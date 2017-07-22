@@ -7,6 +7,57 @@
 	typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
 	typeof define === 'function' && define.amd ? define(factory) :
 	(global.Vue = factory());
+    /*
+     在浏览器环境下：
+     typeof exports
+     // "undefined"
+
+     typeof define
+     // "undefined"
+
+     所以会执行：
+     global.Vue = factory()
+     相当于：
+     window.Vue = factory()
+     这里的 factory 就是下面的 this 后面的这个很长很长的方法
+
+     window.Vue 就是这个方法的返回值，拖到这个文件文件最后一行：
+
+     return Vue$3;
+
+     也就是说，Vue 就是这里的 Vue$3 方法！
+
+     看一下执行流程：
+
+     (function (global, factory) {
+         console.log('给 Vue 赋值');
+         global.Vue = factory();
+         console.log('Vue: ', Vue);
+     }(this, (function () {
+         console.log('① Vue: ',typeof Vue);
+         console.log('执行了');
+         return 'hello';
+     })));
+
+     console.log('② Vue: ', Vue);
+
+     打印结果如下：
+     给 Vue 赋值
+     ① Vue:  undefined
+     执行了
+     Vue:  hello
+     ② Vue:  hello
+
+     既然这样，那下面的出现的那么多 Vue 又是哪来的呢？
+
+     其实，下面的那么多 Vue，只不过内部函数的形参而已，例如：
+
+     function eventsMixin (Vue) {
+         ...
+         Vue.prototype.$on = function (event, fn) {}
+         ...
+     }
+     */
 }(this, (function () { 'use strict';
 
 /*  */
