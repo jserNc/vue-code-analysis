@@ -1,4 +1,19 @@
 /*
+
+熟悉项目方法：
+
+开源代码，首先找到其主页，对README.md文件进行一番查阅，理解一下项目说明，比如：jQuery README，分几部分介绍了下项目:
+
+Contribution Guides: 共享代码的一些规范
+Environments in which to use jQuery: 运行环境
+What you need to build your own jQuery: 构建环境
+How to build your own jQuery: 构建方式
+Running the Unit Tests: 运行测试
+Building to a different directory: 改变构建目录
+Essential Git: 一些git操作
+
+
+
 看一个例子，了解双向绑定机制：
 出处：https://github.com/bison1994
 
