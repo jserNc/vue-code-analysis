@@ -2,7 +2,7 @@
 
 熟悉项目方法：
 
-开源代码，首先找到其主页，对README.md文件进行一番查阅，理解一下项目说明，比如：jQuery README，分几部分介绍了下项目:
+开源代码，首先找到其主页，对 README.md 文件进行一番查阅，理解一下项目说明，比如：jQuery README，分几部分介绍了下项目:
 
 Contribution Guides: 共享代码的一些规范
 Environments in which to use jQuery: 运行环境
