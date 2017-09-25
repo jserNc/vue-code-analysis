@@ -222,18 +222,22 @@ Essential Git: 一些git操作
 
 // these helpers produces better vm code in JS engines due to their
 // explicitness and function inlining
+// 值为 undefined 或 null
 function isUndef (v) {
   return v === undefined || v === null
 }
 
+// 值不为 undefined 且不为 null
 function isDef (v) {
   return v !== undefined && v !== null
 }
 
+// true
 function isTrue (v) {
   return v === true
 }
 
+// false
 function isFalse (v) {
   return v === false
 }
