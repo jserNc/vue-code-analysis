@@ -245,6 +245,7 @@ function isFalse (v) {
 /**
  * Check if value is primitive
  */
+ // value 为字符串或者数值
 function isPrimitive (value) {
   return typeof value === 'string' || typeof value === 'number'
 }
@@ -254,6 +255,7 @@ function isPrimitive (value) {
  * Objects from primitive values when we know the value
  * is a JSON-compliant type.
  */
+// obj 是否为除了 null 之外的对象
 function isObject (obj) {
   return obj !== null && typeof obj === 'object'
 }
@@ -264,10 +266,12 @@ var _toString = Object.prototype.toString;
  * Strict object type check. Only returns true
  * for plain JavaScript objects.
  */
+// object 为普通对象（不包括 null）
 function isPlainObject (obj) {
   return _toString.call(obj) === '[object Object]'
 }
 
+// object 为正则对象
 function isRegExp (v) {
   return _toString.call(v) === '[object RegExp]'
 }
@@ -275,6 +279,7 @@ function isRegExp (v) {
 /**
  * Check if val is a valid array index.
  */
+// val 是否可以作为数组索引，'1',1 这种是合法的
 function isValidArrayIndex (val) {
   var n = parseFloat(val);
   return n >= 0 && Math.floor(n) === n && isFinite(val)
@@ -282,6 +287,12 @@ function isValidArrayIndex (val) {
 
 /**
  * Convert a value to a string that is actually rendered.
+ */
+ /*
+ 对于 JSON.stringify(value [, replacer] [, space]) 函数：
+ value 将要序列化成一个 JSON 字符串的值
+ null  表示对象的所有属性都会被序列化
+ space 文本在每个级别缩进指定数目的空格
  */
 function toString (val) {
   return val == null
@@ -295,6 +306,7 @@ function toString (val) {
  * Convert a input value to a number for persistence.
  * If the conversion fails, return original string.
  */
+// 将 val 转为数值，如果转换后是 NaN，则返回 val
 function toNumber (val) {
   var n = parseFloat(val);
   return isNaN(n) ? val : n
@@ -303,6 +315,12 @@ function toNumber (val) {
 /**
  * Make a map and return a function for checking if a key
  * is in that map.
+ */
+ /*
+ 检验字符串是不是在 str 中，参数为 true 表示忽略大小写，eg:
+ makeMap('aaa,bbb,ccc',true)('aa')  -> undefined
+ makeMap('aaa,bbb,ccc',true)('aaa') -> true
+ makeMap('aaa,bbb,ccc',true)('AAA') -> true
  */
 function makeMap (
   str,
@@ -321,16 +339,29 @@ function makeMap (
 /**
  * Check if a tag is a built-in tag.
  */
+/*
+判断参数是否匹配 slot 或 component，忽视大小写。
+eg:
+isBuiltInTag("SLOT")  -> true
+isBuiltInTag("component")  -> true
+*/
 var isBuiltInTag = makeMap('slot,component', true);
 
 /**
  * Check if a attribute is a reserved attribute.
  */
+ /*
+判断参数是否匹配 key、ref、slot、is 之一。
+eg:
+isReservedAttribute('key') -> true
+isReservedAttribute('KEY') -> undefined
+*/
 var isReservedAttribute = makeMap('key,ref,slot,is');
 
 /**
  * Remove an item from an array
  */
+ // 从数组 arr 中删除元素 item
 function remove (arr, item) {
   if (arr.length) {
     var index = arr.indexOf(item);
@@ -343,6 +374,7 @@ function remove (arr, item) {
 /**
  * Check whether the object has the property.
  */
+ // 判断 key 是否为对象 obj 自己的属性
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 function hasOwn (obj, key) {
   return hasOwnProperty.call(obj, key)
@@ -351,6 +383,7 @@ function hasOwn (obj, key) {
 /**
  * Create a cached version of a pure function.
  */
+// 对函数 fn 的执行结果进行缓存，每次执行 fn 时优先从缓存读取
 function cached (fn) {
   var cache = Object.create(null);
   return (function cachedFn (str) {
@@ -362,6 +395,7 @@ function cached (fn) {
 /**
  * Camelize a hyphen-delimited string.
  */
+// 将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
 var camelizeRE = /-(\w)/g;
 var camelize = cached(function (str) {
   return str.replace(camelizeRE, function (_, c) { return c ? c.toUpperCase() : ''; })
@@ -370,6 +404,7 @@ var camelize = cached(function (str) {
 /**
  * Capitalize a string.
  */
+ // 首字母大写
 var capitalize = cached(function (str) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 });
@@ -377,6 +412,7 @@ var capitalize = cached(function (str) {
 /**
  * Hyphenate a camelCase string.
  */
+ // 将驼峰写法转为连字符写法，如 hyphenate('aaBbCc') -> "aa-bb-cc"
 var hyphenateRE = /([^-])([A-Z])/g;
 var hyphenate = cached(function (str) {
   return str
@@ -388,9 +424,17 @@ var hyphenate = cached(function (str) {
 /**
  * Simple bind, faster than native
  */
+ // 绑定函数 fn 内部的 this 到 ctx 
 function bind (fn, ctx) {
   function boundFn (a) {
     var l = arguments.length;
+	/*
+	(1) l 不为 0 
+	    ① l 大于 1，fn.apply(ctx, arguments)
+		② l 为 1，fn.call(ctx, a)
+	(2) l 为 0
+	    fn.call(ctx)
+	*/
     return l
       ? l > 1
         ? fn.apply(ctx, arguments)
@@ -398,6 +442,7 @@ function bind (fn, ctx) {
       : fn.call(ctx)
   }
   // record original fn length
+  // 函数的 length 属性返回形参个数
   boundFn._length = fn.length;
   return boundFn
 }
@@ -405,9 +450,21 @@ function bind (fn, ctx) {
 /**
  * Convert an Array-like object to a real Array.
  */
+ // toArray([0, 1, 2, 3, 4, 5, 6], 2) -> [2, 3, 4, 5, 6]
 function toArray (list, start) {
   start = start || 0;
   var i = list.length - start;
+  /*
+  关于 Array:
+  ① 无参数，返回空数组
+     new Array() -> []
+  ② 一个正整数参数，表示返回新数组的长度
+     new Array(2) -> [ undefined x 2 ]
+  ③ 一个非正整数参数，则该参数为新数组成员
+     new Array('abc') -> ['abc']
+  ④ 多个参数，所有参数都是新数组的成员
+     new Array(1, 2) -> [1, 2]
+  */
   var ret = new Array(i);
   while (i--) {
     ret[i] = list[i + start];
