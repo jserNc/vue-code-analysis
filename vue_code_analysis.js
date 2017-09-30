@@ -475,7 +475,9 @@ function toArray (list, start) {
 /**
  * Mix properties into target object.
  */
+ // 将对象 _from 的属性依次赋给对象 to
 function extend (to, _from) {
+  // in 运算符获取一个对象的可枚举属性，包括自身的和继承的可枚举属性
   for (var key in _from) {
     to[key] = _from[key];
   }
@@ -484,6 +486,16 @@ function extend (to, _from) {
 
 /**
  * Merge an Array of Objects into a single Object.
+ */
+ /*
+ 将一组对象合并成一个对象，eg:
+ arr = [
+	{ book : 'js' },
+	{ edition : 3 },
+	{ author : 'nanc' }
+ ];
+ toObject(arr) 
+ -> { book: "js", edition: 3, author: "nanc" }
  */
 function toObject (arr) {
   var res = {};
@@ -510,12 +522,29 @@ var no = function (a, b, c) { return false; };
 /**
  * Return same value
  */
+ // 返回参数自身
 var identity = function (_) { return _; };
 
 /**
  * Generate a static keys string from compiler modules.
  */
+/*
+将一组对象的 staticKeys 数组合并成一个字符串，举个例子：
+modules = [
+	{ staticKeys : ['mod11','mod12'] },
+	{ staticKeys : ['mod21','mod22'] },
+	{ staticKeys : ['mod31','mod32'] }
+];
+genStaticKeys(modules)
+-> "mod11,mod12,mod21,mod22,mod31,mod32"
+*/
 function genStaticKeys (modules) {
+  /*
+  对于 arr.reduce([callback, initialValue]) 函数：
+  ① callback 函数的第一个参数为上次调用 callback 的返回值，或者初始值 initialValue
+     callback 函数的第二个参数为当前被处理的元素
+  ② initialValue 为第一次调用 callback 的第一个参数
+  */
   return modules.reduce(function (keys, m) {
     return keys.concat(m.staticKeys || [])
   }, []).join(',')
@@ -525,6 +554,7 @@ function genStaticKeys (modules) {
  * Check if two values are loosely equal - that is,
  * if they are plain objects, do they have the same shape?
  */
+ // a 和 b 形式上（都转为字符串后）是否相等
 function looseEqual (a, b) {
   var isObjectA = isObject(a);
   var isObjectB = isObject(b);
@@ -533,6 +563,7 @@ function looseEqual (a, b) {
       return JSON.stringify(a) === JSON.stringify(b)
     } catch (e) {
       // possible circular reference
+	  // 如果序列化出错，可能是循环引用，那就判断 a 和 b 是否严格相等
       return a === b
     }
   } else if (!isObjectA && !isObjectB) {
@@ -542,6 +573,7 @@ function looseEqual (a, b) {
   }
 }
 
+// 返回 val 元素（其实是和 val 形式上相等的元素） 在 arr 中的索引
 function looseIndexOf (arr, val) {
   for (var i = 0; i < arr.length; i++) {
     if (looseEqual(arr[i], val)) { return i }
@@ -552,6 +584,7 @@ function looseIndexOf (arr, val) {
 /**
  * Ensure a function is called only once.
  */
+// 确保函数 fn 只执行一次
 function once (fn) {
   var called = false;
   return function () {
@@ -564,12 +597,14 @@ function once (fn) {
 
 var SSR_ATTR = 'data-server-rendered';
 
+// 配置类型
 var ASSET_TYPES = [
   'component',
   'directive',
   'filter'
 ];
 
+// 声明周期钩子
 var LIFECYCLE_HOOKS = [
   'beforeCreate',
   'created',
@@ -584,74 +619,87 @@ var LIFECYCLE_HOOKS = [
 ];
 
 /*  */
-
+// 一些全局配置
 var config = ({
   /**
    * Option merge strategies (used in core/util/options)
    */
+  // 可以为该对象添加方法属性，自定义合并策略的选项
   optionMergeStrategies: Object.create(null),
 
   /**
    * Whether to suppress warnings.
    */
+  // 是否取消 Vue 所有的日志和警告
   silent: false,
 
   /**
    * Show production mode tip message on boot?
    */
+  // 开发版本默认为 true。设为 false 以阻止 vue 在启动时生成生产提示。
   productionTip: "development" !== 'production',
 
   /**
    * Whether to enable devtools
    */
+  // 开发版本默认为 true。设为 false 以阻止 vue-devtools 检查代码。
   devtools: "development" !== 'production',
 
   /**
    * Whether to record perf
    */
+  // 默认为 false。设置为 true 以在浏览器开发工具中启用对组件初始化，渲染和打补丁的性能追踪。
   performance: false,
 
   /**
    * Error handler for watcher errors
    */
+  // 指定组件的渲染和观察期间未捕获错误的处理函数。这个处理函数被调用时，可获取错误信息和 Vue 实例。
   errorHandler: null,
 
   /**
    * Warn handler for watcher warns
    */
+  // Vue 运行时警告处理函数
   warnHandler: null,
 
   /**
    * Ignore certain custom elements
    */
+  // 使 Vue 忽略在 Vue 之外的自定义元素。否则，它会假设你忘记注册全局组件或者拼错了组件名称，从而抛出一个关于 Unknown custom element 的警告。
   ignoredElements: [],
 
   /**
    * Custom user key aliases for v-on
    */
+  // 给 v-on 自定义键位别名
   keyCodes: Object.create(null),
 
   /**
    * Check if a tag is reserved so that it cannot be registered as a
    * component. This is platform-dependent and may be overwritten.
    */
+  // 如果一个 tag 标签是保留的，那就不能被注册为组件
   isReservedTag: no,
 
   /**
    * Check if an attribute is reserved so that it cannot be used as a component
    * prop. This is platform-dependent and may be overwritten.
    */
+  // 如果一个属性（attribute）是保留的，那就不能被注册为组件特性（prop）
   isReservedAttr: no,
 
   /**
    * Check if a tag is an unknown element.
    * Platform-dependent.
    */
+  // 检查一个 tag 是否是未知元素
   isUnknownElement: no,
 
   /**
    * Get the namespace of an element
    */
+  // 获取命名空间
   getTagNamespace: noop,
 
   /**
@@ -672,25 +720,46 @@ var config = ({
 });
 
 /*  */
+/*
+关于方法 Object.freeze(obj) ：
+① 冻结对象 obj，冻结指的是不能向这个对象添加新的属性，不能修改其已有属性的值，
+不能删除已有属性，以及不能修改该对象已有属性的可枚举性、可配置性、可写性。也就是说，这个对象永远是不可变的。
 
+② 但是，如果一个属性的值是个对象，则这个对象中的属性是可以修改的，除非它也是个冻结对象。
+
+③ 返回值，被冻结的对象 obj
+*/
 var emptyObject = Object.freeze({});
 
 /**
  * Check if a string starts with $ or _
  */
+// 判断一个字符串是否以 $ 或 _ 开头
 function isReserved (str) {
   var c = (str + '').charCodeAt(0);
+  /*
+	'$'.charCodeAt(0) -> 36 -> 0x24
+	'$'.charCodeAt(0) -> 95 -> 0x5F
+  */
   return c === 0x24 || c === 0x5F
 }
 
 /**
  * Define a property.
  */
+/*
+ Object.defineProperty(obj, prop, descriptor)
+ 直接在一个对象上定义一个新属性，或者修改一个对象的现有属性， 并返回这个对象。
+*/
 function def (obj, key, val, enumerable) {
   Object.defineProperty(obj, key, {
+	// 属性值
     value: val,
+	// 可枚举性
     enumerable: !!enumerable,
+	// 为 true 表示该属性能被赋值运算符改变
     writable: true,
+	// 为 true 表示可以再次配置该属性的 descriptor，也能删除改属性
     configurable: true
   });
 }
@@ -699,6 +768,55 @@ function def (obj, key, val, enumerable) {
  * Parse simple path.
  */
 var bailRE = /[^\w.$]/;
+/*
+ [^\w.$] 匹配除字母|数字|下划线|汉字|.|$以外的字符
+
+ bailRE.test('.') -> false
+ bailRE.test('$') -> false
+
+ bailRE.test('<') -> true
+
+ 对于，bailRE.test(path)，只要 path 中有一个字符不是字母|数字|下划线|汉字|.|$，
+ 就返回 true，那就认为不是路径，直接返回
+
+ 例如：path = 'aaa.bbb.ccc'
+ var f = parsePath(path);
+ var o1 = {
+	aaa : {
+		bbb : {
+			ccc : 1
+		}
+	}
+ }
+
+ f(o1) -> 1
+
+ var o2 = {
+	aaa : {
+		bbb : 1
+	}
+ }
+
+ f(o2) -> undefined
+
+ var o3 = {
+	aaa : 1
+ }
+
+ f(o3) -> undefined
+
+ var o4 = {
+	aaa : {
+		bbb : {
+			ccc : {
+				ddd : 1
+			}
+		}
+	}
+ }
+
+ f(o4) -> {ddd: 1}
+*/
 function parsePath (path) {
   if (bailRE.test(path)) {
     return
@@ -714,21 +832,32 @@ function parsePath (path) {
 }
 
 /*  */
-
+// 空函数
 var warn = noop;
 var tip = noop;
 var formatComponentName = (null); // work around flow check
 
-{
+{ 
+  // 是否支持 console
   var hasConsole = typeof console !== 'undefined';
   var classifyRE = /(?:^|[-_])(\w)/g;
+  /*
+  classifyRE 匹配两类：
+  ① 开头是字母|数字|下划线|汉字的第一个字符
+  ② 紧跟在 - 或 _ 后的第一个字符
+
+  于是，classify 函数的作用就是将首字母或-或_后的字母转为大写
+  classify('aaa-bbb_ccc') -> "AaaBbbCcc"
+  */
   var classify = function (str) { return str
     .replace(classifyRE, function (c) { return c.toUpperCase(); })
     .replace(/[-_]/g, ''); };
 
+  // 警告
   warn = function (msg, vm) {
     var trace = vm ? generateComponentTrace(vm) : '';
 
+	// 优先调用 config.warnHandler 函数发出警告，其次才在控制台报警
     if (config.warnHandler) {
       config.warnHandler.call(null, msg, vm, trace);
     } else if (hasConsole && (!config.silent)) {
@@ -736,6 +865,7 @@ var formatComponentName = (null); // work around flow check
     }
   };
 
+  // 提示
   tip = function (msg, vm) {
     if (hasConsole && (!config.silent)) {
       console.warn("[Vue tip]: " + msg + (
@@ -744,10 +874,18 @@ var formatComponentName = (null); // work around flow check
     }
   };
 
+  // 格式化组件名
   formatComponentName = function (vm, includeFile) {
+	 // 如果一个 vm 的根节点就是自身，那就返回 '<Root>'
     if (vm.$root === vm) {
       return '<Root>'
     }
+	/*
+	① vm 是字符串类型，那么 name 就是 vm 自身
+	② vm 是函数，并且有 options 属性，那么 name 就是 vm.options.name
+	③ vm 是 Vue 实例，那么 name 就是 vm.$options.name || vm.$options._componentTag
+	④ 其他，name 就是 vm.name
+	*/
     var name = typeof vm === 'string'
       ? vm
       : typeof vm === 'function' && vm.options
@@ -758,16 +896,51 @@ var formatComponentName = (null); // work around flow check
 
     var file = vm._isVue && vm.$options.__file;
     if (!name && file) {
+	  /*
+	  从文件名中获取组件名
+
+	  eg:
+	  'myComponet.vue'.match(/([^/\\]+)\.vue$/)
+	  -> ["myComponet.vue", "myComponet", index: 0, input: "myComponet.vue"]
+
+	  所以，match[1] 就是组件名
+	  */
       var match = file.match(/([^/\\]+)\.vue$/);
       name = match && match[1];
     }
 
+	/*
+	① 组件名'aaa-bbb' -> "<AaaBbb>"
+	② 如果没有组件名，就用匿名，"<Anonymous>"
+	③ 如果需要，还可以跟上文件名 "<AaaBbb> at aaa-bbb.vue"
+	*/
     return (
       (name ? ("<" + (classify(name)) + ">") : "<Anonymous>") +
       (file && includeFile !== false ? (" at " + file) : '')
     )
   };
 
+  /*
+  字符串 str 重复 n 遍，我们很容易想到循环 n 次，拼接字符串，可这里没这么做
+
+  右移 >> 运算可以模拟整除：
+  21 >> 2 -> 21 / 4 -> 5
+  21 >> 3 -> 21 / 8 -> 2
+
+  1 >> 1 -> 1 / 2 -> 0
+  2 >> 1 -> 2 / 2 -> 1
+  3 >> 1 -> 3 / 2 -> 1
+  4 >> 1 -> 4 / 2 -> 2
+  5 >> 1 -> 5 / 2 -> 2
+
+  所以，n >> 1 相当于 n / 2
+
+  repeat('a',5) -> "aaaaa"   因为 5 = 2^0 + 2^2
+  repeat('a',6) -> "aaaaaa"  因为 6 = 2^1 + 2^2
+  repeat('a',7) -> "aaaaaaa" 因为 7 = 2^0 + 2^1 + 2^2
+
+  这种写法只需要循环 Math.ceil(log(2)n) 次（以 2 为底 n 的对数），n 越大效果越明显
+  */
   var repeat = function (str, n) {
     var res = '';
     while (n) {
@@ -778,10 +951,12 @@ var formatComponentName = (null); // work around flow check
     return res
   };
 
+  // 获取组件栈，用于警告和提示中打印信息
   var generateComponentTrace = function (vm) {
     if (vm._isVue && vm.$parent) {
       var tree = [];
       var currentRecursiveSequence = 0;
+	  // 依次获取组件 vm 父元素，形成组件树
       while (vm) {
         if (tree.length > 0) {
           var last = tree[tree.length - 1];
@@ -797,6 +972,7 @@ var formatComponentName = (null); // work around flow check
         tree.push(vm);
         vm = vm.$parent;
       }
+	  // 返回警告/提示信息字符串
       return '\n\nfound in\n\n' + tree
         .map(function (vm, i) { return ("" + (i === 0 ? '---> ' : repeat(' ', 5 + i * 2)) + (Array.isArray(vm)
             ? ((formatComponentName(vm[0])) + "... (" + (vm[1]) + " recursive calls)")
@@ -810,6 +986,7 @@ var formatComponentName = (null); // work around flow check
 
 /*  */
 
+// 错误处理函数
 function handleError (err, vm, info) {
   if (config.errorHandler) {
     config.errorHandler.call(null, err, vm, info);
@@ -843,8 +1020,30 @@ var isIOS = UA && /iphone|ipad|ipod|ios/.test(UA);
 var isChrome = UA && /chrome\/\d+/.test(UA) && !isEdge;
 
 // Firefix has a "watch" function on Object.prototype...
+// 火狐浏览器有原生的 watch 方法
 var nativeWatch = ({}).watch;
 
+/*
+参考：
+https://developer.mozilla.org/zh-CN/docs/Web/API/EventTarget/addEventListener
+http://www.cnblogs.com/ziyunfei/p/5545439.html
+
+关于 addEventListener 函数：
+addEventListener(type, listener, {
+    capture: false,
+    passive: true,
+    once: false
+})
+
+如果 passive 设置为 true 表示 listener 永远不会调用 preventDefault()，也就是默认动作一定执行
+
+很多时候我们并不想阻止默认行为，但浏览器无法预先知道一个 listener 会不会调用 preventDefault()
+即便 listener 是个空函数，也会产生一定的卡顿，毕竟空函数的执行也会耗时。
+
+所以，如果可以，将 passive 设置为 true 可以起到性能优化的作用。
+
+不过，并不是所有浏览器都支持这个 passive 属性的，所以下面会对其进行检查。
+*/
 var supportsPassive = false;
 if (inBrowser) {
   try {
