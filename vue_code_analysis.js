@@ -1048,6 +1048,7 @@ var supportsPassive = false;
 if (inBrowser) {
   try {
     var opts = {};
+    // 如果事件发生时，试图读取 opts.passive 属性，那说明当前浏览器支持 passive 属性，于是将 supportsPassive 置为 true
     Object.defineProperty(opts, 'passive', ({
       get: function get () {
         /* istanbul ignore next */
@@ -1061,6 +1062,7 @@ if (inBrowser) {
 // this needs to be lazy-evaled because vue may be required before
 // vue-server-renderer can set VUE_ENV
 var _isServer;
+// 判断是否是服务端环境
 var isServerRendering = function () {
   if (_isServer === undefined) {
     /* istanbul ignore if */
@@ -1079,10 +1081,16 @@ var isServerRendering = function () {
 var devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
 
 /* istanbul ignore next */
+/*
+判断是否是原生方法。以 parseInt 方法为例：
+typeof parseInt      ->  "function"
+parseInt.toString()  ->  "function parseInt() { [native code] }"
+ */
 function isNative (Ctor) {
   return typeof Ctor === 'function' && /native code/.test(Ctor.toString())
 }
 
+// es6 新加的特性
 var hasSymbol =
   typeof Symbol !== 'undefined' && isNative(Symbol) &&
   typeof Reflect !== 'undefined' && isNative(Reflect.ownKeys);
@@ -1090,6 +1098,7 @@ var hasSymbol =
 /**
  * Defer a task to execute it asynchronously.
  */
+// 异步执行任务
 var nextTick = (function () {
   var callbacks = [];
   var pending = false;
@@ -1097,13 +1106,18 @@ var nextTick = (function () {
 
   function nextTickHandler () {
     pending = false;
+    // 深拷贝
     var copies = callbacks.slice(0);
+    // 将 callbacks 数组清空
     callbacks.length = 0;
+    // 依次执行原 callbacks 数组里的方法
     for (var i = 0; i < copies.length; i++) {
       copies[i]();
     }
   }
 
+  // 虽然 Promise 和 MutationObserver 都可以利用“事件循环”，但由于 MutationObserver 在 ios 系统有 bug，
+  // 所以首选还是 Promise
   // the nextTick behavior leverages the microtask queue, which can be accessed
   // via either native Promise.then or MutationObserver.
   // MutationObserver has wider support, however it is seriously bugged in
@@ -1111,18 +1125,42 @@ var nextTick = (function () {
   // completely stops working after triggering a few times... so, if native
   // Promise is available, we will use it:
   /* istanbul ignore if */
+
+  // Promise 是原生方法
   if (typeof Promise !== 'undefined' && isNative(Promise)) {
     var p = Promise.resolve();
+    /*
+    Promise.resolve 方法允许调用时不带参数，直接返回一个 resolved 状态的 Promise 对象。
+    立即 resolve 的 Promise 对象，是在本轮“事件循环”（event loop）的结束时，而不是在下一轮“事件循环”的开始时。
+
+    区别于：setTimeout(fn, 0) 在下一轮“事件循环”开始时执行
+     */
     var logError = function (err) { console.error(err); };
     timerFunc = function () {
+      // 本轮“事件循环”（event loop）的结束时执行 nextTickHandler
       p.then(nextTickHandler).catch(logError);
       // in problematic UIWebViews, Promise.then doesn't completely break, but
       // it can get stuck in a weird state where callbacks are pushed into the
       // microtask queue but the queue isn't being flushed, until the browser
       // needs to do some other work, e.g. handle a timer. Therefore we can
       // "force" the microtask queue to be flushed by adding an empty timer.
+      // 加入一个空的定时器，强制结束本轮“事件循环”，并开启下一轮
       if (isIOS) { setTimeout(noop); }
     };
+  /*
+  参考：http://www.cnblogs.com/jscode/p/3600060.html
+  再来看 MutationObserver：
+
+  Mutation Observer（变动观察器）是监视 DOM 变动的接口。当 DOM 对象树发生任何变动时，Mutation Observer 会得到通知。
+
+  要概念上，它很接近事件。可以理解为，当 DOM 发生变动会触发 Mutation Observer 事件。但是，它与事件有一个本质不同：
+  a) 事件是同步触发，也就是说 DOM 发生变动立刻会触发相应的事件；
+  b) Mutation Observer 则是异步触发，DOM 发生变动以后，并不会马上触发，而是要等到当前所有 DOM 操作都结束后才触发。
+
+  这样设计是为了应付 DOM 变动频繁的情况。举例来说，如果在文档中连续插入 1000 个段落（p 元素），会连续触发 1000 个插入事件，
+  执行每个事件的回调函数，这很可能造成浏览器的卡顿；而 Mutation Observer 完全不同，只在 1000 个段落都插入结束后才会触发，而且只触发一次。
+
+   */
   } else if (typeof MutationObserver !== 'undefined' && (
     isNative(MutationObserver) ||
     // PhantomJS and iOS 7.x
@@ -1131,18 +1169,24 @@ var nextTick = (function () {
     // use MutationObserver where native Promise is not available,
     // e.g. PhantomJS IE11, iOS7, Android 4.4
     var counter = 1;
+    // 指定 observer 的回调方法是 nextTickHandler
     var observer = new MutationObserver(nextTickHandler);
+    // observer 的作用是监视 dom 变化，所以这里创建一个 dom
     var textNode = document.createTextNode(String(counter));
+    // 监视 textNode
     observer.observe(textNode, {
+      // 节点内容或节点文本的变动
       characterData: true
     });
     timerFunc = function () {
+      // 对 2 求模，结果为 0 或 1
       counter = (counter + 1) % 2;
       textNode.data = String(counter);
     };
   } else {
     // fallback to setTimeout
     /* istanbul ignore next */
+    // Promise 和 MutationObserver 都不支持，那就用 setTimeout 在下一轮“事件循环”开始执行吧
     timerFunc = function () {
       setTimeout(nextTickHandler, 0);
     };
@@ -1150,6 +1194,7 @@ var nextTick = (function () {
 
   return function queueNextTick (cb, ctx) {
     var _resolve;
+    // 将 cb 分别用一个新的匿名函数包装，并 push 进 callbacks 数组
     callbacks.push(function () {
       if (cb) {
         try {
@@ -1161,6 +1206,7 @@ var nextTick = (function () {
         _resolve(ctx);
       }
     });
+    // pending 状态改为 true
     if (!pending) {
       pending = true;
       timerFunc();
