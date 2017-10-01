@@ -1219,6 +1219,8 @@ var nextTick = (function () {
   }
 })();
 
+
+// 如果浏览器原生支持 es6 的 Set 方法，那就用原生的，否则退而求其次，这里自己封装一个
 var _Set;
 /* istanbul ignore if */
 if (typeof Set !== 'undefined' && isNative(Set)) {
@@ -1226,6 +1228,18 @@ if (typeof Set !== 'undefined' && isNative(Set)) {
   _Set = Set;
 } else {
   // a non-standard Set polyfill that only works with primitive keys.
+  /*
+  这里自己封装一个简单的 Set 方法
+
+  var set = new _Set();
+  set.add(1);
+
+  set.has(1) -> true
+  set.has(2) -> false
+
+  set.clear();
+  set.has(1) -> false
+   */ 
   _Set = (function () {
     function Set () {
       this.set = Object.create(null);
@@ -1258,10 +1272,12 @@ var Dep = function Dep () {
   this.subs = [];
 };
 
+// 添加订阅者
 Dep.prototype.addSub = function addSub (sub) {
   this.subs.push(sub);
 };
 
+// 删除订阅者
 Dep.prototype.removeSub = function removeSub (sub) {
   remove(this.subs, sub);
 };
@@ -1272,6 +1288,7 @@ Dep.prototype.depend = function depend () {
   }
 };
 
+// 触发更新
 Dep.prototype.notify = function notify () {
   // stabilize the subscriber list first
   var subs = this.subs.slice();
@@ -1286,11 +1303,13 @@ Dep.prototype.notify = function notify () {
 Dep.target = null;
 var targetStack = [];
 
+// 旧的 Dep.target 压栈，_target 作为新的 Dep.target
 function pushTarget (_target) {
   if (Dep.target) { targetStack.push(Dep.target); }
   Dep.target = _target;
 }
 
+// 旧的 Dep.target 出栈
 function popTarget () {
   Dep.target = targetStack.pop();
 }
@@ -1301,7 +1320,9 @@ function popTarget () {
  */
 
 var arrayProto = Array.prototype;
-var arrayMethods = Object.create(arrayProto);[
+var arrayMethods = Object.create(arrayProto);
+
+[
   'push',
   'pop',
   'shift',
@@ -1313,18 +1334,29 @@ var arrayMethods = Object.create(arrayProto);[
 .forEach(function (method) {
   // cache original method
   var original = arrayProto[method];
+  // 依次给 push、pop 等方法赋予新的定义
   def(arrayMethods, method, function mutator () {
     var args = [], len = arguments.length;
+    // 以 len = 3 为例，arguments[3] 就是 undefined，但由于先执行 len--，所以根本不会取 arguments[3] 的值
     while ( len-- ) args[ len ] = arguments[ len ];
 
     var result = original.apply(this, args);
     var ob = this.__ob__;
     var inserted;
+    // 只有 3 种方法会插入新元素
     switch (method) {
       case 'push':
       case 'unshift':
         inserted = args;
         break
+      /*
+      arrayObject.splice(index,howmany,item1,.....,itemX)
+      index 整数，规定添加/删除项目的位置，使用负数可从数组结尾处规定位置.
+      howmany 要删除的项目数量。如果设置为 0，则不会删除项目。
+      item1, ..., itemX 向数组添加的新项目。
+
+      这里把 [item1, ..., itemX] 赋给 inserted
+       */
       case 'splice':
         inserted = args.slice(2);
         break
@@ -1332,12 +1364,19 @@ var arrayMethods = Object.create(arrayProto);[
     if (inserted) { ob.observeArray(inserted); }
     // notify change
     ob.dep.notify();
+    // 最后返回的还是原始方法的值
     return result
   });
 });
 
 /*  */
 
+/*
+如果没有执行前面的 forEach 方法，arrayKeys 为空数组 []
+执行了 forEach 后，arrayKeys 为 ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
+
+虽然以上 forEach 方法定义以上 push 等属性时都是不可枚举的，但是 Object.getOwnPropertyNames 方法是可以返回不可枚举的属性名的
+ */ 
 var arrayKeys = Object.getOwnPropertyNames(arrayMethods);
 
 /**
@@ -1360,11 +1399,23 @@ var Observer = function Observer (value) {
   this.value = value;
   this.dep = new Dep();
   this.vmCount = 0;
+  /*
+  回顾一下 def 方法的定义：
+  function def (obj, key, val, enumerable) {...}
+   */
   def(value, '__ob__', this);
   if (Array.isArray(value)) {
+    // hasProto = '__proto__' in {};
     var augment = hasProto
       ? protoAugment
       : copyAugment;
+
+    /*
+    ① 如果支持 __proto__ 写法
+       那么 value.__proto__ = arrayMethods;
+    ② 如果不支持 __proto__ 写法
+       那么依次将 arrayMethods[key] 赋给 value[key]，其中 key 为 "push", "pop", "shift", "unshift", "splice", "sort", "reverse" 等 7 个方法名之一
+     */
     augment(value, arrayMethods, arrayKeys);
     this.observeArray(value);
   } else {
@@ -1378,6 +1429,9 @@ var Observer = function Observer (value) {
  * value type is Object.
  */
 Observer.prototype.walk = function walk (obj) {
+  /*
+  Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys方法只返回可枚举的属性。
+   */
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
     defineReactive$$1(obj, keys[i], obj[keys[i]]);
@@ -1399,6 +1453,7 @@ Observer.prototype.observeArray = function observeArray (items) {
  * Augment an target Object or Array by intercepting
  * the prototype chain using __proto__
  */
+// 将 target 的原型指定为 src
 function protoAugment (target, src, keys) {
   /* eslint-disable no-proto */
   target.__proto__ = src;
@@ -1413,6 +1468,7 @@ function protoAugment (target, src, keys) {
 function copyAugment (target, src, keys) {
   for (var i = 0, l = keys.length; i < l; i++) {
     var key = keys[i];
+    // 依次将 src[key] 赋予 target[key]
     def(target, key, src[key]);
   }
 }
