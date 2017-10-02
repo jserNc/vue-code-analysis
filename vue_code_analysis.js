@@ -1402,6 +1402,10 @@ var Observer = function Observer (value) {
   /*
   回顾一下 def 方法的定义：
   function def (obj, key, val, enumerable) {...}
+
+  这里的 this 是一个 Observer 实例，有：
+  this.value = value;
+  value.__ob__ = this;
    */
   def(value, '__ob__', this);
   if (Array.isArray(value)) {
@@ -1429,9 +1433,7 @@ var Observer = function Observer (value) {
  * value type is Object.
  */
 Observer.prototype.walk = function walk (obj) {
-  /*
-  Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys方法只返回可枚举的属性。
-   */
+  // Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys方法只返回可枚举的属性。
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
     defineReactive$$1(obj, keys[i], obj[keys[i]]);
@@ -1443,6 +1445,7 @@ Observer.prototype.walk = function walk (obj) {
  */
 Observer.prototype.observeArray = function observeArray (items) {
   for (var i = 0, l = items.length; i < l; i++) {
+    // 依次观察每一个 item 对象
     observe(items[i]);
   }
 };
@@ -1478,14 +1481,26 @@ function copyAugment (target, src, keys) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
+// 为 value 创建一个观察者实例
 function observe (value, asRootData) {
+  // 如果 vulue 不是对象就不处理了
   if (!isObject(value)) {
     return
   }
   var ob;
+  // 如果已经有对应的观察者对象，就用这个已经存在的
   if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
     ob = value.__ob__;
+  // 如果没有对应的观察者对象，就新创建一个
   } else if (
+    /*
+    需同时满足以下条件：
+    ① observerState.shouldConvert 为 true
+    ② 非服务器环境
+    ③ value 是数组或者对象
+    ④ value 对象可扩展
+    ⑤ value 没有 _isVue 属性
+     */
     observerState.shouldConvert &&
     !isServerRendering() &&
     (Array.isArray(value) || isPlainObject(value)) &&
@@ -1494,6 +1509,7 @@ function observe (value, asRootData) {
   ) {
     ob = new Observer(value);
   }
+  // 如果作为根数据，那么 vmCount 属性加 1
   if (asRootData && ob) {
     ob.vmCount++;
   }
@@ -1513,6 +1529,7 @@ function defineReactive$$1 (
   var dep = new Dep();
 
   var property = Object.getOwnPropertyDescriptor(obj, key);
+  // 如果 obj 的 key 属性不可配置，直接返回
   if (property && property.configurable === false) {
     return
   }
@@ -1523,8 +1540,11 @@ function defineReactive$$1 (
 
   var childOb = !shallow && observe(val);
   Object.defineProperty(obj, key, {
+    // 可枚举
     enumerable: true,
+    // 可配置
     configurable: true,
+    // 获取 obj 的 key 属性时触发该方法
     get: function reactiveGetter () {
       var value = getter ? getter.call(obj) : val;
       if (Dep.target) {
@@ -1538,13 +1558,16 @@ function defineReactive$$1 (
       }
       return value
     },
+    // 设置 obj 的 key 属性时触发该函数
     set: function reactiveSetter (newVal) {
       var value = getter ? getter.call(obj) : val;
       /* eslint-disable no-self-compare */
+      // 如果旧值和新值相等或者旧值和新值都是 NaN，则不进行设置操作。（NaN 应该是唯一不等于自身的值）
       if (newVal === value || (newVal !== newVal && value !== value)) {
         return
       }
       /* eslint-enable no-self-compare */
+      // 执行自定义 setter
       if ("development" !== 'production' && customSetter) {
         customSetter();
       }
@@ -1554,6 +1577,7 @@ function defineReactive$$1 (
         val = newVal;
       }
       childOb = !shallow && observe(newVal);
+      // 发出通知，执行订阅者
       dep.notify();
     }
   });
@@ -1565,17 +1589,23 @@ function defineReactive$$1 (
  * already exist.
  */
 function set (target, key, val) {
+  // target 是数组，并且 key 是合法的数组索引
   if (Array.isArray(target) && isValidArrayIndex(key)) {
+    // 数组长度变为 target.length, key 中的较大者
     target.length = Math.max(target.length, key);
+    // 在 key 位置新增一个 val
     target.splice(key, 1, val);
+    // 数组设置完值，就在这里返回
     return val
   }
+  // 如果 key 是 target 自身对象，直接赋值，返回
   if (hasOwn(target, key)) {
     target[key] = val;
     return val
   }
   var ob = (target).__ob__;
   if (target._isVue || (ob && ob.vmCount)) {
+    // 开发环境发出警告：不能给 Vue 实例或根 $data 添加 reactive 属性
     "development" !== 'production' && warn(
       'Avoid adding reactive properties to a Vue instance or its root $data ' +
       'at runtime - declare it upfront in the data option.'
@@ -1595,11 +1625,13 @@ function set (target, key, val) {
  * Delete a property and trigger change if necessary.
  */
 function del (target, key) {
+  // 数组直接删除索引为 key 的元素
   if (Array.isArray(target) && isValidArrayIndex(key)) {
     target.splice(key, 1);
     return
   }
   var ob = (target).__ob__;
+  // 开发环境发出警告：不能删除 Vue 实例或根 $data 的 reactive 属性
   if (target._isVue || (ob && ob.vmCount)) {
     "development" !== 'production' && warn(
       'Avoid deleting properties on a Vue instance or its root $data ' +
@@ -1610,10 +1642,12 @@ function del (target, key) {
   if (!hasOwn(target, key)) {
     return
   }
+  // 删除自身属性
   delete target[key];
   if (!ob) {
     return
   }
+  // 发出通知
   ob.dep.notify();
 }
 
@@ -1624,7 +1658,9 @@ function del (target, key) {
 function dependArray (value) {
   for (var e = (void 0), i = 0, l = value.length; i < l; i++) {
     e = value[i];
+    // 依次调用 depend 方法
     e && e.__ob__ && e.__ob__.dep.depend();
+    // 递归调用
     if (Array.isArray(e)) {
       dependArray(e);
     }
