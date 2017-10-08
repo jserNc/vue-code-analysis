@@ -1674,6 +1674,10 @@ function dependArray (value) {
  * how to merge a parent option value and a child option
  * value into the final value.
  */
+/*
+  可以为该对象添加方法属性，自定义合并策略的选项
+  optionMergeStrategies: Object.create(null)
+ */
 var strats = config.optionMergeStrategies;
 
 /**
@@ -1687,6 +1691,7 @@ var strats = config.optionMergeStrategies;
         'creation with the `new` keyword.'
       );
     }
+    // 只要 child 不是 undefined，就返回 child，否则返回 parent
     return defaultStrat(parent, child)
   };
 }
@@ -1702,12 +1707,15 @@ function mergeData (to, from) {
     key = keys[i];
     toVal = to[key];
     fromVal = from[key];
+    // 如果对象 to 中不存在 key 属性，那就新创建 key 属性
     if (!hasOwn(to, key)) {
       set(to, key, fromVal);
+    // 属性值是对象，递归调用
     } else if (isPlainObject(toVal) && isPlainObject(fromVal)) {
       mergeData(toVal, fromVal);
     }
   }
+  // 合并完毕，返回 to 对象
   return to
 }
 
@@ -1732,13 +1740,16 @@ function mergeDataOrFn (
     // merged result of both functions... no need to
     // check if parentVal is a function here because
     // it has to be a function to pass previous merges.
+    // 合并函数数据
     return function mergedDataFn () {
       return mergeData(
         typeof childVal === 'function' ? childVal.call(this) : childVal,
+        // 这里虽然没有检查 parentVal 是否是函数，但是它必须是函数
         parentVal.call(this)
       )
     }
   } else if (parentVal || childVal) {
+    // 合并实例函数数据
     return function mergedInstanceDataFn () {
       // instance merge
       var instanceData = typeof childVal === 'function'
@@ -1747,6 +1758,7 @@ function mergeDataOrFn (
       var defaultData = typeof parentVal === 'function'
         ? parentVal.call(vm)
         : undefined;
+      // 存在实例数据，才执行合并操作，否则直接返回默认数据
       if (instanceData) {
         return mergeData(instanceData, defaultData)
       } else {
@@ -1756,13 +1768,16 @@ function mergeDataOrFn (
   }
 }
 
+// 调用 mergeDataOrFn 函数
 strats.data = function (
   parentVal,
   childVal,
   vm
 ) {
   if (!vm) {
+    // childVal 不是函数，返回 parentVal
     if (childVal && typeof childVal !== 'function') {
+      // 开发环境下发出警告：data 选项应该是函数
       "development" !== 'production' && warn(
         'The "data" option should be a function ' +
         'that returns a per-instance value in component ' +
@@ -1781,10 +1796,28 @@ strats.data = function (
 /**
  * Hooks and props are merged as arrays.
  */
+// hooks 合并成数组
+/*
+举例：
+mergeHook([1,2,3]) -> [1, 2, 3]
+mergeHook([1,2,3],false) -> [1, 2, 3]
+mergeHook([1,2,3],[4,5,6]) -> [1, 2, 3, 4, 5, 6]
+mergeHook(false,[4,5,6]) -> [4, 5, 6]
+mergeHook(false,4,5,6) -> [4]
+ */
 function mergeHook (
   parentVal,
   childVal
 ) {
+  /*
+  (1) childVal 为真值
+      ① parentVal 为真值，返回 parentVal.concat(childVal)
+      ② parentVal 为假值
+         a) childVal 是数组，直接返回 childVal
+         b) childVal 不是数组，返回 [childVal]
+
+  (2) childVal 为假值，返回 parentVal
+   */
   return childVal
     ? parentVal
       ? parentVal.concat(childVal)
@@ -1794,6 +1827,20 @@ function mergeHook (
     : parentVal
 }
 
+/*
+var LIFECYCLE_HOOKS = [
+  'beforeCreate',
+  'created',
+  'beforeMount',
+  'mounted',
+  'beforeUpdate',
+  'updated',
+  'beforeDestroy',
+  'destroyed',
+  'activated',
+  'deactivated'
+];
+ */
 LIFECYCLE_HOOKS.forEach(function (hook) {
   strats[hook] = mergeHook;
 });
@@ -1806,6 +1853,10 @@ LIFECYCLE_HOOKS.forEach(function (hook) {
  * options and parent options.
  */
 function mergeAssets (parentVal, childVal) {
+  /*
+  ① 以 parentVal 为原型创建对象 res
+  ② 如果 childVal 为真值，那就将 childVal 的属性都赋给 res，否则直接返回 res
+   */
   var res = Object.create(parentVal || null);
   return childVal
     ? extend(res, childVal)
@@ -1863,6 +1914,7 @@ strats.provide = mergeDataOrFn;
 /**
  * Default strategy.
  */
+// 只要 childVal 不是 undefined，那就返回 childVal
 var defaultStrat = function (parentVal, childVal) {
   return childVal === undefined
     ? parentVal
