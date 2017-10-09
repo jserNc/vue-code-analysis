@@ -1267,6 +1267,7 @@ var uid = 0;
  * A dep is an observable that can have multiple
  * directives subscribing to it.
  */
+// 主题对象构造函数
 var Dep = function Dep () {
   this.id = uid++;
   this.subs = [];
@@ -1279,6 +1280,7 @@ Dep.prototype.addSub = function addSub (sub) {
 
 // 删除订阅者
 Dep.prototype.removeSub = function removeSub (sub) {
+  // 先找到 sub 在 this.subs 中的索引，然后调用 splice 函数删除它
   remove(this.subs, sub);
 };
 
