@@ -317,7 +317,7 @@ function toNumber (val) {
  * is in that map.
  */
  /*
- 检验字符串是不是在 str 中，参数为 true 表示忽略大小写，eg:
+ 检验字符串是不是在 str 中，参数为 true 表示将参数转为小写后再比较，eg:
  makeMap('aaa,bbb,ccc',true)('aa')  -> undefined
  makeMap('aaa,bbb,ccc',true)('aaa') -> true
  makeMap('aaa,bbb,ccc',true)('AAA') -> true
@@ -331,6 +331,7 @@ function makeMap (
   for (var i = 0; i < list.length; i++) {
     map[list[i]] = true;
   }
+  // expectsLowerCase 为假，需要严格相等；expectsLowerCase 为真会将 val 先转为小写再比较
   return expectsLowerCase
     ? function (val) { return map[val.toLowerCase()]; }
     : function (val) { return map[val]; }
@@ -340,7 +341,7 @@ function makeMap (
  * Check if a tag is a built-in tag.
  */
 /*
-判断参数是否匹配 slot 或 component，忽视大小写。
+判断参数是否匹配 slot 或 component（这两种是内置标签名），忽视大小写。
 eg:
 isBuiltInTag("SLOT")  -> true
 isBuiltInTag("component")  -> true
@@ -1927,8 +1928,14 @@ var defaultStrat = function (parentVal, childVal) {
  * Validate component names
  */
 function checkComponents (options) {
+  // 依次打印出不合法的组件名
   for (var key in options.components) {
     var lower = key.toLowerCase();
+	/*
+	不用内置的或者保留的 html 标签名作为组件名
+	① isBuiltInTag(lower) 当 lower 是 slot 或 component 这两种内置组件名时，返回 true
+	② config.isReservedTag(lower) 判断 lower 是否是 html/svg 保留标签
+	*/
     if (isBuiltInTag(lower) || config.isReservedTag(lower)) {
       warn(
         'Do not use built-in or reserved HTML elements as component ' +
@@ -1942,31 +1949,38 @@ function checkComponents (options) {
  * Ensure all props option syntax are normalized into the
  * Object-based format.
  */
+// 将 options.props 都统一成对象格式
 function normalizeProps (options) {
   var props = options.props;
   if (!props) { return }
   var res = {};
   var i, val, name;
+  // props 是数组
   if (Array.isArray(props)) {
     i = props.length;
     while (i--) {
       val = props[i];
       if (typeof val === 'string') {
+		// 将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
         name = camelize(val);
         res[name] = { type: null };
+	  // 提示：使用数组语法时，属性必须是字符串
       } else {
         warn('props must be strings when using array syntax.');
       }
     }
+  // props 是对象
   } else if (isPlainObject(props)) {
     for (var key in props) {
       val = props[key];
       name = camelize(key);
+	  // 如果 val 是对象，那就用这个对象，否则创建一个新的对象
       res[name] = isPlainObject(val)
         ? val
         : { type: val };
     }
   }
+  // 覆盖原来的 options.props
   options.props = res;
 }
 
@@ -5410,6 +5424,7 @@ var namespaceMap = {
   math: 'http://www.w3.org/1998/Math/MathML'
 };
 
+// html 保留标签名
 var isHTMLTag = makeMap(
   'html,body,base,head,link,meta,style,title,' +
   'address,article,aside,footer,header,h1,h2,h3,h4,h5,h6,hgroup,nav,section,' +
@@ -5426,6 +5441,7 @@ var isHTMLTag = makeMap(
 
 // this map is intentionally selective, only covering SVG elements that may
 // contain child elements.
+// svg 保留标签名
 var isSVG = makeMap(
   'svg,animate,circle,clippath,cursor,defs,desc,ellipse,filter,font-face,' +
   'foreignObject,g,glyph,image,line,marker,mask,missing-glyph,path,pattern,' +
@@ -5435,6 +5451,7 @@ var isSVG = makeMap(
 
 var isPreTag = function (tag) { return tag === 'pre'; };
 
+// 是否是保留标签
 var isReservedTag = function (tag) {
   return isHTMLTag(tag) || isSVG(tag)
 };
