@@ -1987,11 +1987,14 @@ function normalizeProps (options) {
 /**
  * Normalize all injections into Object-based format
  */
+// 将 options.inject 都统一成对象格式
 function normalizeInject (options) {
   var inject = options.inject;
+  // options.inject 是数组
   if (Array.isArray(inject)) {
     var normalized = options.inject = {};
     for (var i = 0; i < inject.length; i++) {
+	  // normalized 和 options.inject 指向同一个对象，修改 normalized 就是修改 options.inject
       normalized[inject[i]] = inject[i];
     }
   }
@@ -2000,12 +2003,14 @@ function normalizeInject (options) {
 /**
  * Normalize raw function directives into object format.
  */
+// 将 funtion 类型的 directives 转成对象格式
 function normalizeDirectives (options) {
   var dirs = options.directives;
   if (dirs) {
     for (var key in dirs) {
       var def = dirs[key];
       if (typeof def === 'function') {
+		// eg : dirs[d1] = { bind: function(){...}, update: function(){...}};
         dirs[key] = { bind: def, update: def };
       }
     }
@@ -2016,24 +2021,31 @@ function normalizeDirectives (options) {
  * Merge two option objects into a new one.
  * Core utility used in both instantiation and inheritance.
  */
+// 合并两个 options 对象
 function mergeOptions (
   parent,
   child,
   vm
 ) {
-  {
+  { 
+	// 打印出 child.components 中不符合要求的组件名
     checkComponents(child);
   }
 
+  // 如果 child 类型是 function，那么取 child.options
   if (typeof child === 'function') {
     child = child.options;
   }
 
+  // 将 child.props 都统一成对象格式
   normalizeProps(child);
+  // 将 child.inject 都统一成对象格式
   normalizeInject(child);
+  // 将 funtion 类型的 child.directives 转成对象格式
   normalizeDirectives(child);
   var extendsFrom = child.extends;
   if (extendsFrom) {
+	// 递归
     parent = mergeOptions(parent, extendsFrom, vm);
   }
   if (child.mixins) {
@@ -2043,18 +2055,27 @@ function mergeOptions (
   }
   var options = {};
   var key;
+  // 首先合并 parent 中所有的可枚举属性
   for (key in parent) {
     mergeField(key);
   }
+  // 然后合并 child 中并且不属于 parent 中的所有属性
   for (key in child) {
     if (!hasOwn(parent, key)) {
       mergeField(key);
     }
   }
+  // 针对特定属性 key，进行合并
   function mergeField (key) {
+	/*
+	① strats = config.optionMergeStrategies 是一个对象，可以为该对象添加方法属性，自定义合并策略的选项
+	   strats[key] 是一个 function，不同的 key 对应不同的 function，也就是不同的合并策略
+	② defaultStrat 是一个函数，defaultStrat(parentVal, childVal)，只要 childVal 不是 undefined，那就返回 childVal
+	*/
     var strat = strats[key] || defaultStrat;
     options[key] = strat(parent[key], child[key], vm, key);
   }
+  // 返回合并后的对象
   return options
 }
 
@@ -2070,19 +2091,31 @@ function resolveAsset (
   warnMissing
 ) {
   /* istanbul ignore if */
+  // id 必须为字符串，否则不处理
   if (typeof id !== 'string') {
     return
   }
   var assets = options[type];
+
   // check local registration variations first
+  // 首先检查本地注册变量 id
   if (hasOwn(assets, id)) { return assets[id] }
+  // 将连字符分隔的 id 驼峰化，例如：a-b-c -> aBC
   var camelizedId = camelize(id);
+  // 再次检查本地注册变量
   if (hasOwn(assets, camelizedId)) { return assets[camelizedId] }
+  // 首字母大写，例如：aBC -> ABC
   var PascalCaseId = capitalize(camelizedId);
+  // 再次检查本地注册变量
   if (hasOwn(assets, PascalCaseId)) { return assets[PascalCaseId] }
+
+
   // fallback to prototype chain
+  // 既然走到这，说明 assets 本身不含 id/camelizedId/PascalCaseId 属性，那就去 assets 的原型链去找
   var res = assets[id] || assets[camelizedId] || assets[PascalCaseId];
+  // 开发环境，并且 warnMissing 为真，并且在原型链中都找不到，才会发出警告
   if ("development" !== 'production' && warnMissing && !res) {
+	// 'abcdef'.slice(0, -1) -> "abcde"
     warn(
       'Failed to resolve ' + type.slice(0, -1) + ': ' + id,
       options
@@ -2091,8 +2124,7 @@ function resolveAsset (
   return res
 }
 
-/*  */
-
+// 验证属性
 function validateProp (
   key,
   propOptions,
@@ -2100,12 +2132,15 @@ function validateProp (
   vm
 ) {
   var prop = propOptions[key];
+  // key 不是 propsData 自身属性
   var absent = !hasOwn(propsData, key);
   var value = propsData[key];
   // handle boolean props
+  // prop.type 这个函数是 Boolean，修正 value 为 true 或 false
   if (isType(Boolean, prop.type)) {
     if (absent && !hasOwn(prop, 'default')) {
       value = false;
+	// hyphenate 用于将驼峰写法转为连字符写法，如 hyphenate('aaBbCc') -> "aa-bb-cc"
     } else if (!isType(String, prop.type) && (value === '' || value === hyphenate(key))) {
       value = true;
     }
@@ -2129,6 +2164,7 @@ function validateProp (
 /**
  * Get the default value of a prop.
  */
+// 获取一个属性的默认值
 function getPropDefaultValue (vm, prop, key) {
   // no default, return undefined
   if (!hasOwn(prop, 'default')) {
@@ -2136,6 +2172,7 @@ function getPropDefaultValue (vm, prop, key) {
   }
   var def = prop.default;
   // warn against non-factory defaults for Object & Array
+  // 默认值不能是对象或者数组，必须用工厂函数返回默认值
   if ("development" !== 'production' && isObject(def)) {
     warn(
       'Invalid default value for prop "' + key + '": ' +
@@ -2150,10 +2187,16 @@ function getPropDefaultValue (vm, prop, key) {
     vm.$options.propsData[key] === undefined &&
     vm._props[key] !== undefined
   ) {
+	// 直接返回 vm._props[key]
     return vm._props[key]
   }
   // call factory function for non-Function types
   // a value is Function if its prototype is function even across different execution context
+  /*
+  getType(Function) -> "Function"
+  ① def 是 function 类型，并且 prop.type 的函数名不是 Function，def 的 this 绑定 vm 执行，返回执行结果；
+  ② 否则，时间返回 def
+  */
   return typeof def === 'function' && getType(prop.type) !== 'Function'
     ? def.call(vm)
     : def
@@ -2237,15 +2280,31 @@ function assertType (value, type) {
  * because a simple equality check will fail when running
  * across different vms / iframes.
  */
+/*
+获取函数名，如果没有就返回空字符串
+eg:
+① var match = Boolean.toString().match(/^\s*function (\w+)/)
+   -> ["function Boolean", "Boolean", index: 0, input: "function Boolean() { [native code] }"]
+
+   match[1] -> "Boolean"
+
+② var match = (function myFn(){}).toString().match(/^\s*function (\w+)/)
+   -> ["function myFn", "myFn", index: 0, input: "function myFn(){}"]
+
+   match[1] -> "myFn"
+*/
 function getType (fn) {
   var match = fn && fn.toString().match(/^\s*function (\w+)/);
   return match ? match[1] : ''
 }
 
+// 判断是否是同名函数
 function isType (type, fn) {
+  // fn 不是数组，只有 fn 和 type 这俩函数同名才返回 true
   if (!Array.isArray(fn)) {
     return getType(fn) === getType(type)
   }
+  // fn 是数组，那么只要 fn 中有一个函数和函数 type 同名就返回 true
   for (var i = 0, len = fn.length; i < len; i++) {
     if (getType(fn[i]) === getType(type)) {
       return true
