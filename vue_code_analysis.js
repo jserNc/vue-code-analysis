@@ -2147,15 +2147,27 @@ function validateProp (
   }
   // check default value
   if (value === undefined) {
+	// 获取默认值
     value = getPropDefaultValue(vm, prop, key);
     // since the default value is a fresh copy,
     // make sure to observe it.
+	/*
+	前面定义过：
+	observerState = {
+	  shouldConvert: true
+	};
+	不过，有多个地方可能对 observerState.shouldConvert 进行重置
+	*/
+	// 先保存之前的 observerState.shouldConvert
     var prevShouldConvert = observerState.shouldConvert;
     observerState.shouldConvert = true;
+	// 为 value 创建一个观察者实例
     observe(value);
+	// 还原 observerState.shouldConvert
     observerState.shouldConvert = prevShouldConvert;
   }
   {
+	// 验证属性的有效性
     assertProp(prop, key, value, vm, absent);
   }
   return value
@@ -2205,6 +2217,7 @@ function getPropDefaultValue (vm, prop, key) {
 /**
  * Assert whether a prop is valid.
  */
+// 验证属性的有效性
 function assertProp (
   prop,
   name,
@@ -2212,6 +2225,7 @@ function assertProp (
   vm,
   absent
 ) {
+  // prop 必需，并且 absent 为真。发出警告，然后返回
   if (prop.required && absent) {
     warn(
       'Missing required prop: "' + name + '"',
@@ -2219,33 +2233,55 @@ function assertProp (
     );
     return
   }
+  // prop 非必需，并且 value 为 undefined 或 null，直接返回
   if (value == null && !prop.required) {
     return
   }
   var type = prop.type;
+  // type 为假（undefined、null、false、0、NaN、""）或 true 时，valid 为 true
   var valid = !type || type === true;
   var expectedTypes = [];
+  // prop.type 为真
   if (type) {
+	// 如果 type 不是数组，手动转为数值形式
     if (!Array.isArray(type)) {
       type = [type];
     }
+	// 只要 valid 变为 true，就终止该循环。也就是说，只要 valid 匹配到 type 数组中任一个即可
     for (var i = 0; i < type.length && !valid; i++) {
+	  /*
+	  assertedType 的格式为：
+	  {
+		valid: valid,
+		expectedType: expectedType
+	  }
+	  */
       var assertedType = assertType(value, type[i]);
+	  // 这里的 assertedType.expectedType 是 type[i] 转为为字符串形式的函数名，例如：type[i] 为 Boolean，那么 assertedType.expectedType 就是 "Boolean"
       expectedTypes.push(assertedType.expectedType || '');
       valid = assertedType.valid;
     }
   }
+  // 经过上面的循环匹配后，valid 还是假，那就发出警告：该属性无效
   if (!valid) {
     warn(
       'Invalid prop: type check failed for prop "' + name + '".' +
+	  // 将 expectedTypes 数组元素首字母大写，然后拼成字符串
       ' Expected ' + expectedTypes.map(capitalize).join(', ') +
+	  /*
+	  Object.prototype.toString.call(1) -> "[object Number]"
+	  "[object Number]".slice(8, -1) -> "Number"
+	  */
       ', got ' + Object.prototype.toString.call(value).slice(8, -1) + '.',
       vm
     );
+	// 属性无效，在此返回
     return
   }
   var validator = prop.validator;
+  // 如果属性有验证器，就要验证器检验之
   if (validator) {
+	// 没通过验证器检验，发出警告
     if (!validator(value)) {
       warn(
         'Invalid prop: custom validator check failed for prop "' + name + '".',
@@ -2257,15 +2293,28 @@ function assertProp (
 
 var simpleCheckRE = /^(String|Number|Boolean|Function|Symbol)$/;
 
+// 判断 value 是否是 type 的实例。返回一个 json 对象
 function assertType (value, type) {
   var valid;
+  // getType 方法用于获取函数名，如果没有就返回空字符串，例如：getType(Boolean) -> "Boolean"
   var expectedType = getType(type);
+  // expectedType 为 String|Number|Boolean|Function|Symbol 其中一种
   if (simpleCheckRE.test(expectedType)) {
+	/*
+	这里有赋值（=）、typeof、全等（===）、成员访问（.）等 4 种运算符，优先级从高到低分别是：
+	. 高于 typeof 高于 === 高于 =
+
+	那只有 value 类型为 function，并且 expectedType 为 Function 才会返回 true
+	typeof (function myFunc(){}) === 'Function'.toLowerCase() -> true
+	*/
     valid = typeof value === expectedType.toLowerCase();
+  // value 为对象
   } else if (expectedType === 'Object') {
     valid = isPlainObject(value);
+  // value 为数组
   } else if (expectedType === 'Array') {
     valid = Array.isArray(value);
+  // value 是 type 的实例
   } else {
     valid = value instanceof type;
   }
@@ -2320,6 +2369,36 @@ var mark;
 var measure;
 
 {
+  /*
+	window.performance 对象是 W3C 性能小组引入的新的 API，目前 IE9 以上的浏览器都支持。
+	它的作用是允许网页访问某些函数来测量网页和Web应用程序的性能。
+
+	window.performance.timing 有以下子属性：
+
+	navigationStart：浏览器处理当前网页的启动时间
+	fetchStart：浏览器发起http请求读取文档的毫秒时间戳。
+	domainLookupStart：域名查询开始时的时间戳。
+	domainLookupEnd：域名查询结束时的时间戳。
+	connectStart：http请求开始向服务器发送的时间戳。
+	connectEnd：浏览器与服务器连接建立（握手和认证过程结束）的毫秒时间戳。
+	requestStart：浏览器向服务器发出http请求时的时间戳。或者开始读取本地缓存时。
+	responseStart：浏览器从服务器（或读取本地缓存）收到第一个字节时的时间戳。
+	responseEnd：浏览器从服务器收到最后一个字节时的毫秒时间戳。
+	domLoading：浏览器开始解析网页DOM结构的时间。
+	domInteractive：网页dom树创建完成，开始加载内嵌资源的时间。
+	domContentLoadedEventStart：网页DOMContentLoaded事件发生时的时间戳。
+	domContentLoadedEventEnd：网页所有需要执行的脚本执行完成时的时间，domReady的时间。
+	domComplete：网页dom结构生成时的时间戳。
+	loadEventStart：当前网页load事件的回调函数开始执行的时间戳。
+	loadEventEnd：当前网页load事件的回调函数结束运行时的时间戳。
+
+	window.performance 对象有以下方法：
+
+	performance.getEntries()：浏览器获取网页时，会对网页中每一个对象（脚本文件、样式表、图片文件等等）发出一个HTTP请求。performance.getEntries方法以数组形式，返回这些请求的时间统计信息，有多少个请求，返回数组就会有多少个成员。
+	performance.now() 方法返回当前网页自从 performance.timing.navigationStart 到当前时间之间的微秒数（毫秒的千分之一）
+	performance.mark() 给相应的视点做标记。结合performance.measure()使用也可以算出各个时间段的耗时
+    performance.clearMarks() 方法用于清除标记，如果不加参数，就表示清除所有标记。
+  */
   var perf = inBrowser && window.performance;
   /* istanbul ignore if */
   if (
@@ -2329,7 +2408,9 @@ var measure;
     perf.clearMarks &&
     perf.clearMeasures
   ) {
+	// 标识视点
     mark = function (tag) { return perf.mark(tag); };
+	// 计算两个视点之间的时间差
     measure = function (name, startTag, endTag) {
       perf.measure(name, startTag, endTag);
       perf.clearMarks(startTag);
@@ -2344,6 +2425,7 @@ var measure;
 var initProxy;
 
 {
+  // allowedGlobals('parseFloat') -> true，也就是说，只要参数是以下任何一个全局变量，就返回 true
   var allowedGlobals = makeMap(
     'Infinity,undefined,NaN,isFinite,isNaN,' +
     'parseFloat,parseInt,decodeURI,decodeURIComponent,encodeURI,encodeURIComponent,' +
@@ -2351,6 +2433,7 @@ var initProxy;
     'require' // for Webpack/Browserify
   );
 
+  // 发出警告：实例的属性/方法未定义
   var warnNonPresent = function (target, key) {
     warn(
       "Property or method \"" + key + "\" is not defined on the instance but " +
@@ -2360,17 +2443,23 @@ var initProxy;
     );
   };
 
+  // 是否原生支持 Proxy
   var hasProxy =
     typeof Proxy !== 'undefined' &&
     Proxy.toString().match(/native code/);
 
+  // 原生支持 Proxy 构造函数
   if (hasProxy) {
+	// 是否是内置的修饰词
     var isBuiltInModifier = makeMap('stop,prevent,self,ctrl,shift,alt,meta');
+	// 这里的 config.keyCodes 是一个对象，这里对这个对象的属性设置进行拦截
     config.keyCodes = new Proxy(config.keyCodes, {
       set: function set (target, key, value) {
+		// 如果是内置的修饰符，发出警告，不能设置
         if (isBuiltInModifier(key)) {
           warn(("Avoid overwriting built-in modifier in config.keyCodes: ." + key));
           return false
+		// 其他可以成功设置
         } else {
           target[key] = value;
           return true
@@ -2380,31 +2469,43 @@ var initProxy;
   }
 
   var hasHandler = {
+	// has(target, propKey)：拦截 propKey in proxy 的操作，返回一个布尔值。
     has: function has (target, key) {
+	  // key 是否在 target 对象中
       var has = key in target;
+	  // key 值为全局变量或下划线开头
       var isAllowed = allowedGlobals(key) || key.charAt(0) === '_';
+	  // key 不在 target 中并且 key 是普通标识符，发出警告
       if (!has && !isAllowed) {
         warnNonPresent(target, key);
       }
+	  // key 在 target 中或 key 是普通标识符，返回 true
       return has || !isAllowed
     }
   };
 
   var getHandler = {
+	// get(target, propKey, receiver)：拦截对象属性的读取，比如 proxy.foo 和 proxy['foo']
     get: function get (target, key) {
+	  // key 不在 target 中，发出警告，属性不存在
       if (typeof key === 'string' && !(key in target)) {
         warnNonPresent(target, key);
       }
+	  // 返回 key 对应的属性值
       return target[key]
     }
   };
 
   initProxy = function initProxy (vm) {
+	// 原生支持 Proxy
     if (hasProxy) {
       // determine which proxy handler to use
       var options = vm.$options;
+	  
       var handlers = options.render && options.render._withStripped
+		// 拦截 vm 对象属性的读取
         ? getHandler
+		// 拦截 prop in vm 的操作，返回一个布尔值
         : hasHandler;
       vm._renderProxy = new Proxy(vm, handlers);
     } else {
@@ -2414,7 +2515,7 @@ var initProxy;
 }
 
 /*  */
-
+// VNode 构造函数
 var VNode = function VNode (
   tag,
   data,
@@ -2456,9 +2557,41 @@ prototypeAccessors.child.get = function () {
   return this.componentInstance
 };
 
+/*
+Object.defineProperties() 方法直接在一个对象上定义新的属性或修改现有属性，并返回该对象。
+
+例如：
+var obj = {};
+Object.defineProperties(obj, {
+  'property1': {
+    value: true,
+    writable: true
+  },
+  'property2': {
+    value: 'Hello',
+    writable: false
+  }
+  // etc. etc.
+});
+
+这里相当于：
+Object.defineProperties( VNode.prototype, {
+  child: {
+	get:function () {
+	  return this.componentInstance
+	};
+  }
+});
+
+也就是说，VNode 的实例访问 child 属性，会返回其 componentInstance 属性
+var vn = new VNode();
+vn.child -> vn.componentInstance
+*/
 Object.defineProperties( VNode.prototype, prototypeAccessors );
 
+// 创建一个空的 vNode（注释）
 var createEmptyVNode = function (text) {
+  // void 0 === undefined -> true
   if ( text === void 0 ) text = '';
 
   var node = new VNode();
@@ -2467,7 +2600,9 @@ var createEmptyVNode = function (text) {
   return node
 };
 
+// 创建文本 vNode
 function createTextVNode (val) {
+  // 将 val 强制转为字符串
   return new VNode(undefined, undefined, undefined, String(val))
 }
 
