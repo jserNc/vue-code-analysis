@@ -2600,7 +2600,7 @@ var createEmptyVNode = function (text) {
   return node
 };
 
-// 创建文本 vNode
+// 创建文本 VNode
 function createTextVNode (val) {
   // 将 val 强制转为字符串
   return new VNode(undefined, undefined, undefined, String(val))
@@ -2610,7 +2610,14 @@ function createTextVNode (val) {
 // used for static nodes and slot nodes because they may be reused across
 // multiple renders, cloning them avoids errors when DOM manipulations rely
 // on their elm reference.
+// 克隆一个节点
 function cloneVNode (vnode) {
+  /*
+  看一下 VNode 构造函数：
+  var VNode = function VNode (tag,data,children,text,elm,context,componentOptions,asyncFactory) {}
+  
+  克隆节点的所有属性都取自原节点，不过，克隆节点是一个独立的新的对象
+  */
   var cloned = new VNode(
     vnode.tag,
     vnode.data,
@@ -2629,6 +2636,7 @@ function cloneVNode (vnode) {
   return cloned
 }
 
+// 克隆一组节点
 function cloneVNodes (vnodes) {
   var len = vnodes.length;
   var res = new Array(len);
@@ -2638,15 +2646,24 @@ function cloneVNodes (vnodes) {
   return res
 }
 
-/*  */
-
+// 格式化事件
 var normalizeEvent = cached(function (name) {
+  // 如果 name 的第一个字符是 &，那么 passive 为 true
   var passive = name.charAt(0) === '&';
+  // 如果 name 的第一个字符是 &，那么丢掉这个字符
   name = passive ? name.slice(1) : name;
+
+  // 如果 name 的第一个字符是 ~，那么 once$$1 为 true
   var once$$1 = name.charAt(0) === '~'; // Prefixed last, checked first
+  // 如果 name 的第一个字符是 ~，那么丢掉这个字符
   name = once$$1 ? name.slice(1) : name;
+
+  // 如果 name 的第一个字符是 !，那么 capture 为 true
   var capture = name.charAt(0) === '!';
+  // 如果 name 的第一个字符是 !，那么丢掉这个字符
   name = capture ? name.slice(1) : name;
+
+  // 返回格式化 json
   return {
     name: name,
     once: once$$1,
@@ -2655,25 +2672,32 @@ var normalizeEvent = cached(function (name) {
   }
 });
 
+// 创建函数调用器
 function createFnInvoker (fns) {
   function invoker () {
     var arguments$1 = arguments;
 
     var fns = invoker.fns;
+	// fns 是函数数组
     if (Array.isArray(fns)) {
+	  // 深拷贝 fns 数组
       var cloned = fns.slice();
       for (var i = 0; i < cloned.length; i++) {
+		// 为什么要多定义一个 arguments$1 变量，直接用 arguments 不行吗？
         cloned[i].apply(null, arguments$1);
       }
+	// fns 是单个函数，this 绑定全局对象执行
     } else {
       // return handler return value for single handlers
       return fns.apply(null, arguments)
     }
   }
   invoker.fns = fns;
+  // 返回闭包
   return invoker
 }
 
+// 更新监听
 function updateListeners (
   on,
   oldOn,
@@ -2685,32 +2709,51 @@ function updateListeners (
   for (name in on) {
     cur = on[name];
     old = oldOn[name];
+	/*
+	格式化后的 event 是这样一个 json：
+	{
+		name: name,
+		once: once$$1,
+		capture: capture,
+		passive: passive
+	}
+	*/
     event = normalizeEvent(name);
+	// cur 为 undefined 或 null，这是不允许的
     if (isUndef(cur)) {
+	  // 开发环境下发出警告
       "development" !== 'production' && warn(
         "Invalid handler for event \"" + (event.name) + "\": got " + String(cur),
         vm
       );
+	// cur 合法，但 old 为 undefined 或 null，那么就需要用 add 新建事件绑定了
     } else if (isUndef(old)) {
+	  // 如果 cur.fns 为 undefined 或 null，那么，cur 重置为 cur 函数调用器
       if (isUndef(cur.fns)) {
         cur = on[name] = createFnInvoker(cur);
       }
+	  // 事件绑定
       add(event.name, cur, event.once, event.capture, event.passive);
+	// cur 和 old 都合法，但不相等，那么可以继续用 old，只是更新 old 的监听函数即可
     } else if (cur !== old) {
       old.fns = cur;
+	  // 更新 on[name]
       on[name] = old;
     }
   }
+
+  // 遍历 oldOn，删除掉不必要的事件绑定
   for (name in oldOn) {
+	// on[name] 为 undefined 或 null，则移除掉对应的事件绑定
     if (isUndef(on[name])) {
+	  // 格式化 event
       event = normalizeEvent(name);
       remove$$1(event.name, oldOn[name], event.capture);
     }
   }
 }
 
-/*  */
-
+// 合并 VNode 钩子
 function mergeVNodeHook (def, hookKey, hook) {
   var invoker;
   var oldHook = def[hookKey];
@@ -2719,30 +2762,39 @@ function mergeVNodeHook (def, hookKey, hook) {
     hook.apply(this, arguments);
     // important: remove merged hook to ensure it's called only once
     // and prevent memory leak
+	// 从数组 invoker.fns 中删除 wrappedHook，确保钩子只被调用一次，还能防止内存泄漏
     remove(invoker.fns, wrappedHook);
   }
 
+  // oldHook 为 undefined 或 null，也就是之前没有对应的钩子
   if (isUndef(oldHook)) {
     // no existing hook
+	// 把函数 wrappedHook 加到调用器 invoker 里
     invoker = createFnInvoker([wrappedHook]);
   } else {
     /* istanbul ignore if */
+	/*
+	isDef(oldHook.fns) -> oldHook.fns 不为 undefined 且不为 null ?
+	isTrue(oldHook.merged) -> oldHook.merged === true ?
+
+	同时满足这俩条件，用旧的钩子就好了
+	*/
     if (isDef(oldHook.fns) && isTrue(oldHook.merged)) {
-      // already a merged invoker
+      // already a merged invoker，已经存在一个合并过的钩子
       invoker = oldHook;
       invoker.fns.push(wrappedHook);
     } else {
-      // existing plain hook
+      // existing plain hook，已经存在一个没合并过的空钩子
       invoker = createFnInvoker([oldHook, wrappedHook]);
     }
   }
-
+  // 标识合并过
   invoker.merged = true;
+  // 更新 def 的 hookKey 属性
   def[hookKey] = invoker;
 }
 
-/*  */
-
+// 从 VNodeData 中提取 props
 function extractPropsFromVNodeData (
   data,
   Ctor,
@@ -2751,15 +2803,19 @@ function extractPropsFromVNodeData (
   // we are only extracting raw values here.
   // validation and default values are handled in the child
   // component itself.
+  // 这里只提取原始值，验证和默认值的处理由子组件自己完成
   var propOptions = Ctor.options.props;
+  // propOptions 为 undefined 或 null，直接返回
   if (isUndef(propOptions)) {
     return
   }
   var res = {};
   var attrs = data.attrs;
   var props = data.props;
+  // attrs 或 props 不为 null/undefined 
   if (isDef(attrs) || isDef(props)) {
     for (var key in propOptions) {
+	  // 将驼峰写法转为连字符写法，如 hyphenate('aaBbCc') -> "aa-bb-cc"
       var altKey = hyphenate(key);
       {
         var keyInLowerCase = key.toLowerCase();
@@ -2767,6 +2823,18 @@ function extractPropsFromVNodeData (
           key !== keyInLowerCase &&
           attrs && hasOwn(attrs, keyInLowerCase)
         ) {
+		  /*
+		  ① tip 函数的作用是：调用 console.warn 函数发出警告，例如："[Vue tip]: some tip"
+
+		  ② formatComponentName 函数的作用是格式化组件名：
+		     a. 组件名'aaa-bbb' -> "<AaaBbb>"
+			 b. 如果没有组件名，就用匿名，"<Anonymous>"
+			 c. 如果需要，还可以跟上文件名 "<AaaBbb> at aaa-bbb.vue"
+
+		  ③ 翻译一下以下的提示信息：
+		     这里把全小写字母组成的属性名传给了某组件，但是声明的属性名并不全是小写字母。
+			 需要注意的是：html 属性对大小写是不敏感的（都解析为小写）。camelCased 驼峰化的属性名需要转换为相应的 kebab-case (短横线隔开式) 命名。
+		  */
           tip(
             "Prop \"" + keyInLowerCase + "\" is passed to component " +
             (formatComponentName(tag || Ctor)) + ", but the declared prop name is" +
@@ -2777,6 +2845,7 @@ function extractPropsFromVNodeData (
           );
         }
       }
+	  // key/altKey 为 props/attrs 自身属性就会往 res 对象中添加该属性
       checkProp(res, props, key, altKey, true) ||
       checkProp(res, attrs, key, altKey, false);
     }
@@ -2784,20 +2853,26 @@ function extractPropsFromVNodeData (
   return res
 }
 
+// 如果 key/altKey 属性是 hash 自身属性，那就把它添加到 res 中。添加成功返回 true，添加失败返回 false
 function checkProp (
   res,
   hash,
   key,
   altKey,
+  // preserve 为 false 表示匹配成功后会删除 hash[key]
   preserve
 ) {
+  // hash 不能为 undefined 或 null，否则返回 false
   if (isDef(hash)) {
+	// key 为 hash 的自身属性
     if (hasOwn(hash, key)) {
+	  // 修改 res
       res[key] = hash[key];
       if (!preserve) {
         delete hash[key];
       }
       return true
+	// altKey（将 key 转为连字符写法）为 hash 的自身属性
     } else if (hasOwn(hash, altKey)) {
       res[key] = hash[altKey];
       if (!preserve) {
@@ -2806,14 +2881,29 @@ function checkProp (
       return true
     }
   }
+  //
   return false
 }
 
-/*  */
 
+// 模板编译器会在编译时静态分析模板，以最大限度减少对标准化处理的依赖
 // The template compiler attempts to minimize the need for normalization by
 // statically analyzing the template at compile time.
-//
+
+/*
+   对于普通的 html 标记，标准化处理是完全不需要的，因为生成的渲染函数会返回 Array<VNode>。
+
+   主要有两种情况需要额外的标准化处理：
+   ① 当 children 包含组件时
+      因为功能性组件可能会返回一个数组而不是一个单独的 root。
+
+	  这种情况下，仅需要一个简单的标准化处理。即：如果某个 child 是数组，那就通过 Array.prototype.concat 方法使之扁平化。
+	  这样就可以确保 children 数组总是一维的（功能性组件也会对它的子组件进行标准化处理）。
+
+   ② 当 children 包含产生嵌套数组（多维数组）的构造函数时（e.g. <template>, <slot>, v-for）或 children 是用户手写的渲染函数/JSX 提供的。
+	  
+	  这种情况下，就需要一整套的标准化处理来应该各种类型的 children。
+*/
 // For plain HTML markup, normalization can be completely skipped because the
 // generated render function is guaranteed to return Array<VNode>. There are
 // two cases where extra normalization is needed:
@@ -2823,8 +2913,22 @@ function checkProp (
 // normalization is needed - if any child is an Array, we flatten the whole
 // thing with Array.prototype.concat. It is guaranteed to be only 1-level deep
 // because functional components already normalize their own children.
+// 简单的标准化处理：将数组扁平化，变成一维数组
 function simpleNormalizeChildren (children) {
   for (var i = 0; i < children.length; i++) {
+	/*
+	只要有一个 child 是数组，那就将整个 children 扁平化
+
+	eg : 
+	var a = [1,[2,3,4],[5,6],7,8,9];
+	var b = Array.prototype.concat.apply([], a)
+	    -> [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+	不过，这样也只能将数组维度降 1，再看：
+	var c = [1,[2,[3,4]],[[5],6],7,8,9];
+	var d = Array.prototype.concat.apply([], c)
+		-> [1, 2, [3,4], [5], 6, 7, 8, 9]
+	*/
     if (Array.isArray(children[i])) {
       return Array.prototype.concat.apply([], children)
     }
@@ -2836,7 +2940,13 @@ function simpleNormalizeChildren (children) {
 // e.g. <template>, <slot>, v-for, or when the children is provided by user
 // with hand-written render functions / JSX. In such cases a full normalization
 // is needed to cater to all possible types of children values.
+// 处理多种类型的 child
 function normalizeChildren (children) {
+  /*
+	① children 为字符串（string）或数值（number），返回 [ children 转成的文本 VNode]
+	② children 为数组，返回 normalizeArrayChildren(children)
+	③ 否则，返回 undefined
+  */
   return isPrimitive(children)
     ? [createTextVNode(children)]
     : Array.isArray(children)
@@ -2844,34 +2954,46 @@ function normalizeChildren (children) {
       : undefined
 }
 
+// 是否为文本节点
 function isTextNode (node) {
+  // node.text 存在，并且不是注释
   return isDef(node) && isDef(node.text) && isFalse(node.isComment)
 }
-
+ 
+// 标准化数组类型 children
 function normalizeArrayChildren (children, nestedIndex) {
   var res = [];
   var i, c, last;
+  // 遍历 children
   for (i = 0; i < children.length; i++) {
     c = children[i];
+	// 如果 children[i] 为 undefined/null/布尔值，那就跳过本次循环
     if (isUndef(c) || typeof c === 'boolean') { continue }
     last = res[res.length - 1];
     //  nested
+	// children[i] 是数组，递归调用
     if (Array.isArray(c)) {
       res.push.apply(res, normalizeArrayChildren(c, ((nestedIndex || '') + "_" + i)));
+	// children[i] 为字符串（string）或数值（number）
     } else if (isPrimitive(c)) {
+	  // 如果 res 的最后一个元素是文本节点，那就把 children[i] 作为文本添加到该文本节点里
       if (isTextNode(last)) {
         // merge adjacent text nodes
         // this is necessary for SSR hydration because text nodes are
         // essentially merged when rendered to HTML strings
         (last).text += String(c);
+	  // 否则，将 children[i] 转为文本节点，并添加到 res 末尾
       } else if (c !== '') {
         // convert primitive to vnode
         res.push(createTextVNode(c));
       }
+	// children[i] 为其他类型
     } else {
+	  // children[i] 和 last 都为文本节点，创建一个新的文本节点作为 res 最后一个元素
       if (isTextNode(c) && isTextNode(last)) {
         // merge adjacent text nodes
         res[res.length - 1] = createTextVNode(last.text + c.text);
+	  // 其他
       } else {
         // default key for nested array children (likely generated by v-for)
         if (isTrue(children._isVList) &&
@@ -2884,6 +3006,7 @@ function normalizeArrayChildren (children, nestedIndex) {
       }
     }
   }
+  // 最终返回数组 res
   return res
 }
 
