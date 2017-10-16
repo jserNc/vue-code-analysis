@@ -35,7 +35,7 @@ Essential Git: 一些git操作
 
     Object.defineProperty(obj, key, {
       get: function () {
-        // 添加订阅者watcher到主题对象Dep
+        // 添加订阅者 watcher 到主题对象 Dep
         if (Dep.target) dep.addSub(Dep.target);
         return val
       },
@@ -70,10 +70,11 @@ Essential Git: 一些git操作
         if (attr[i].nodeName == 'v-model') {
           var name = attr[i].nodeValue; // 获取v-model绑定的属性名
           node.addEventListener('input', function (e) {
-            // 给相应的data属性赋值，进而触发该属性的set方法
+            // 给 vm[name] 属性赋值，进而触发该属性的 set 方法
             vm[name] = e.target.value;
           });
-          node.value = vm[name]; // 将data的值赋给该node
+		  // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
+          node.value = vm[name]; 
           node.removeAttribute('v-model');
         }
       };
@@ -113,7 +114,8 @@ Essential Git: 一些git操作
     },
     // 获取data中的属性值
     get: function () {
-      this.value = this.vm[this.name]; // 触发相应属性的get
+	  // 触发相应属性的 get 方法
+      this.value = this.vm[this.name]; 
     }
   }
 
@@ -142,7 +144,7 @@ Essential Git: 一些git操作
     var id = options.el;
     var dom = nodeToFragment(document.getElementById(id), this);
 
-    // 编译完成后，将dom返回到app中
+    // 编译完成后，将 dom 返回到 app 中
     document.getElementById(id).appendChild(dom);
   }
 
