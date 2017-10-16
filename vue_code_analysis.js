@@ -3684,7 +3684,7 @@ function mountComponent (
       if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') ||
         vm.$options.el || el) {
 		/*
-		发出警告：你正在用只包含运行时的版本，这个版本的模板编译器时不可用的。
+		发出警告：你正在用只包含运行时的版本，这个版本的模板编译器是不可用的。
 		可采取的方式有两种：
 		① 将模板预编译成渲染函数；
 		② 用包含模板编译器的版本
