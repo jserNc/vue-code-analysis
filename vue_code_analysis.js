@@ -190,23 +190,27 @@ Essential Git: 一些git操作
      (function (global, factory) {
          console.log('给 Vue 赋值');
          global.Vue = factory();
-         console.log('Vue: ', Vue);
+         console.log('Vue 的值: ', Vue);
      }(this, (function () {
-         console.log('① Vue: ',typeof Vue);
-         console.log('执行了');
+         console.log('Vue 定义了吗: ',typeof Vue);
          return 'hello';
      })));
 
-     console.log('② Vue: ', Vue);
+     console.log('最终的 Vue: ', Vue);
 
      打印结果如下：
-     给 Vue 赋值
-     ① Vue:  undefined
-     执行了
-     Vue:  hello
-     ② Vue:  hello
+	 ① 给 Vue 赋值
+	 ② Vue 定义了吗:  undefined
+	 ③ Vue 的值:  hello
+	 ④ 最终的 Vue:  hello
 
-     既然这样，那下面的出现的那么多 Vue 又是哪来的呢？
+	 也就是说，在实参  (function () {
+         console.log('Vue 定义了吗: ',typeof Vue);
+         return 'hello';
+     }) 里是取不到 Vue 的
+
+
+     既然这样，那下面的出现的那么多 Vue 又是干嘛的呢？
 
      其实，下面的那么多 Vue，只不过内部函数的形参而已，例如：
 
@@ -215,6 +219,9 @@ Essential Git: 一些git操作
          Vue.prototype.$on = function (event, fn) {}
          ...
      }
+	
+	 // 实参是真正的构造函数 Vue$3
+	 eventsMixin(Vue$3);
      */
 }(this, (function () { 'use strict';
 
@@ -2394,9 +2401,9 @@ var measure;
 
 	window.performance 对象有以下方法：
 
-	performance.getEntries()：浏览器获取网页时，会对网页中每一个对象（脚本文件、样式表、图片文件等等）发出一个HTTP请求。performance.getEntries方法以数组形式，返回这些请求的时间统计信息，有多少个请求，返回数组就会有多少个成员。
+	performance.getEntries()：浏览器获取网页时，会对网页中每一个对象（脚本文件、样式表、图片文件等等）发出一个 http 请求。performance.getEntries 方法以数组形式，返回这些请求的时间统计信息，有多少个请求，返回数组就会有多少个成员。
 	performance.now() 方法返回当前网页自从 performance.timing.navigationStart 到当前时间之间的微秒数（毫秒的千分之一）
-	performance.mark() 给相应的视点做标记。结合performance.measure()使用也可以算出各个时间段的耗时
+	performance.mark() 给相应的视点做标记。结合 performance.measure() 使用也可以算出各个时间段的耗时
     performance.clearMarks() 方法用于清除标记，如果不加参数，就表示清除所有标记。
   */
   var perf = inBrowser && window.performance;
@@ -3013,14 +3020,21 @@ function normalizeArrayChildren (children, nestedIndex) {
 /*  */
 
 function ensureCtor (comp, base) {
+  // 修正 comp
   if (comp.__esModule && comp.default) {
     comp = comp.default;
   }
+  /*
+  isObject (obj) 方法的作用是：判断 obj 是否为除了 null 之外的对象
+
+  如果 comp 不是对象，那就返回 comp
+  */
   return isObject(comp)
     ? base.extend(comp)
     : comp
 }
 
+// 创建异步的占位符，返回 VNode 节点
 function createAsyncPlaceholder (
   factory,
   data,
@@ -3028,57 +3042,71 @@ function createAsyncPlaceholder (
   children,
   tag
 ) {
+  // 创建一个空的注释节点
   var node = createEmptyVNode();
   node.asyncFactory = factory;
   node.asyncMeta = { data: data, context: context, children: children, tag: tag };
   return node
 }
 
+// resolve 异步组件
 function resolveAsyncComponent (
   factory,
   baseCtor,
   context
 ) {
+  // 出错了，返回 factory.errorComp
   if (isTrue(factory.error) && isDef(factory.errorComp)) {
     return factory.errorComp
   }
 
+  // resolved 了，返回 factory.resolved
   if (isDef(factory.resolved)) {
     return factory.resolved
   }
 
+  // 加载中，返回 factory.loadingComp
   if (isTrue(factory.loading) && isDef(factory.loadingComp)) {
     return factory.loadingComp
   }
 
+  // 已经存在 factory.contexts，向 factory.contexts 中加一个 context
   if (isDef(factory.contexts)) {
     // already pending
     factory.contexts.push(context);
+  // 不存在 factory.contexts，创建之
   } else {
     var contexts = factory.contexts = [context];
+	// 同步
     var sync = true;
 
+	// 遍历 contexts 数组，分别调用其强制渲染更新函数
     var forceRender = function () {
       for (var i = 0, l = contexts.length; i < l; i++) {
         contexts[i].$forceUpdate();
       }
     };
 
+	// resolve 方法只能执行一次
     var resolve = once(function (res) {
       // cache resolved
       factory.resolved = ensureCtor(res, baseCtor);
       // invoke callbacks only if this is not a synchronous resolve
       // (async resolves are shimmed as synchronous during SSR)
+	  // 非同步
       if (!sync) {
         forceRender();
       }
     });
 
+	// reject 方法也只能执行一次
     var reject = once(function (reason) {
+	  // 开发环境发出警告：resolve 异步组件失败...
       "development" !== 'production' && warn(
         "Failed to resolve async component: " + (String(factory)) +
         (reason ? ("\nReason: " + reason) : '')
       );
+	  // 如果有出错组件，那就渲染之
       if (isDef(factory.errorComp)) {
         factory.error = true;
         forceRender();
@@ -3090,22 +3118,27 @@ function resolveAsyncComponent (
     if (isObject(res)) {
       if (typeof res.then === 'function') {
         // () => Promise
+		// 之前没有成功触发，用 then 绑定回调
         if (isUndef(factory.resolved)) {
           res.then(resolve, reject);
         }
       } else if (isDef(res.component) && typeof res.component.then === 'function') {
         res.component.then(resolve, reject);
 
+		// res 出错
         if (isDef(res.error)) {
           factory.errorComp = ensureCtor(res.error, baseCtor);
         }
-
+		
+		// res 加载中
         if (isDef(res.loading)) {
           factory.loadingComp = ensureCtor(res.loading, baseCtor);
           if (res.delay === 0) {
             factory.loading = true;
           } else {
+			// 默认延迟 200 毫秒
             setTimeout(function () {
+			  // 没有成功，也没有失败，才渲染加载中
               if (isUndef(factory.resolved) && isUndef(factory.error)) {
                 factory.loading = true;
                 forceRender();
@@ -3113,10 +3146,12 @@ function resolveAsyncComponent (
             }, res.delay || 200);
           }
         }
-
+		
+		// res 超时
         if (isDef(res.timeout)) {
           setTimeout(function () {
             if (isUndef(factory.resolved)) {
+			  // 触发失败，失败原因是 "timeout (" + (res.timeout) + "ms)"
               reject(
                 "timeout (" + (res.timeout) + "ms)"
               );
@@ -3134,12 +3169,13 @@ function resolveAsyncComponent (
   }
 }
 
-/*  */
 
+// 获取第一个子组件
 function getFirstComponentChild (children) {
   if (Array.isArray(children)) {
     for (var i = 0; i < children.length; i++) {
       var c = children[i];
+	  // 只要当前 child 有 componentOptions 属性，那就认为它是组件，那就在此返回
       if (isDef(c) && isDef(c.componentOptions)) {
         return c
       }
@@ -3147,23 +3183,23 @@ function getFirstComponentChild (children) {
   }
 }
 
-/*  */
-
-/*  */
-
+// 事件初始化
 function initEvents (vm) {
   vm._events = Object.create(null);
   vm._hasHookEvent = false;
   // init parent attached events
   var listeners = vm.$options._parentListeners;
   if (listeners) {
+	// 更新监听
     updateComponentListeners(vm, listeners);
   }
 }
 
 var target;
 
+// 事件绑定
 function add (event, fn, once$$1) {
+  // 只执行一次
   if (once$$1) {
     target.$once(event, fn);
   } else {
@@ -3171,43 +3207,66 @@ function add (event, fn, once$$1) {
   }
 }
 
+// 移除事件
 function remove$1 (event, fn) {
   target.$off(event, fn);
 }
 
+// 更新组件 listeners
 function updateComponentListeners (
   vm,
   listeners,
   oldListeners
 ) {
   target = vm;
+  // 更新监听
   updateListeners(listeners, oldListeners || {}, add, remove$1, vm);
 }
 
+
+/*
+事件混入 
+
+该方法调用时实参是真正的构造函数
+eventsMixin(Vue$3);
+*/
 function eventsMixin (Vue) {
   var hookRE = /^hook:/;
+  // 给 Vue 原型添加 $on 方法，这样 Vue 的实例都可以调用这个方法了
   Vue.prototype.$on = function (event, fn) {
+	// 这里的 this$1 和 vm 都是指 Vue 实例
     var this$1 = this;
 
     var vm = this;
+	// event 是数组，递归调用 $on 方法
     if (Array.isArray(event)) {
       for (var i = 0, l = event.length; i < l; i++) {
         this$1.$on(event[i], fn);
       }
     } else {
+	  /*
+	  $on 函数最核心的就是这一句，把 fn 添加到 vm._events[event] 数组里即完成了事件的绑定
+	  
+	  ① 若 vm._events[event] 不存在，初始化为空数组
+	  ② 向数组 vm._events[event] 末尾添加 fn
+	  */
       (vm._events[event] || (vm._events[event] = [])).push(fn);
       // optimize hook:event cost by using a boolean flag marked at registration
       // instead of a hash lookup
       if (hookRE.test(event)) {
+		// 标识当前 vm 拥有钩子事件
         vm._hasHookEvent = true;
       }
     }
+	// 返回 Vue 实例，所以可以链式调用
     return vm
   };
 
+  // fn 函数只能执行一次
   Vue.prototype.$once = function (event, fn) {
     var vm = this;
     function on () {
+	  // on 执行时就会将事件接触监听，也就是说，fn 只能执行一次
       vm.$off(event, on);
       fn.apply(vm, arguments);
     }
@@ -3216,37 +3275,52 @@ function eventsMixin (Vue) {
     return vm
   };
 
+  // 事件解绑
   Vue.prototype.$off = function (event, fn) {
     var this$1 = this;
 
     var vm = this;
     // all
+	// 如果不传参数，vm.$off() 表示移除所有事件监听。即将 vm._events 对象重置为一个空对象。
     if (!arguments.length) {
       vm._events = Object.create(null);
       return vm
     }
     // array of events
+	// 如果 event 是数组，那就递归调用，一个个解除绑定
     if (Array.isArray(event)) {
       for (var i$1 = 0, l = event.length; i$1 < l; i$1++) {
         this$1.$off(event[i$1], fn);
       }
       return vm
     }
+
+
     // specific event
     var cbs = vm._events[event];
+	// 如果 vm._events[event] 不存在，那说明根本没绑定过该类型事件，直接返回就好了
     if (!cbs) {
       return vm
     }
+
+	// 如果参数长度为 1，如 vm.$off("click") 那就把点击事件全部解绑
     if (arguments.length === 1) {
+	  // event 类别的事件数组清空
       vm._events[event] = null;
       return vm
     }
+
+	
     // specific handler
+	// 以下才是解绑 event 类型的监听函数 fn
     var cb;
     var i = cbs.length;
     while (i--) {
+	  // cbs = vm._events[event]，是个数组，cb 为函数
       cb = cbs[i];
+	  // cb === fn 是 $on 方法绑定的，cb.fn === fn 是 $once 方法绑定的，二者其一满足即可
       if (cb === fn || cb.fn === fn) {
+		// 从回调函数数组 vm._events[event] 中剔除当前项
         cbs.splice(i, 1);
         break
       }
@@ -3254,11 +3328,20 @@ function eventsMixin (Vue) {
     return vm
   };
 
+  // 事件触发
   Vue.prototype.$emit = function (event) {
     var vm = this;
     {
       var lowerCaseEvent = event.toLowerCase();
       if (lowerCaseEvent !== event && vm._events[lowerCaseEvent]) {
+		/*
+		tip 函数的作用是：调用 console.warn 函数发出警告，例如："[Vue tip]: some tip"
+
+		翻译一下提示：
+		组件 <AaaBbb>（格式化后的组件名）发出了事件 lowerCaseEvent（全小写字母构成），但是注册的事件类型是 event（非全小写字母构成）。
+		需要注意的是 html 属性是大小写不敏感的。我们不能在模板中用 v-on 来监听驼峰写法的事件类型。
+		我们应该使用连字符写法。如 hyphenate('aaBbCc') -> "aa-bb-cc"。
+		*/
         tip(
           "Event \"" + lowerCaseEvent + "\" is emitted in component " +
           (formatComponentName(vm)) + " but the handler is registered for \"" + event + "\". " +
@@ -3270,12 +3353,20 @@ function eventsMixin (Vue) {
     }
     var cbs = vm._events[event];
     if (cbs) {
+	  /*
+		toArray(list, start) 的作用是将类数组 list 转为真正的数组，start 表示起始索引
+		eg: toArray([0, 1, 2, 3, 4, 5, 6], 2) -> [2, 3, 4, 5, 6]
+	  */
       cbs = cbs.length > 1 ? toArray(cbs) : cbs;
+	  // 将第一个实参 event 排除掉，剩下的参数真正被回调函数用的实参
       var args = toArray(arguments, 1);
+	  // 依次执行 vm._events[event] 数组中的回调函数，也就是说执行 event 类型的所有回调函数
       for (var i = 0, l = cbs.length; i < l; i++) {
         try {
+		  // 执行的实参是 $emit 方法除了参数 event 以外的其他参数
           cbs[i].apply(vm, args);
         } catch (e) {
+		  // 如果出错，发出提示
           handleError(e, vm, ("event handler for \"" + event + "\""));
         }
       }
@@ -3284,61 +3375,96 @@ function eventsMixin (Vue) {
   };
 }
 
-/*  */
-
 /**
  * Runtime helper for resolving raw children VNodes into a slot object.
  */
+// 插槽处理
 function resolveSlots (
   children,
   context
 ) {
   var slots = {};
+  // children 不存在，就返回空数组
   if (!children) {
     return slots
   }
+
   var defaultSlot = [];
   for (var i = 0, l = children.length; i < l; i++) {
     var child = children[i];
     // named slots should only be respected if the vnode was rendered in the
     // same context.
+	// 命名插槽。只有几个 vnode 在同一个上下文中渲染，才会注意命名插槽。
     if ((child.context === context || child.functionalContext === context) &&
       child.data && child.data.slot != null
     ) {
+	  // 插槽名
       var name = child.data.slot;
+	  // 如果 slots[name] 不存在，那就将 slots[name] 初始化一个空数组
       var slot = (slots[name] || (slots[name] = []));
+	  /*
+	  ① 如果 child 是 template，那就将 child.children 都加到数组 slot 中
+	  ② 否则，仅仅将 child 加到数组 slot 中
+	  */
       if (child.tag === 'template') {
+		// 之所以这么写，是因为 push 方法不接受数组参数，其用法为 arrayObject.push(newelement1,newelement2,....,newelementX)
         slot.push.apply(slot, child.children);
       } else {
         slot.push(child);
       }
     } else {
+	  // 不是命名插槽，就是默认插槽
       defaultSlot.push(child);
     }
   }
   // ignore whitespace
+  // every 方法，只有数组中所有项全部满足才会返回 true
   if (!defaultSlot.every(isWhitespace)) {
+	// 只要 defaultSlot 数组中有一个 child 不为空节点，那么默认插槽就是 defaultSlot
     slots.default = defaultSlot;
   }
+  /*
+  于是，slots 结构大致为：
+  {
+	default : defaultSlot,
+	name1 : slot1,
+	name2 : slot2,
+	...
+  }
+  */
   return slots
 }
 
+// 是否为注释节点或文本为空
 function isWhitespace (node) {
   return node.isComment || node.text === ' '
 }
 
+// 局部的插槽处理
 function resolveScopedSlots (
   fns, // see flow/vnode
   res
 ) {
+  // res 不存在则初始化为空对象
   res = res || {};
   for (var i = 0; i < fns.length; i++) {
+	// fns[i] 是数组，递归调用 resolveScopedSlots 方法
     if (Array.isArray(fns[i])) {
       resolveScopedSlots(fns[i], res);
+	// 一般情况下，fns[i] 是个对象 {key : keyVal, fn : fnVal}
     } else {
       res[fns[i].key] = fns[i].fn;
     }
   }
+  /*
+  于是，res 的结构大致如下：
+  {
+	keyVal1 : fnVal1,
+	keyVal2 : fnVal2,
+	keyVal3 : fnVal3,
+	...
+  }
+  */
   return res
 }
 
@@ -3347,24 +3473,43 @@ function resolveScopedSlots (
 var activeInstance = null;
 var isUpdatingChildComponent = false;
 
+// 初始化生命周期
 function initLifecycle (vm) {
   var options = vm.$options;
 
   // locate first non-abstract parent
   var parent = options.parent;
+  
   if (parent && !options.abstract) {
+	// 修正 parent
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent;
     }
+	// 将当前 vm 添加到修正后的 parent.$children 数组中
     parent.$children.push(vm);
   }
 
+  // 父实例
   vm.$parent = parent;
+  // 当前组件树的根 Vue 实例。如果当前实例没有父实例，此根 Vue 实例将会是其自己
   vm.$root = parent ? parent.$root : vm;
 
+  // 当前实例的直接子组件
   vm.$children = [];
+  // 已注册过 ref 的所有子组件
   vm.$refs = {};
+  /*
+  ref 被用来给元素或子组件注册引用信息。引用信息将会注册在父组件的 $refs 对象上。
+  ① 如果在普通的 DOM 元素上使用，引用指向的就是 DOM 元素；
+	 <p ref="p">hello</p>
+	 vm.$refs.p 指当前 dom 节点
 
+  ② 如果用在子组件上，引用就指向组件实例：
+     <child-comp ref="child"></child-comp>
+	 vm.$refs.child 指当前组件实例
+  */
+
+  // 状态信息初始化
   vm._watcher = null;
   vm._inactive = null;
   vm._directInactive = false;
@@ -3373,19 +3518,55 @@ function initLifecycle (vm) {
   vm._isBeingDestroyed = false;
 }
 
+// 生命周期混入
 function lifecycleMixin (Vue) {
+  // 更新
   Vue.prototype._update = function (vnode, hydrating) {
     var vm = this;
+	// 如果已经插入到文档中，那么更新之前调用 beforeUpdate 钩子回调函数
     if (vm._isMounted) {
       callHook(vm, 'beforeUpdate');
     }
     var prevEl = vm.$el;
     var prevVnode = vm._vnode;
     var prevActiveInstance = activeInstance;
+	// 当前被激活的 Vue 实例
     activeInstance = vm;
     vm._vnode = vnode;
     // Vue.prototype.__patch__ is injected in entry points
     // based on the rendering backend used.
+	/*
+	参考：https://www.zhihu.com/question/29504639
+	Virtual DOM 算法主要是实现上面步骤的三个函数：element，diff，patch
+
+	// 1. 构建虚拟 DOM
+	var tree = el('div', {'id': 'container'}, [
+		el('h1', {style: 'color: blue'}, ['simple virtal dom']),
+		el('p', ['Hello, virtual-dom']),
+		el('ul', [el('li')])
+	])
+
+	// 2. 通过虚拟 DOM 构建真正的 DOM
+	var root = tree.render()
+	document.body.appendChild(root)
+
+	// 3. 生成新的虚拟 DOM
+	var newTree = el('div', {'id': 'container'}, [
+		el('h1', {style: 'color: red'}, ['simple virtal dom']),
+		el('p', ['Hello, virtual-dom']),
+		el('ul', [el('li'), el('li')])
+	])
+
+	// 4. 比较两棵虚拟 DOM 树的不同
+	var patches = diff(tree, newTree)
+
+	// 5. 在真正的 DOM 元素上应用变更
+	patch(root, patches)
+
+	这里的 patch 方法就是下面的 __patch__ 方法
+	*/
+
+	// 之前没有创建虚拟 dom，初始化一个
     if (!prevVnode) {
       // initial render
       vm.$el = vm.__patch__(
@@ -3398,24 +3579,32 @@ function lifecycleMixin (Vue) {
       vm.$options._parentElm = vm.$options._refElm = null;
     } else {
       // updates
+	  // 比较新旧虚拟 DOM，并更新。数据更新就是由这一句关键代码完成！
       vm.$el = vm.__patch__(prevVnode, vnode);
     }
     activeInstance = prevActiveInstance;
+
+
     // update __vue__ reference
+	// 更新 prevEl 和 vm.$el 的 __vue__ 属性
     if (prevEl) {
       prevEl.__vue__ = null;
     }
     if (vm.$el) {
       vm.$el.__vue__ = vm;
     }
+
+
     // if parent is an HOC, update its $el as well
     if (vm.$vnode && vm.$parent && vm.$vnode === vm.$parent._vnode) {
+	  // 父组件的 $el 属性也指向当前组件的 $el
       vm.$parent.$el = vm.$el;
     }
     // updated hook is called by the scheduler to ensure that children are
     // updated in a parent's updated hook.
   };
 
+  // 强制更新
   Vue.prototype.$forceUpdate = function () {
     var vm = this;
     if (vm._watcher) {
@@ -3423,58 +3612,81 @@ function lifecycleMixin (Vue) {
     }
   };
 
+  // 实例销毁
   Vue.prototype.$destroy = function () {
     var vm = this;
+	// 如果已经开始销毁了，那就返回吧
     if (vm._isBeingDestroyed) {
       return
     }
+	// 调用 beforeDestroy 钩子回调
     callHook(vm, 'beforeDestroy');
+	// 标志开始销毁
     vm._isBeingDestroyed = true;
     // remove self from parent
     var parent = vm.$parent;
+	// 从父组件中移除当前实例
     if (parent && !parent._isBeingDestroyed && !vm.$options.abstract) {
       remove(parent.$children, vm);
     }
+
     // teardown watchers
     if (vm._watcher) {
       vm._watcher.teardown();
     }
     var i = vm._watchers.length;
     while (i--) {
+	  // 依次执行 teardown 函数
       vm._watchers[i].teardown();
     }
+
     // remove reference from data ob
     // frozen object may not have observer.
+	// Observer 实例的 vmCount 属性减一
     if (vm._data.__ob__) {
       vm._data.__ob__.vmCount--;
     }
     // call the last hook...
+	// 标志当前实例被销毁了
     vm._isDestroyed = true;
     // invoke destroy hooks on current rendered tree
+	// 更新虚拟 dom 树
     vm.__patch__(vm._vnode, null);
     // fire destroyed hook
+	// 触发销毁完毕钩子回调
     callHook(vm, 'destroyed');
     // turn off all instance listeners.
+	// 移除所有事件监听
     vm.$off();
     // remove __vue__ reference
     if (vm.$el) {
+	  // 移除 __vue__ 引用
       vm.$el.__vue__ = null;
     }
   };
 }
 
+// 安装组件
 function mountComponent (
   vm,
   el,
   hydrating
 ) {
   vm.$el = el;
+  // 没有自定义 render 方法
   if (!vm.$options.render) {
+	// 指向 createEmptyVNode 方法
     vm.$options.render = createEmptyVNode;
     {
       /* istanbul ignore if */
       if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') ||
         vm.$options.el || el) {
+		/*
+		发出警告：你正在用只包含运行时的版本，这个版本的模板编译器时不可用的。
+		可采取的方式有两种：
+		① 将模板预编译成渲染函数；
+		② 用包含模板编译器的版本
+		*/
         warn(
           'You are using the runtime-only build of Vue where the template ' +
           'compiler is not available. Either pre-compile the templates into ' +
@@ -3482,6 +3694,7 @@ function mountComponent (
           vm
         );
       } else {
+		// 警告，组件安装失败：未定义模板或者渲染函数
         warn(
           'Failed to mount component: template or render function not defined.',
           vm
@@ -3489,10 +3702,15 @@ function mountComponent (
       }
     }
   }
+  // 调用 beforeMount 钩子回调
   callHook(vm, 'beforeMount');
 
   var updateComponent;
   /* istanbul ignore if */
+  /*
+	① 开发版本下，做性能统计
+	② mark 方法用来给相应的视点做标记。结合 performance.measure() 使用也可以算出各个时间段的耗时
+  */
   if ("development" !== 'production' && config.performance && mark) {
     updateComponent = function () {
       var name = vm._name;
@@ -3503,19 +3721,29 @@ function mountComponent (
       mark(startTag);
       var vnode = vm._render();
       mark(endTag);
+	  // 计算渲染耗时
       measure((name + " render"), startTag, endTag);
 
       mark(startTag);
       vm._update(vnode, hydrating);
       mark(endTag);
+	  // 计算更新耗时
       measure((name + " patch"), startTag, endTag);
     };
   } else {
+	/*
+	生产环境下，直接渲染、更新
+	
+	其实，跟上面的 if 块一样，注意执行这两句：
+	var vnode = vm._render();
+	vm._update(vnode, hydrating);
+	*/
     updateComponent = function () {
       vm._update(vm._render(), hydrating);
     };
   }
 
+  // 添加观察者实例
   vm._watcher = new Watcher(vm, updateComponent, noop);
   hydrating = false;
 
@@ -3523,6 +3751,7 @@ function mountComponent (
   // mounted is called for render-created child components in its inserted hook
   if (vm.$vnode == null) {
     vm._isMounted = true;
+	// 安装成功回调
     callHook(vm, 'mounted');
   }
   return vm
@@ -3635,17 +3864,22 @@ function deactivateChildComponent (vm, direct) {
 }
 
 function callHook (vm, hook) {
+  // 钩子处理函数
   var handlers = vm.$options[hook];
   if (handlers) {
     for (var i = 0, j = handlers.length; i < j; i++) {
       try {
+		// this 绑定到 vm 上执行 handlers[i] 方法
         handlers[i].call(vm);
       } catch (e) {
+		// 出错了，发出警告
         handleError(e, vm, (hook + " hook"));
       }
     }
   }
+  // 触发自定义的钩子回调
   if (vm._hasHookEvent) {
+	// eg : vm.$emit('hook:beforeUpdate')
     vm.$emit('hook:' + hook);
   }
 }
