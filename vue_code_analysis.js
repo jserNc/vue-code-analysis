@@ -3541,33 +3541,32 @@ function lifecycleMixin (Vue) {
 	参考：https://www.zhihu.com/question/29504639
 	Virtual DOM 算法主要是实现上面步骤的三个函数：element，diff，patch
 
-	// 1. 构建虚拟 DOM
+	1. 构建虚拟 DOM
 	var tree = el('div', {'id': 'container'}, [
 		el('h1', {style: 'color: blue'}, ['simple virtal dom']),
 		el('p', ['Hello, virtual-dom']),
 		el('ul', [el('li')])
 	])
 
-	// 2. 通过虚拟 DOM 构建真正的 DOM
+	2. 通过虚拟 DOM 构建真正的 DOM
 	var root = tree.render()
 	document.body.appendChild(root)
 
-	// 3. 生成新的虚拟 DOM
+	3. 生成新的虚拟 DOM
 	var newTree = el('div', {'id': 'container'}, [
 		el('h1', {style: 'color: red'}, ['simple virtal dom']),
 		el('p', ['Hello, virtual-dom']),
 		el('ul', [el('li'), el('li')])
 	])
 
-	// 4. 比较两棵虚拟 DOM 树的不同
+	4. 比较两棵虚拟 DOM 树的不同
 	var patches = diff(tree, newTree)
 
-	// 5. 在真正的 DOM 元素上应用变更
+	5. 在真正的 DOM 元素上应用变更
 	patch(root, patches)
 
 	这里的 patch 方法就是下面的 __patch__ 方法
 	*/
-
 	// 之前没有创建虚拟 dom，初始化一个
     if (!prevVnode) {
       // initial render
@@ -3759,6 +3758,7 @@ function mountComponent (
   return vm
 }
 
+// 更新子组件
 function updateChildComponent (
   vm,
   propsData,
@@ -3766,7 +3766,8 @@ function updateChildComponent (
   parentVnode,
   renderChildren
 ) {
-  {
+  {  
+	// 标志正在更新子组件
     isUpdatingChildComponent = true;
   }
 
@@ -3794,6 +3795,7 @@ function updateChildComponent (
   vm.$listeners = listeners;
 
   // update props
+  // 更新属性
   if (propsData && vm.$options.props) {
     observerState.shouldConvert = false;
     var props = vm._props;
@@ -3808,32 +3810,39 @@ function updateChildComponent (
   }
 
   // update listeners
+  // 更新监听
   if (listeners) {
     var oldListeners = vm.$options._parentListeners;
     vm.$options._parentListeners = listeners;
     updateComponentListeners(vm, listeners, oldListeners);
   }
   // resolve slots + force update if has children
+  // 更新插槽
   if (hasChildren) {
     vm.$slots = resolveSlots(renderChildren, parentVnode.context);
     vm.$forceUpdate();
   }
 
   {
+	// 标志子组件不在更新状态
     isUpdatingChildComponent = false;
   }
 }
 
+// 是否在非活动树中
 function isInInactiveTree (vm) {
+  // 从父元素开始依次遍历祖先实例，只要有一个祖先实例拥有 _Inactive 属性，就返回 true
   while (vm && (vm = vm.$parent)) {
     if (vm._inactive) { return true }
   }
   return false
 }
 
+// 激活子组件
 function activateChildComponent (vm, direct) {
   if (direct) {
     vm._directInactive = false;
+	// 如果当前 vm 在非活动树中，那就什么都不做，返回！
     if (isInInactiveTree(vm)) {
       return
     }
@@ -3841,26 +3850,35 @@ function activateChildComponent (vm, direct) {
     return
   }
   if (vm._inactive || vm._inactive === null) {
+	// 取消失效状态
     vm._inactive = false;
+	
     for (var i = 0; i < vm.$children.length; i++) {
+	  // 递归激活子组件
       activateChildComponent(vm.$children[i]);
     }
+	// 组件被激活钩子回调
     callHook(vm, 'activated');
   }
 }
 
+// 使子组件失效
 function deactivateChildComponent (vm, direct) {
   if (direct) {
     vm._directInactive = true;
+	// 如果当前 vm 在非活动树中，那就什么都不做，返回！
     if (isInInactiveTree(vm)) {
       return
     }
   }
   if (!vm._inactive) {
+	// 标志失效状态
     vm._inactive = true;
     for (var i = 0; i < vm.$children.length; i++) {
+	  // 递归使子组件失效
       deactivateChildComponent(vm.$children[i]);
     }
+	// 组件失效钩子回调
     callHook(vm, 'deactivated');
   }
 }
@@ -3902,6 +3920,7 @@ var index = 0;
 /**
  * Reset the scheduler's state.
  */
+// 重置调度状态，以上所有状态信息都重置为默认值
 function resetSchedulerState () {
   index = queue.length = activatedChildren.length = 0;
   has = {};
@@ -3914,10 +3933,14 @@ function resetSchedulerState () {
 /**
  * Flush both queues and run the watchers.
  */
+// flush 调度队列
 function flushSchedulerQueue () {
+  // 标志正在 flush
   flushing = true;
   var watcher, id;
 
+
+ 
   // Sort queue before flush.
   // This ensures that:
   // 1. Components are updated from parent to child. (because parent is always
@@ -3926,19 +3949,31 @@ function flushSchedulerQueue () {
   //    user watchers are created before the render watcher)
   // 3. If a component is destroyed during a parent component's watcher run,
   //    its watchers can be skipped.
+  
+  /*
+	 在 flush 之前，将队列排序，这样做的目的有三：
+	 1. 组件更新顺序是由父组件到子组件（因为父组件先于子组件创建）
+	 2. 组件的用户观察器先于它的渲染观察器运行（因为用户观察器先于渲染观察器创建）
+	 3. 如果一个组件在父组件的观察器运行期间被销毁了，那么它的观察器会被跳过
+  */
+
   queue.sort(function (a, b) { return a.id - b.id; });
 
   // do not cache length because more watchers might be pushed
   // as we run existing watchers
+  // 之所以每次循环都重新计算 queue.length，而不把 queue.length 缓存起来，是因为在执行已有观察器过程中可能会有新的执行器加入
   for (index = 0; index < queue.length; index++) {
     watcher = queue[index];
     id = watcher.id;
     has[id] = null;
+	// watcher 跑起来
     watcher.run();
     // in dev build, check and stop circular updates.
     if ("development" !== 'production' && has[id] != null) {
       circular[id] = (circular[id] || 0) + 1;
+	  // 超过 100，发出警告
       if (circular[id] > MAX_UPDATE_COUNT) {
+		// 可能是一个无限循环...
         warn(
           'You may have an infinite update loop ' + (
             watcher.user
@@ -3953,12 +3988,15 @@ function flushSchedulerQueue () {
   }
 
   // keep copies of post queues before resetting state
+  // 深拷贝一份副本
   var activatedQueue = activatedChildren.slice();
   var updatedQueue = queue.slice();
 
+  // 重置所有状态
   resetSchedulerState();
 
   // call component updated and activated hooks
+  // 调用激活钩子和更新钩子
   callActivatedHooks(activatedQueue);
   callUpdatedHooks(updatedQueue);
 
@@ -3969,8 +4007,10 @@ function flushSchedulerQueue () {
   }
 }
 
+// 调用 updated 钩子
 function callUpdatedHooks (queue) {
   var i = queue.length;
+  // 遍历 watcher，调用对应 vm 的 updated 钩子回调
   while (i--) {
     var watcher = queue[i];
     var vm = watcher.vm;
@@ -3984,16 +4024,20 @@ function callUpdatedHooks (queue) {
  * Queue a kept-alive component that was activated during patch.
  * The queue will be processed after the entire tree has been patched.
  */
+// 将 vm 添加到 activatedChildren 数组中
 function queueActivatedComponent (vm) {
   // setting _inactive to false here so that a render function can
   // rely on checking whether it's in an inactive tree (e.g. router-view)
+  // 将 _inactive 置为 false，渲染函数可以根据这个值来判断 vm 是否在非活动树中
   vm._inactive = false;
   activatedChildren.push(vm);
 }
 
+// 调用激活钩子，这里的 queue 是由 vm 组成的数组
 function callActivatedHooks (queue) {
   for (var i = 0; i < queue.length; i++) {
     queue[i]._inactive = true;
+	// 激活子组件，queue[i] 就是 vm
     activateChildComponent(queue[i], true /* true */);
   }
 }
@@ -4003,16 +4047,20 @@ function callActivatedHooks (queue) {
  * Jobs with duplicate IDs will be skipped unless it's
  * pushed when the queue is being flushed.
  */
+// 将一个 watcher 添加进 watcher 队列，对于有重复 id 的 watcher 会跳过，除非队列正在 flush。
 function queueWatcher (watcher) {
   var id = watcher.id;
+  // id 去重
   if (has[id] == null) {
     has[id] = true;
     if (!flushing) {
+	  // 不在队列 flush 过程中，那就将 watcher 加到队列末尾
       queue.push(watcher);
     } else {
       // if already flushing, splice the watcher based on its id
       // if already past its id, it will be run next immediately.
       var i = queue.length - 1;
+	  // queue 在 flush 过程中会将队列元素按 id 值从小到大排序，所以，这里会根据 id 值，修正插入位置索引
       while (i > index && queue[i].id > watcher.id) {
         i--;
       }
@@ -4021,6 +4069,7 @@ function queueWatcher (watcher) {
     // queue the flush
     if (!waiting) {
       waiting = true;
+	  // 下一帧，调用 flush 调度队列
       nextTick(flushSchedulerQueue);
     }
   }
@@ -4041,7 +4090,9 @@ var Watcher = function Watcher (
   cb,
   options
 ) {
+  // 当前 watcher 的 vm 属性指向 vm
   this.vm = vm;
+  // 同时将当前 watcher 加入到 vm._watchers 数组中
   vm._watchers.push(this);
   // options
   if (options) {
@@ -4053,6 +4104,7 @@ var Watcher = function Watcher (
     this.deep = this.user = this.lazy = this.sync = false;
   }
   this.cb = cb;
+  // id 递增，值唯一
   this.id = ++uid$2; // uid for batching
   this.active = true;
   this.dirty = this.lazy; // for lazy watchers
@@ -4060,14 +4112,35 @@ var Watcher = function Watcher (
   this.newDeps = [];
   this.depIds = new _Set();
   this.newDepIds = new _Set();
+  // 表达式转为字符串形式
   this.expression = expOrFn.toString();
   // parse expression for getter
   if (typeof expOrFn === 'function') {
     this.getter = expOrFn;
   } else {
+	/*
+	根据路径 expOrFn 返回数据
+	eg：
+	var path = 'aaa.bbb.ccc'
+	var getter = parsePath(path);
+	var o = {
+		aaa : {
+			bbb : {
+				ccc : {
+					ddd : 1
+				}
+			}
+		}
+	 }
+
+	 getter(o) -> {ddd: 1}
+
+	 如果路径 expOrFn 不合符，parsePath(expOrFn) 就是 undefined
+	*/
     this.getter = parsePath(expOrFn);
     if (!this.getter) {
       this.getter = function () {};
+	  // 走到这里，说明路径不合符。只有 . 分隔的路径才是合法的。
       "development" !== 'production' && warn(
         "Failed watching path: \"" + expOrFn + "\" " +
         'Watcher only accepts simple dot-delimited paths. ' +
@@ -4085,10 +4158,12 @@ var Watcher = function Watcher (
  * Evaluate the getter, and re-collect dependencies.
  */
 Watcher.prototype.get = function get () {
+  // 旧的 Dep.target 压栈，this 作为新的 Dep.target
   pushTarget(this);
   var value;
   var vm = this.vm;
   try {
+	// this.getter 执行时的 this 和实参都为 vm
     value = this.getter.call(vm, vm);
   } catch (e) {
     if (this.user) {
@@ -4102,7 +4177,9 @@ Watcher.prototype.get = function get () {
     if (this.deep) {
       traverse(value);
     }
+	// Dep.target 出栈
     popTarget();
+	// 清除 dependency collection
     this.cleanupDeps();
   }
   return value
@@ -4113,10 +4190,13 @@ Watcher.prototype.get = function get () {
  */
 Watcher.prototype.addDep = function addDep (dep) {
   var id = dep.id;
+  // this.newDepIds 是一个 _Set 实例
   if (!this.newDepIds.has(id)) {
     this.newDepIds.add(id);
     this.newDeps.push(dep);
+	// this.newDepIds 也是一个 _Set 实例 
     if (!this.depIds.has(id)) {
+	  // 添加订阅者。将当前 watcher 加入到 dep.subs 数组里
       dep.addSub(this);
     }
   }
@@ -4132,13 +4212,17 @@ Watcher.prototype.cleanupDeps = function cleanupDeps () {
   while (i--) {
     var dep = this$1.deps[i];
     if (!this$1.newDepIds.has(dep.id)) {
+	  // 删除订阅者
       dep.removeSub(this$1);
     }
   }
   var tmp = this.depIds;
   this.depIds = this.newDepIds;
   this.newDepIds = tmp;
+  // this.newDepIds 清空
   this.newDepIds.clear();
+
+
   tmp = this.deps;
   this.deps = this.newDeps;
   this.newDeps = tmp;
