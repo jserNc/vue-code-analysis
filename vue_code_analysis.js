@@ -187,6 +187,16 @@ Essential Git: 一些git操作
 
      也就是说，Vue 就是这里的 Vue$3 方法！
 
+	 (function (global, factory) {
+		 global.Vue = factory();
+	 }(this, (function () {
+		 function Vue$3 (options) {
+			// ...
+		 }
+		 // ...
+		 return Vue$3;
+	 })));
+
      看一下执行流程：
 
      (function (global, factory) {
@@ -2135,6 +2145,24 @@ function resolveAsset (
   }
   return res
 }
+
+/*
+props 和 propsData 的区别：
+参考：https://cn.vuejs.org/v2/api/#propsData
+
+① props
+   props 可以是数组或对象，用于接收来自父组件的数据。
+   props 可以是简单的数组，或者使用对象作为替代，对象允许配置高级选项，如类型检测、自定义校验和设置默认值。
+
+② propsData
+   只用于 new 创建的实例中，主要作用是方便测试。例如：
+   var vm = new Comp({
+		propsData: {
+			msg: 'hello'
+		}
+   })
+   这里的 propsData 就可以传给 props 了
+*/
 
 // 返回合法的属性值
 function validateProp (
@@ -4738,6 +4766,7 @@ function createWatcher (
   return vm.$watch(keyOrFn, handler, options)
 }
 
+// 状态混入
 function stateMixin (Vue) {
   // flow somehow has problems with directly declared definition object
   // when using Object.defineProperty, so we have to procedurally build up
@@ -4793,25 +4822,32 @@ function stateMixin (Vue) {
   };
 }
 
-/*  */
-
+// 初始化 provide
 function initProvide (vm) {
   var provide = vm.$options.provide;
   if (provide) {
+	// 如果 provide 是函数，取函数执行结果，否则就取 provide
     vm._provided = typeof provide === 'function'
       ? provide.call(vm)
       : provide;
   }
 }
 
+// 初始化注入
 function initInjections (vm) {
+  // 注入的数据，存在对象 result 中
   var result = resolveInject(vm.$options.inject, vm);
   if (result) {
     observerState.shouldConvert = false;
     Object.keys(result).forEach(function (key) {
       /* istanbul ignore else */
       {
+		// 在 vm 对象上拦截 key 属性的 get/set 操作
         defineReactive$$1(vm, key, result[key], function () {
+		  /*
+			避免直接地突变一个属性值。因为父组件重新渲染的时候会覆盖这个值。
+			推荐的做法是：用 data 或computed 属性。
+		  */
           warn(
             "Avoid mutating an injected value directly since the changes will be " +
             "overwritten whenever the provided component re-renders. " +
@@ -4825,25 +4861,56 @@ function initInjections (vm) {
   }
 }
 
+// 处理注入，inject 中的列的属性名，依次和祖先元素的 provide 属性属性名对比，只有找到了就存到 result 中，最后返回 result
 function resolveInject (inject, vm) {
   if (inject) {
     // inject is :any because flow is not smart enough to figure out cached
     var result = Object.create(null);
+	/*
+	① hasSymbol 为 true 表示原生支持 Symblo 和 Reflect
+	② Reflect.ownKeys 方法用于返回对象的所有属性，基本等同于 Object.getOwnPropertyNames 与 Object.getOwnPropertySymbols 之和
+	③ Object.keys 方法返回对象的可枚举属性组成的数组
+	*/
     var keys = hasSymbol
         ? Reflect.ownKeys(inject)
         : Object.keys(inject);
 
     for (var i = 0; i < keys.length; i++) {
+	  /*
+		参考：https://cn.vuejs.org/v2/api/#provide-inject
+		provide 和 inject 主要为高阶插件/组件库提供用例。并不推荐直接用于应用程序代码中。
+		
+		var Provider = {
+		  provide: {
+			foo: 'bar'
+		  },
+		  // ...
+		}
+		var Child = {
+		  inject: ['foo'],
+		  created () {
+			console.log(this.foo) // => "bar"
+		  }
+		  // ...
+		}
+
+		可以看到，inject【属性值】对应 provide【属性名】
+	  */
+	  // inject【属性值】
       var key = keys[i];
+	  // inject【属性值】对应 provide【属性名】
       var provideKey = inject[key];
       var source = vm;
+	  // 向上遍历祖先实例
       while (source) {
+		// 只要当前属性名存在于某个祖先 vm.$options.provide 中，就终止循环
         if (source._provided && provideKey in source._provided) {
           result[key] = source._provided[provideKey];
           break
         }
         source = source.$parent;
       }
+	  // hasOwn(result, key) 为 false，说明以上并没给执行给 result 添加 key 属性的操作，也就是所有祖先元素中都没找到，那就发出警告
       if ("development" !== 'production' && !hasOwn(result, key)) {
         warn(("Injection \"" + key + "\" not found"), vm);
       }
@@ -4852,8 +4919,7 @@ function resolveInject (inject, vm) {
   }
 }
 
-/*  */
-
+// 创建功能性组件，最后返回一个 vnode
 function createFunctionalComponent (
   Ctor,
   propsData,
@@ -4863,17 +4929,26 @@ function createFunctionalComponent (
 ) {
   var props = {};
   var propOptions = Ctor.options.props;
+  // 如果定义了 Ctor.options.props，将这些属性添加到 props 对象
   if (isDef(propOptions)) {
     for (var key in propOptions) {
       props[key] = validateProp(key, propOptions, propsData || {});
     }
+  // 否则 props 对象取 data.attrs 和 data.props 的数据
   } else {
     if (isDef(data.attrs)) { mergeProps(props, data.attrs); }
     if (isDef(data.props)) { mergeProps(props, data.props); }
   }
   // ensure the createElement function in functional components
   // gets a unique context - this is necessary for correct named slot check
+  /*
+	① 确保 createElement 函数在功能性组件中
+	② 获取唯一的上下文 —— 这对于检查命名插槽是有必要的
+
+	Object.create 方法接受一个对象作为参数，然后以它为原型，返回一个实例对象。该实例完全继承继承原型对象的属性。
+  */
   var _context = Object.create(context);
+  // 该函数返回一个 vnode
   var h = function (a, b, c, d) { return createElement(_context, a, b, c, d, true); };
   var vnode = Ctor.options.render.call(null, h, {
     data: data,
@@ -4887,6 +4962,7 @@ function createFunctionalComponent (
   if (vnode instanceof VNode) {
     vnode.functionalContext = context;
     vnode.functionalOptions = Ctor.options;
+	// vnode.data.slot = data.slot
     if (data.slot) {
       (vnode.data || (vnode.data = {})).slot = data.slot;
     }
@@ -4894,8 +4970,10 @@ function createFunctionalComponent (
   return vnode
 }
 
+// 将 from 的属性都赋给 to
 function mergeProps (to, from) {
   for (var key in from) {
+	// camelize 方法将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
     to[camelize(key)] = from[key];
   }
 }
@@ -4903,6 +4981,7 @@ function mergeProps (to, from) {
 /*  */
 
 // hooks to be invoked on component VNodes during patch
+// 组件 patch 过程中的钩子方法 
 var componentVNodeHooks = {
   init: function init (
     vnode,
@@ -4910,6 +4989,7 @@ var componentVNodeHooks = {
     parentElm,
     refElm
   ) {
+	// 不是组件实例或组件实例被销毁了
     if (!vnode.componentInstance || vnode.componentInstance._isDestroyed) {
       var child = vnode.componentInstance = createComponentInstanceForVnode(
         vnode,
@@ -5066,6 +5146,7 @@ function createComponent (
   return vnode
 }
 
+// 创建 Vnode 类型的组件实例
 function createComponentInstanceForVnode (
   vnode, // we know it's MountedComponentVNode but flow doesn't
   parent, // activeInstance in lifecycle state
@@ -5132,6 +5213,7 @@ var ALWAYS_NORMALIZE = 2;
 
 // wrapper function for providing a more flexible interface
 // without getting yelled at by flow
+// 创建元素，修正参数，实际调用 _createElement(context, tag, data, children, normalizationType)，返回一个 vnode
 function createElement (
   context,
   tag,
@@ -5140,17 +5222,22 @@ function createElement (
   normalizationType,
   alwaysNormalize
 ) {
+  // data 为数组、字符串或数值
   if (Array.isArray(data) || isPrimitive(data)) {
+	// normalizationType 修正为第 4 个实参
     normalizationType = children;
+	// children 修正为第 3 个实参
     children = data;
     data = undefined;
   }
+  // alwaysNormalize === true，再次修正 normalizationType 为 2
   if (isTrue(alwaysNormalize)) {
     normalizationType = ALWAYS_NORMALIZE;
   }
   return _createElement(context, tag, data, children, normalizationType)
 }
 
+// 返回一个 vnode
 function _createElement (
   context,
   tag,
@@ -5158,26 +5245,31 @@ function _createElement (
   children,
   normalizationType
 ) {
+  // 避免使用被观察的 data 对象作为虚拟节点的 data
   if (isDef(data) && isDef((data).__ob__)) {
     "development" !== 'production' && warn(
       "Avoid using observed data object as vnode data: " + (JSON.stringify(data)) + "\n" +
       'Always create fresh vnode data objects in each render!',
       context
     );
+	// 创建一个空的 vNode（注释）
     return createEmptyVNode()
   }
   // object syntax in v-bind
+  // 如果有 data.is 属性，用该属性作为真正的标签名
   if (isDef(data) && isDef(data.is)) {
     tag = data.is;
   }
   if (!tag) {
     // in case of component :is set to falsy value
+	// 所以得注意 :is 被设置为一个假值的情况
     return createEmptyVNode()
   }
   // warn against non-primitive key
   if ("development" !== 'production' &&
     isDef(data) && isDef(data.key) && !isPrimitive(data.key)
   ) {
+	// 可以必须为字符串或数值类型
     warn(
       'Avoid using non-primitive value as key, ' +
       'use string/number value instead.',
@@ -5185,22 +5277,30 @@ function _createElement (
     );
   }
   // support single function children as default scoped slot
+  // children 为数组，并且该数组的第一个元素是函数
   if (Array.isArray(children) &&
     typeof children[0] === 'function'
   ) {
     data = data || {};
     data.scopedSlots = { default: children[0] };
+	// 将 children 数组清空
     children.length = 0;
   }
+  // ALWAYS_NORMALIZE 为 2
   if (normalizationType === ALWAYS_NORMALIZE) {
+	// 标准化处理，返回一个数组
     children = normalizeChildren(children);
+  // SIMPLE_NORMALIZE 为 1
   } else if (normalizationType === SIMPLE_NORMALIZE) {
+	// 简单的标准化处理：将 children 数组扁平化，变成一维数组
     children = simpleNormalizeChildren(children);
   }
   var vnode, ns;
   if (typeof tag === 'string') {
     var Ctor;
+	// 命名空间
     ns = config.getTagNamespace(tag);
+	// 若 tag 为 div、span 等保留标签，直接用这个标签名创建虚拟节点就好了
     if (config.isReservedTag(tag)) {
       // platform built-in elements
       vnode = new VNode(
@@ -5224,13 +5324,14 @@ function _createElement (
     vnode = createComponent(tag, data, context, children);
   }
   if (isDef(vnode)) {
+	// vnode.ns = ns
     if (ns) { applyNS(vnode, ns); }
     return vnode
   } else {
     return createEmptyVNode()
   }
 }
-
+// 核心就一句：vnode.ns = ns
 function applyNS (vnode, ns) {
   vnode.ns = ns;
   if (vnode.tag === 'foreignObject') {
