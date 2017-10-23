@@ -1102,7 +1102,7 @@ var devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__;
 
 /* istanbul ignore next */
 /*
-判断是否是原生方法。以 parseInt 方法为例：
+判断是否是原生构造方法。以 parseInt 方法为例：
 typeof parseInt      ->  "function"
 parseInt.toString()  ->  "function parseInt() { [native code] }"
  */
@@ -4983,6 +4983,7 @@ function mergeProps (to, from) {
 // hooks to be invoked on component VNodes during patch
 // 组件 patch 过程中的钩子方法 
 var componentVNodeHooks = {
+  // 初始化。如果没有组件实例，创建之；如果 keepAlive，则调用 prepatch 方法
   init: function init (
     vnode,
     hydrating,
@@ -4991,6 +4992,7 @@ var componentVNodeHooks = {
   ) {
 	// 不是组件实例或组件实例被销毁了
     if (!vnode.componentInstance || vnode.componentInstance._isDestroyed) {
+	  // 创建组件实例
       var child = vnode.componentInstance = createComponentInstanceForVnode(
         vnode,
         activeInstance,
@@ -5005,44 +5007,57 @@ var componentVNodeHooks = {
     }
   },
 
+  // 更新组件
   prepatch: function prepatch (oldVnode, vnode) {
     var options = vnode.componentOptions;
     var child = vnode.componentInstance = oldVnode.componentInstance;
     updateChildComponent(
-      child,
-      options.propsData, // updated props
-      options.listeners, // updated listeners
-      vnode, // new parent vnode
-      options.children // new children
+      child,			 // 组件实例
+      options.propsData, // updated props，更新属性
+      options.listeners, // updated listeners，更新监听器
+      vnode,			 // new parent vnode，更新父 vnode
+      options.children   // new children，更新 children
     );
   },
 
+  // 节点插入文档
   insert: function insert (vnode) {
     var context = vnode.context;
     var componentInstance = vnode.componentInstance;
+	// 如果之前没有插入过文档，那就标志 _isMounted，并调用 mounted 回调函数
     if (!componentInstance._isMounted) {
       componentInstance._isMounted = true;
       callHook(componentInstance, 'mounted');
     }
     if (vnode.data.keepAlive) {
+	  // 如果上下文已经插入过文档，那就把组件加入到队列中，由队列统一激活
       if (context._isMounted) {
         // vue-router#1212
         // During updates, a kept-alive component's child components may
         // change, so directly walking the tree here may call activated hooks
         // on incorrect children. Instead we push them into a queue which will
         // be processed after the whole patch process ended.
+		/*
+			在更新过程中，保持 alive 组件的子组件可能变化。如果直接的遍历组件树可能会在不正确的子节点上调用已经激活过的钩子。
+			推荐的做法是：我们将它们加入到队列里，等这个 patch 过程结束后再执行队列。
+		*/
         queueActivatedComponent(componentInstance);
+	  // 否则，直接在此激活子组件
       } else {
         activateChildComponent(componentInstance, true /* direct */);
       }
     }
   },
 
+  // 组件销毁
   destroy: function destroy (vnode) {
     var componentInstance = vnode.componentInstance;
+	// 没被销毁过，才执行
     if (!componentInstance._isDestroyed) {
+	  // 如果在 keepAlive 状态，直接销毁之
       if (!vnode.data.keepAlive) {
         componentInstance.$destroy();
+	  // 否则，使子组件失效
       } else {
         deactivateChildComponent(componentInstance, true /* direct */);
       }
@@ -5051,7 +5066,9 @@ var componentVNodeHooks = {
 };
 
 var hooksToMerge = Object.keys(componentVNodeHooks);
+// -> ["init", "prepatch", "insert", "destroy"]
 
+// 创建组件
 function createComponent (
   Ctor,
   data,
@@ -5059,6 +5076,7 @@ function createComponent (
   children,
   tag
 ) {
+  // 如果没构造函数，返回
   if (isUndef(Ctor)) {
     return
   }
@@ -5066,14 +5084,17 @@ function createComponent (
   var baseCtor = context.$options._base;
 
   // plain options object: turn it into a constructor
+  // Ctor 为对象，则将之转为构造函数
   if (isObject(Ctor)) {
     Ctor = baseCtor.extend(Ctor);
   }
 
   // if at this stage it's not a constructor or an async component factory,
   // reject.
+  // 如果到这里 Ctor 还不是函数，那就报错。
   if (typeof Ctor !== 'function') {
     {
+	  // 无效的组件定义
       warn(("Invalid Component definition: " + (String(Ctor))), context);
     }
     return
@@ -5081,13 +5102,19 @@ function createComponent (
 
   // async component
   var asyncFactory;
+  // Ctor.cid 为 null 或 undefined
   if (isUndef(Ctor.cid)) {
     asyncFactory = Ctor;
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor, context);
+	// Ctor 为 undefined，返回占位符
     if (Ctor === undefined) {
       // return a placeholder node for async component, which is rendered
       // as a comment node but preserves all the raw information for the node.
       // the information will be used for async server-rendering and hydration.
+	  /*
+		对于异步组件，这里返回一个占位符。这种占位符会作为注释节点来渲染，不过它会保留节点的所有元信息。
+		这些元信息在异步的服务器渲染和 hydration 时是有用的。
+	  */
       return createAsyncPlaceholder(
         asyncFactory,
         data,
@@ -5102,17 +5129,19 @@ function createComponent (
 
   // resolve constructor options in case global mixins are applied after
   // component constructor creation
+  // resolve 构造函数选项，以免组件构造函数创建后全局的 mixin 被应用
   resolveConstructorOptions(Ctor);
 
   // transform component v-model data into props & events
+  // 将 v-model 数据转换成 props 和 events
   if (isDef(data.model)) {
     transformModel(Ctor.options, data);
   }
 
-  // extract props
+  // extract props，提取 props
   var propsData = extractPropsFromVNodeData(data, Ctor, tag);
 
-  // functional component
+  // functional component，功能性组件，就在这里创建，然后返回
   if (isTrue(Ctor.options.functional)) {
     return createFunctionalComponent(Ctor, propsData, data, context, children)
   }
@@ -5120,12 +5149,14 @@ function createComponent (
   // keep listeners
   var listeners = data.on;
 
+  // 抽象组件除了 props & listeners & slot，不会保留其他任何东西
   if (isTrue(Ctor.options.abstract)) {
     // abstract components do not keep anything
     // other than props & listeners & slot
 
     // work around flow
     var slot = data.slot;
+	// 将 data 清空，抽象组件不需要数据
     data = {};
     if (slot) {
       data.slot = slot;
@@ -5133,9 +5164,11 @@ function createComponent (
   }
 
   // merge component management hooks onto the placeholder node
+  // 合并 data 和 hooksToMerge 的钩子
   mergeHooks(data);
 
   // return a placeholder vnode
+  // 节点标签
   var name = Ctor.options.name || tag;
   var vnode = new VNode(
     ("vue-component-" + (Ctor.cid) + (name ? ("-" + name) : '')),
@@ -5171,21 +5204,35 @@ function createComponentInstanceForVnode (
     options.render = inlineTemplate.render;
     options.staticRenderFns = inlineTemplate.staticRenderFns;
   }
+  // 根据以上 options 选项，返回实例。这里的 Ctor 指的是“构造函数”
   return new vnodeComponentOptions.Ctor(options)
 }
 
+// 合并 data 和 hooksToMerge 的钩子
 function mergeHooks (data) {
   if (!data.hook) {
     data.hook = {};
   }
+  /*
+	var hooksToMerge = Object.keys(componentVNodeHooks);
+    -> ["init", "prepatch", "insert", "destroy"]
+  */
   for (var i = 0; i < hooksToMerge.length; i++) {
     var key = hooksToMerge[i];
     var fromParent = data.hook[key];
     var ours = componentVNodeHooks[key];
+	/*
+		以 i = 0 为例：
+		key = "init"
+
+		① data.hook["init"] 存在，那么新的 data.hook["init"] 重置为旧的 data.hook["init"] 和 componentVNodeHooks["init"] 合并后的函数
+		② data.hook["init"] 不存在，那么新的 data.hook["init"] 就是 componentVNodeHooks["init"]
+	*/
     data.hook[key] = fromParent ? mergeHook$1(ours, fromParent) : ours;
   }
 }
 
+// 返回一个新的函数，新函数每次调用时，one、two 这俩方法都执行
 function mergeHook$1 (one, two) {
   return function (a, b, c, d) {
     one(a, b, c, d);
@@ -5195,10 +5242,19 @@ function mergeHook$1 (one, two) {
 
 // transform component v-model info (value and callback) into
 // prop and event handler respectively.
+// 将组件的 v-model 信息转换成 prop 和 event
 function transformModel (options, data) {
+  // 默认的 prop 是 value
   var prop = (options.model && options.model.prop) || 'value';
-  var event = (options.model && options.model.event) || 'input';(data.props || (data.props = {}))[prop] = data.model.value;
+  // 默认的 event 是 input 事件
+  var event = (options.model && options.model.event) || 'input';
+  
+  // data.props 如果不存在，将其初始化为空对象，然后将 data.props[prop] 置为 data.model.value
+  (data.props || (data.props = {}))[prop] = data.model.value;
+
+  // data.on 如果不存在，将其初始化为空对象
   var on = data.on || (data.on = {});
+  // 如果当前事件已经绑定过回调函数，那就回调函数数组合并
   if (isDef(on[event])) {
     on[event] = [data.model.callback].concat(on[event]);
   } else {
@@ -5338,6 +5394,7 @@ function applyNS (vnode, ns) {
     // use default namespace inside foreignObject
     return
   }
+  // 遍历子组件，递归调用 applyNS
   if (isDef(vnode.children)) {
     for (var i = 0, l = vnode.children.length; i < l; i++) {
       var child = vnode.children[i];
@@ -5353,21 +5410,25 @@ function applyNS (vnode, ns) {
 /**
  * Runtime helper for rendering v-for lists.
  */
+// 渲染 v-for 列表，返回数组 ret，该数组元素是 render 函数执行结果
 function renderList (
   val,
   render
 ) {
   var ret, i, l, keys, key;
+  // val 是数组或 val 是字符串
   if (Array.isArray(val) || typeof val === 'string') {
     ret = new Array(val.length);
     for (i = 0, l = val.length; i < l; i++) {
       ret[i] = render(val[i], i);
     }
+  // val 是数组
   } else if (typeof val === 'number') {
     ret = new Array(val);
     for (i = 0; i < val; i++) {
       ret[i] = render(i + 1, i);
     }
+  // val 是对象
   } else if (isObject(val)) {
     keys = Object.keys(val);
     ret = new Array(keys.length);
@@ -5376,6 +5437,7 @@ function renderList (
       ret[i] = render(val[key], key, i);
     }
   }
+  // val 是以上 3 中情况之一，ret 就会被赋值为数组，在此给 ret 添加一个 _isVList 属性
   if (isDef(ret)) {
     (ret)._isVList = true;
   }
@@ -5387,6 +5449,7 @@ function renderList (
 /**
  * Runtime helper for rendering <slot>
  */
+// 渲染插槽，这个函数的返回值依赖于 this，也就是说跟它的执行对象有关
 function renderSlot (
   name,
   fallback,
@@ -5397,6 +5460,7 @@ function renderSlot (
   if (scopedSlotFn) { // scoped slot
     props = props || {};
     if (bindObject) {
+	  // 合并 bindObject 和 props
       props = extend(extend({}, bindObject), props);
     }
     return scopedSlotFn(props) || fallback
@@ -5405,10 +5469,12 @@ function renderSlot (
     // warn duplicate slot usage
     if (slotNodes && "development" !== 'production') {
       slotNodes._rendered && warn(
+		// 某个插槽重复的出现在一棵渲染树中，可能会导致渲染错误
         "Duplicate presence of slot \"" + name + "\" found in the same render tree " +
         "- this will likely cause render errors.",
         this
       );
+	  // 标志当前插槽渲染过
       slotNodes._rendered = true;
     }
     return slotNodes || fallback
@@ -5420,6 +5486,7 @@ function renderSlot (
 /**
  * Runtime helper for resolving filters
  */
+ // 处理过滤器
 function resolveFilter (id) {
   return resolveAsset(this.$options, 'filters', id, true) || identity
 }
@@ -5429,10 +5496,11 @@ function resolveFilter (id) {
 /**
  * Runtime helper for checking keyCodes from config.
  */
+// 检查键值，eventKeyCode 和配置的键值不相同返回 true
 function checkKeyCodes (
   eventKeyCode,
   key,
-  builtInAlias
+  builtInAlias  // 内置别名
 ) {
   var keyCodes = config.keyCodes[key] || builtInAlias;
   if (Array.isArray(keyCodes)) {
@@ -5447,6 +5515,7 @@ function checkKeyCodes (
 /**
  * Runtime helper for merging v-bind="object" into a VNode's data.
  */
+// 将 v-bind="object" 转换成 VNode 的 data，以下操作会修改 data，最后返回 data
 function bindObjectProps (
   data,
   tag,
@@ -5455,12 +5524,15 @@ function bindObjectProps (
   isSync
 ) {
   if (value) {
+	// value 不是对象
     if (!isObject(value)) {
+	  // v-bind 在没有参数的情况下，值应该为对象或数组
       "development" !== 'production' && warn(
         'v-bind without argument expects an Object or Array value',
         this
       );
     } else {
+	  // 将数组 value 转为对象
       if (Array.isArray(value)) {
         value = toObject(value);
       }
@@ -5474,25 +5546,34 @@ function bindObjectProps (
           hash = data;
         } else {
           var type = data.attrs && data.attrs.type;
+		  /*
+			hash 值为 data.domProps 或 data.attrs
+			如果 data.domProps 或 data.attrs 不存在，初始化为一个空对象
+		  */
           hash = asProp || config.mustUseProp(tag, type, key)
             ? data.domProps || (data.domProps = {})
             : data.attrs || (data.attrs = {});
         }
+
+		// key 不在 hash 对象里
         if (!(key in hash)) {
+		  // 修改 hash，就是修改 data
           hash[key] = value[key];
 
           if (isSync) {
             var on = data.on || (data.on = {});
+			// 修改 on 就是修改 data.on
             on[("update:" + key)] = function ($event) {
               value[key] = $event;
             };
           }
         }
       };
-
+	  // 遍历 value 对象
       for (var key in value) loop( key );
     }
   }
+  // 返回修改过的 data
   return data
 }
 
@@ -5501,6 +5582,7 @@ function bindObjectProps (
 /**
  * Runtime helper for rendering static trees.
  */
+// 渲染静态树
 function renderStatic (
   index,
   isInFor
@@ -5508,14 +5590,19 @@ function renderStatic (
   var tree = this._staticTrees[index];
   // if has already-rendered static tree and not inside v-for,
   // we can reuse the same tree by doing a shallow clone.
+
+  // 如果已经渲染了静态树并且不是在 v-for 内部。我们可以通过浅拷贝来重利用相同的树，在此返回。
   if (tree && !isInFor) {
     return Array.isArray(tree)
       ? cloneVNodes(tree)
       : cloneVNode(tree)
   }
   // otherwise, render a fresh tree.
+  // 否则，重新渲染静态树
   tree = this._staticTrees[index] =
     this.$options.staticRenderFns[index].call(this._renderProxy);
+
+  // 遍历 tree，依次给每个节点加上标记
   markStatic(tree, ("__static__" + index), false);
   return tree
 }
@@ -5524,6 +5611,7 @@ function renderStatic (
  * Runtime helper for v-once.
  * Effectively it means marking the node as static with a unique key.
  */
+// 标记一次
 function markOnce (
   tree,
   index,
@@ -5533,11 +5621,13 @@ function markOnce (
   return tree
 }
 
+// 标记静态树
 function markStatic (
   tree,
   key,
   isOnce
 ) {
+  // 遍历 tree，依次对每一个 node 进行标记
   if (Array.isArray(tree)) {
     for (var i = 0; i < tree.length; i++) {
       if (tree[i] && typeof tree[i] !== 'string') {
@@ -5549,17 +5639,20 @@ function markStatic (
   }
 }
 
+// 标记静态节点
 function markStaticNode (node, key, isOnce) {
+  // 静态
   node.isStatic = true;
   node.key = key;
   node.isOnce = isOnce;
 }
 
-/*  */
-
+// 修改 data ，最终返回 data
 function bindObjectListeners (data, value) {
   if (value) {
+	// value 不是对象，发出警告
     if (!isPlainObject(value)) {
+	  // v-on 在不带参数时的值应该是对象
       "development" !== 'production' && warn(
         'v-on without argument expects an Object value',
         this
@@ -5569,6 +5662,7 @@ function bindObjectListeners (data, value) {
       for (var key in value) {
         var existing = on[key];
         var ours = value[key];
+		// 如果 data 里已经有了 key 对应的回调函数数组，那就 ours、existing 俩数组合并，否则就取 ours
         on[key] = existing ? [].concat(ours, existing) : ours;
       }
     }
