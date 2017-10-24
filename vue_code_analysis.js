@@ -5670,22 +5670,33 @@ function bindObjectListeners (data, value) {
   return data
 }
 
-/*  */
-
+// 初始化渲染
 function initRender (vm) {
   vm._vnode = null; // the root of the child tree
   vm._staticTrees = null;
   var parentVnode = vm.$vnode = vm.$options._parentVnode; // the placeholder node in parent tree
   var renderContext = parentVnode && parentVnode.context;
   vm.$slots = resolveSlots(vm.$options._renderChildren, renderContext);
+  // emptyObject = Object.freeze({}) 被冻结的对象，是不可以修改的
   vm.$scopedSlots = emptyObject;
+
+
   // bind the createElement fn to this instance
   // so that we get proper render context inside it.
   // args order: tag, data, children, normalizationType, alwaysNormalize
   // internal version is used by render functions compiled from templates
+  /*
+	将 createElement 方法绑定到这个实例。这里我们可以获取适当的渲染上下文。
+	参数顺序：tag, data, children, normalizationType, alwaysNormalize
+
+	内部版本是被模板编译而成的渲染函数用的
+  */
   vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); };
+
+
   // normalization is always applied for the public version, used in
   // user-written render functions.
+  // normalization 主要在公共版本中应用，也就是用户自己编写的渲染函数中
   vm.$createElement = function (a, b, c, d) { return createElement(vm, a, b, c, d, true); };
 
   // $attrs & $listeners are exposed for easier HOC creation.
@@ -5693,20 +5704,26 @@ function initRender (vm) {
   var parentData = parentVnode && parentVnode.data;
   /* istanbul ignore else */
   {
+	// 在 vm 对象上拦截 $attrs 属性的 get/set 操作
     defineReactive$$1(vm, '$attrs', parentData && parentData.attrs, function () {
+	  // 进行 set 操作并且开发环境下执行这句，其中 isUpdatingChildComponent 是个全局变量
       !isUpdatingChildComponent && warn("$attrs is readonly.", vm);
     }, true);
+	// 在 vm 对象上拦截 $listeners 属性的 get/set 操作
     defineReactive$$1(vm, '$listeners', parentData && parentData.on, function () {
+	  // 进行 set 操作并且开发环境下执行这句，其中 isUpdatingChildComponent 是个全局变量
       !isUpdatingChildComponent && warn("$listeners is readonly.", vm);
     }, true);
   }
 }
 
+// 渲染混合，给 Vue 的原型添加方法，然后实例都可以用这里的方法。这个方法只执行一次 renderMixin(Vue$3);
 function renderMixin (Vue) {
   Vue.prototype.$nextTick = function (fn) {
     return nextTick(fn, this)
   };
 
+  // 返回 vnode
   Vue.prototype._render = function () {
     var vm = this;
     var ref = vm.$options;
@@ -5714,6 +5731,7 @@ function renderMixin (Vue) {
     var staticRenderFns = ref.staticRenderFns;
     var _parentVnode = ref._parentVnode;
 
+	// 如果当前实例已经插入文档
     if (vm._isMounted) {
       // clone slot nodes on re-renders
       for (var key in vm.$slots) {
@@ -5723,14 +5741,20 @@ function renderMixin (Vue) {
 
     vm.$scopedSlots = (_parentVnode && _parentVnode.data.scopedSlots) || emptyObject;
 
+	// vm._staticTrees 初始化为空数组
     if (staticRenderFns && !vm._staticTrees) {
       vm._staticTrees = [];
     }
+
     // set parent vnode. this allows render functions to have access
     // to the data on the placeholder node.
+	// 设置父节点，这使得渲染函数可以访问占位节点上的数据
     vm.$vnode = _parentVnode;
+
+
     // render self
     var vnode;
+	// 调用 render 方法，出错就调用错误处理函数。生成 vnode。
     try {
       vnode = render.call(vm._renderProxy, vm.$createElement);
     } catch (e) {
@@ -5745,8 +5769,10 @@ function renderMixin (Vue) {
       }
     }
     // return empty vnode in case the render function errored out
+	// 如果 vnode 不是 VNode 的实例，就生成一个空的 VNode 实例，以免渲染方法出错
     if (!(vnode instanceof VNode)) {
       if ("development" !== 'production' && Array.isArray(vnode)) {
+		// 渲染函数只能返回一个根节点，不能有多个！
         warn(
           'Multiple root nodes returned from render function. Render function ' +
           'should return a single root node.',
@@ -5763,6 +5789,7 @@ function renderMixin (Vue) {
   // internal render helpers.
   // these are exposed on the instance prototype to reduce generated render
   // code size.
+  // 这些方法暴露在原型上以减少生成的渲染函数代码量
   Vue.prototype._o = markOnce;
   Vue.prototype._n = toNumber;
   Vue.prototype._s = toString;
@@ -5784,6 +5811,7 @@ function renderMixin (Vue) {
 
 var uid$1 = 0;
 
+// 初始化混入
 function initMixin (Vue) {
   Vue.prototype._init = function (options) {
     var vm = this;
@@ -5792,6 +5820,7 @@ function initMixin (Vue) {
 
     var startTag, endTag;
     /* istanbul ignore if */
+	// 开发模式下记录初始化开始时间
     if ("development" !== 'production' && config.performance && mark) {
       startTag = "vue-perf-init:" + (vm._uid);
       endTag = "vue-perf-end:" + (vm._uid);
@@ -5799,12 +5828,18 @@ function initMixin (Vue) {
     }
 
     // a flag to avoid this being observed
+	// 有了这个标志就不会被 observe 了
     vm._isVue = true;
+
     // merge options
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
       // internal component options needs special treatment.
+	  /*
+		优化内部组件实例化。
+
+	  */
       initInternalComponent(vm, options);
     } else {
       vm.$options = mergeOptions(
@@ -5813,6 +5848,8 @@ function initMixin (Vue) {
         vm
       );
     }
+
+
     /* istanbul ignore else */
     {
       initProxy(vm);
@@ -5829,9 +5866,11 @@ function initMixin (Vue) {
     callHook(vm, 'created');
 
     /* istanbul ignore if */
+	// 开发模式下记录初始化结束时间
     if ("development" !== 'production' && config.performance && mark) {
       vm._name = formatComponentName(vm, false);
       mark(endTag);
+	  // 初始化总耗时
       measure(((vm._name) + " init"), startTag, endTag);
     }
 
