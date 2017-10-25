@@ -470,7 +470,7 @@ function bind (fn, ctx) {
 /**
  * Convert an Array-like object to a real Array.
  */
- // toArray([0, 1, 2, 3, 4, 5, 6], 2) -> [2, 3, 4, 5, 6]
+ // 将类数组转成真正数组，并从指定索引截取该数组，例：toArray([0, 1, 2, 3, 4, 5, 6], 2) -> [2, 3, 4, 5, 6]
 function toArray (list, start) {
   start = start || 0;
   var i = list.length - start;
@@ -5813,9 +5813,10 @@ var uid$1 = 0;
 
 // 初始化混入
 function initMixin (Vue) {
+  // Vue 的构造函数里，就执行这一个初始化方法
   Vue.prototype._init = function (options) {
     var vm = this;
-    // a uid
+    // a uid，全局变量，每个 Vue 实例有一个唯一的 _uid
     vm._uid = uid$1++;
 
     var startTag, endTag;
@@ -5828,7 +5829,7 @@ function initMixin (Vue) {
     }
 
     // a flag to avoid this being observed
-	// 有了这个标志就不会被 observe 了
+	// 标志当前对象是 Vue 实例，有了这个标志就不会被 observe 了
     vm._isVue = true;
 
     // merge options
@@ -5838,11 +5839,12 @@ function initMixin (Vue) {
       // internal component options needs special treatment.
 	  /*
 		优化内部组件实例化。
-
+		由于动态选项合并相当慢，并且没有一个内部组件的选项需要特殊处理
 	  */
       initInternalComponent(vm, options);
     } else {
       vm.$options = mergeOptions(
+		// 处理构造函数选项
         resolveConstructorOptions(vm.constructor),
         options || {},
         vm
@@ -5859,10 +5861,12 @@ function initMixin (Vue) {
     initLifecycle(vm);
     initEvents(vm);
     initRender(vm);
+	// beforeCreate 钩子回调
     callHook(vm, 'beforeCreate');
     initInjections(vm); // resolve injections before data/props
     initState(vm);
     initProvide(vm); // resolve provide after data/props
+	// created 钩子回调
     callHook(vm, 'created');
 
     /* istanbul ignore if */
@@ -5874,12 +5878,14 @@ function initMixin (Vue) {
       measure(((vm._name) + " init"), startTag, endTag);
     }
 
+	// 插入文档
     if (vm.$options.el) {
       vm.$mount(vm.$options.el);
     }
   };
 }
 
+// 初始化内部组件，即给 vm.$options 的属性赋值
 function initInternalComponent (vm, options) {
   var opts = vm.$options = Object.create(vm.constructor.options);
   // doing this because it's faster than dynamic enumeration.
@@ -5897,21 +5903,30 @@ function initInternalComponent (vm, options) {
   }
 }
 
+// 处理构造函数选项，最终返回 Ctor.options
 function resolveConstructorOptions (Ctor) {
   var options = Ctor.options;
   if (Ctor.super) {
+	// 处理构造函数的父类选项
     var superOptions = resolveConstructorOptions(Ctor.super);
     var cachedSuperOptions = Ctor.superOptions;
+
+	// 本次取到的父类选项和之前的不一样
     if (superOptions !== cachedSuperOptions) {
       // super option changed,
       // need to resolve new options.
+	  // 新的覆盖旧的
       Ctor.superOptions = superOptions;
+
       // check if there are any late-modified/attached options (#4976)
+	  // 检查是还有最新修改的选项
       var modifiedOptions = resolveModifiedOptions(Ctor);
+
       // update base extend options
       if (modifiedOptions) {
         extend(Ctor.extendOptions, modifiedOptions);
       }
+	  // 合并选项
       options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions);
       if (options.name) {
         options.components[options.name] = Ctor;
@@ -5921,6 +5936,7 @@ function resolveConstructorOptions (Ctor) {
   return options
 }
 
+// 返回被修改过的选项组成的 json 对象
 function resolveModifiedOptions (Ctor) {
   var modified;
   var latest = Ctor.options;
@@ -5935,97 +5951,157 @@ function resolveModifiedOptions (Ctor) {
   return modified
 }
 
+// 过滤数组 latest，选出属于 extended 并且不属于 sealed 的元素
 function dedupe (latest, extended, sealed) {
   // compare latest and sealed to ensure lifecycle hooks won't be duplicated
   // between merges
+  // 对比 latest 和 sealed 以确保在合并过程中生命周期钩子不会重复
+
+  // latest 为数组
   if (Array.isArray(latest)) {
     var res = [];
+
+	// 如果 sealed 和 extended 不是数组，那就转为数组
     sealed = Array.isArray(sealed) ? sealed : [sealed];
     extended = Array.isArray(extended) ? extended : [extended];
+
     for (var i = 0; i < latest.length; i++) {
       // push original options and not sealed options to exclude duplicated options
+	  // latest[i] 在数组 extended 中，并且不在数组 sealed 中
       if (extended.indexOf(latest[i]) >= 0 || sealed.indexOf(latest[i]) < 0) {
         res.push(latest[i]);
       }
     }
     return res
+  // 否则直接返回 latest
   } else {
     return latest
   }
 }
 
+// 真正的 Vue 构造函数
 function Vue$3 (options) {
-  if ("development" !== 'production' &&
-    !(this instanceof Vue$3)
-  ) {
+  // 如果 this 不是 Vue$3 的实例，发出警告：Vue 是一个构造函数，必须用 new 关键词来调用
+  if ("development" !== 'production' && !(this instanceof Vue$3)) {
     warn('Vue is a constructor and should be called with the `new` keyword');
   }
+  // 根据 options 完成一系列初始化操作
   this._init(options);
 }
 
+// 将 _init 方法挂载到 Vue$3.prototype 上。所以上面的 Vue$3 函数才可以调用 _init 方法
 initMixin(Vue$3);
+
+// 将 $data、$props、$set、$delete、$watch 等 5 个属性/方法挂载到 Vue$3.prototype 上
 stateMixin(Vue$3);
+
+// 将 $on、$once、$off、$emit 等 4 个方法挂载到 Vue$3.prototype 上
 eventsMixin(Vue$3);
+
+// 将 _update、$forceUpdate、$destroy 等 3 个方法挂载到 Vue$3.prototype 上
 lifecycleMixin(Vue$3);
+
+// 将 $nextTick、_render 以及 _o、_n、_s、_l、_t、_q、_i、_m、_f、_k、_b、_v、_e、_u、_g 等一系列方法挂载到 Vue$3.prototype 上
 renderMixin(Vue$3);
 
-/*  */
-
+// 定义静态方法 Vue$3.use
 function initUse (Vue) {
+  // 使用第三方插件
   Vue.use = function (plugin) {
+	// 已经安装过的插件
     var installedPlugins = (this._installedPlugins || (this._installedPlugins = []));
+	// 如果当前插件已经安装过，直接返回 this，也就是 Vue
     if (installedPlugins.indexOf(plugin) > -1) {
       return this
     }
 
     // additional parameters
+	// 将实参转成数组形式，并剔除第一个实参
     var args = toArray(arguments, 1);
+	// 将 Vue 添加到 args 数组开头
     args.unshift(this);
+	// 如果 plugin.install 是函数，那就执行之
     if (typeof plugin.install === 'function') {
       plugin.install.apply(plugin, args);
+	// 否则，如果 plugin 是函数，执行之
     } else if (typeof plugin === 'function') {
       plugin.apply(null, args);
     }
+	// 将当前插件加入已安装过的插件数组里
     installedPlugins.push(plugin);
     return this
   };
 }
 
-/*  */
 
+// 定义静态方法 Vue$3.mixin
 function initMixin$1 (Vue) {
+  // 修改 Vue.options
   Vue.mixin = function (mixin) {
     this.options = mergeOptions(this.options, mixin);
     return this
   };
 }
 
-/*  */
 
+// 定义静态方法 Vue$3.extend
 function initExtend (Vue) {
   /**
    * Each instance constructor, including Vue, has a unique
    * cid. This enables us to create wrapped "child
    * constructors" for prototypal inheritance and cache them.
    */
+  // 每个实例构造函数（包括 Vue）都有一个唯一的 cid。这使得我们能够为原型继承创建被包裹的“子构造函数”，并且缓存它们。
   Vue.cid = 0;
   var cid = 1;
 
   /**
-   * Class inheritance
+   * Class inheritance 类继承
    */
+  /*
+	该方法的作用是使用基础 Vue 构造器，创建一个“子类”。参数是一个包含组件选项的对象。
+	其中，data 选项是特例，它在 Vue.extend() 中它必须是函数
+
+	eg：
+	<div id="mount-point"></div>
+
+	// 创建构造器
+	var Profile = Vue.extend({
+	  template: '<p>{{firstName}} {{lastName}} aka {{alias}}</p>',
+	  data: function () {
+		return {
+		  firstName: 'Walter',
+		  lastName: 'White',
+		  alias: 'Heisenberg'
+		}
+	  }
+	})
+	// 创建 Profile 实例，并挂载到一个元素上。
+	new Profile().$mount('#mount-point')
+  */
+  // 返回一个新的构造函数 Sub
   Vue.extend = function (extendOptions) {
+	// 参数未定义则初始化为空对象
     extendOptions = extendOptions || {};
+
+	// 父类
     var Super = this;
     var SuperId = Super.cid;
+	// 缓存的构造函数
     var cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {});
+	// 如果找到了缓存的构造函数，就此返回
     if (cachedCtors[SuperId]) {
       return cachedCtors[SuperId]
     }
 
     var name = extendOptions.name || Super.options.name;
-    {
+    { 
+	  /*
+		\w : 匹配字母或数字或下划线或汉字
+		/^[a-zA-Z][\w-]*$/ 匹配字母开头后面跟若干个字母或数字或下划线或汉字或-
+	  */
       if (!/^[a-zA-Z][\w-]*$/.test(name)) {
+		// 组件名之内包含字母数字和连字符，并且要以字母开头
         warn(
           'Invalid component name: "' + name + '". Component names ' +
           'can only contain alphanumeric characters and the hyphen, ' +
@@ -6034,21 +6110,32 @@ function initExtend (Vue) {
       }
     }
 
+	// 子构造函数
     var Sub = function VueComponent (options) {
       this._init(options);
     };
+
+	// 继承 Vue 的原型
     Sub.prototype = Object.create(Super.prototype);
     Sub.prototype.constructor = Sub;
+
+	
     Sub.cid = cid++;
+	// 合并 Vue.options 和 extendOptions
     Sub.options = mergeOptions(
       Super.options,
       extendOptions
     );
+	// super 属性指向父类
     Sub['super'] = Super;
 
     // For props and computed properties, we define the proxy getters on
     // the Vue instances at extension time, on the extended prototype. This
     // avoids Object.defineProperty calls for each instance created.
+	/*
+		对于 props 和 computed 属性，在 Vue 实例延伸期间，在扩展的原型上我们定义了代理 getters。
+		这样会避免每次实例创建都调用 Object.defineProperty 方法。
+	*/
     if (Sub.options.props) {
       initProps$1(Sub);
     }
@@ -6057,16 +6144,26 @@ function initExtend (Vue) {
     }
 
     // allow further extension/mixin/plugin usage
+	// 获取父类的 extend、mixin 和 use 方法
     Sub.extend = Super.extend;
     Sub.mixin = Super.mixin;
     Sub.use = Super.use;
 
     // create asset registers, so extended classes
     // can have their private assets too.
+	/*
+	// 配置类型
+	var ASSET_TYPES = [
+	  'component',
+	  'directive',
+	  'filter'
+	];
+	*/
     ASSET_TYPES.forEach(function (type) {
       Sub[type] = Super[type];
     });
-    // enable recursive self-lookup
+
+    // enable recursive self-lookup，启用递归自查找
     if (name) {
       Sub.options.components[name] = Sub;
     }
@@ -6074,46 +6171,63 @@ function initExtend (Vue) {
     // keep a reference to the super options at extension time.
     // later at instantiation we can check if Super's options have
     // been updated.
+	// 在扩展期间保持对父级 options 的引用。后面在实例化时我们可以检查父级 options 是否更新了
     Sub.superOptions = Super.options;
     Sub.extendOptions = extendOptions;
     Sub.sealedOptions = extend({}, Sub.options);
 
-    // cache constructor
+    // cache constructor，缓存构造函数
     cachedCtors[SuperId] = Sub;
     return Sub
   };
 }
 
+// 给 Comp.prototype 添加若干属性/方法
 function initProps$1 (Comp) {
   var props = Comp.options.props;
   for (var key in props) {
+	/*
+	给 Comp.prototype 对象添加 key 属性
+	① get 操作：
+	   return this["_props"][key]
+	② set 操作：
+	   this["_props"][key] = val
+	*/
     proxy(Comp.prototype, "_props", key);
   }
 }
 
+// 给 Comp.prototype 添加若干属性/方法
 function initComputed$1 (Comp) {
   var computed = Comp.options.computed;
   for (var key in computed) {
+	// 给 Comp.prototype 对象添加 key 属性，该属性的 get/set 操作由 computed[key] 指定的方法拦截 
     defineComputed(Comp.prototype, key, computed[key]);
   }
 }
 
-/*  */
-
+// 定义静态方法 Vue$3.component、Vue$3.directive、Vue$3.filter
 function initAssetRegisters (Vue) {
   /**
    * Create asset registration methods.
    */
+  /*
+	配置类型
+	var ASSET_TYPES = [
+	  'component',
+	  'directive',
+	  'filter'
+	];
+  */
   ASSET_TYPES.forEach(function (type) {
-    Vue[type] = function (
-      id,
-      definition
-    ) {
+    Vue[type] = function (id, definition) {
+	  // 只有一个实参就是获取注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
       if (!definition) {
         return this.options[type + 's'][id]
       } else {
         /* istanbul ignore if */
         {
+		  // 如果 type 是 'component'，则 id 不能是保留标签名
           if (type === 'component' && config.isReservedTag(id)) {
             warn(
               'Do not use built-in or reserved HTML elements as component ' +
@@ -6122,12 +6236,16 @@ function initAssetRegisters (Vue) {
           }
         }
         if (type === 'component' && isPlainObject(definition)) {
+		  // 如果没有 name 属性就取第一个参数 id
           definition.name = definition.name || id;
+		  // Vue.options._base = Vue，所以 definition = Vue.extend(definition);
           definition = this.options._base.extend(definition);
         }
+		// definition 如果是函数，那就重置为 json 对象
         if (type === 'directive' && typeof definition === 'function') {
           definition = { bind: definition, update: definition };
         }
+		// 注册组件，然后返回
         this.options[type + 's'][id] = definition;
         return definition
       }
@@ -6139,15 +6257,20 @@ function initAssetRegisters (Vue) {
 
 var patternTypes = [String, RegExp, Array];
 
+// 获取组件名称
 function getComponentName (opts) {
   return opts && (opts.Ctor.options.name || opts.tag)
 }
 
+// pattern 和 name 是否匹配
 function matches (pattern, name) {
+  // ① pattern 是数组，name 在数组中则返回 true
   if (Array.isArray(pattern)) {
     return pattern.indexOf(name) > -1
+  // ② pattern 是逗号分隔的字符串，name 在这个字符串中则返回 true
   } else if (typeof pattern === 'string') {
     return pattern.split(',').indexOf(name) > -1
+  // ③ pattern 是正则，用 test 方法来检验 name
   } else if (isRegExp(pattern)) {
     return pattern.test(name)
   }
@@ -6155,11 +6278,13 @@ function matches (pattern, name) {
   return false
 }
 
+// 裁剪 cache
 function pruneCache (cache, current, filter) {
   for (var key in cache) {
     var cachedNode = cache[key];
     if (cachedNode) {
       var name = getComponentName(cachedNode.componentOptions);
+	  // 不能通过过滤器 filter 则销毁 cachedNode
       if (name && !filter(name)) {
         if (cachedNode !== current) {
           pruneCacheEntry(cachedNode);
@@ -6170,22 +6295,27 @@ function pruneCache (cache, current, filter) {
   }
 }
 
+// 销毁
 function pruneCacheEntry (vnode) {
   if (vnode) {
     vnode.componentInstance.$destroy();
   }
 }
 
+
 var KeepAlive = {
   name: 'keep-alive',
   abstract: true,
 
+  
   props: {
+	// patternTypes = [String, RegExp, Array]
     include: patternTypes,
     exclude: patternTypes
   },
 
   created: function created () {
+	// 空对象
     this.cache = Object.create(null);
   },
 
@@ -6193,36 +6323,47 @@ var KeepAlive = {
     var this$1 = this;
 
     for (var key in this$1.cache) {
+	  // 销毁 cache 的元素
       pruneCacheEntry(this$1.cache[key]);
     }
   },
 
   watch: {
+	// 包含，销毁不包含的
     include: function include (val) {
+	  // 裁剪 this.cache
       pruneCache(this.cache, this._vnode, function (name) { return matches(val, name); });
     },
+	// 不包含，销毁包含的
     exclude: function exclude (val) {
       pruneCache(this.cache, this._vnode, function (name) { return !matches(val, name); });
     }
   },
 
+  // 返回 vnode
   render: function render () {
     var vnode = getFirstComponentChild(this.$slots.default);
     var componentOptions = vnode && vnode.componentOptions;
     if (componentOptions) {
       // check pattern
       var name = getComponentName(componentOptions);
-      if (name && (
-        (this.include && !matches(this.include, name)) ||
-        (this.exclude && matches(this.exclude, name))
-      )) {
+	  // name 不存在于 this.include 中，或 name 存在于 this.exclude 中，返回 vnode
+      if (name && ((this.include && !matches(this.include, name)) || (this.exclude && matches(this.exclude, name)))) {
         return vnode
       }
+	  
+	  /*
+		① 若 vnode.key 为 null，那么 key 为 componentOptions.Ctor.cid + "::" + componentOptions.tag 或 componentOptions.Ctor.cid
+		② 否则，key 为 vnode.key
+	  */
       var key = vnode.key == null
         // same constructor may get registered as different local components
         // so cid alone is not enough (#3269)
+		// 相同的构造函数可能会被注册成不同的局部组件，所以仅仅判断 cid 是不够的
         ? componentOptions.Ctor.cid + (componentOptions.tag ? ("::" + (componentOptions.tag)) : '')
         : vnode.key;
+
+
       if (this.cache[key]) {
         vnode.componentInstance = this.cache[key].componentInstance;
       } else {
@@ -6278,8 +6419,11 @@ function initGlobalAPI (Vue) {
 
   extend(Vue.options.components, builtInComponents);
 
+  // 定义静态方法 Vue$3.use
   initUse(Vue);
+  // 定义静态方法 Vue$3.mixin
   initMixin$1(Vue);
+  // 定义静态方法 Vue$3.extend
   initExtend(Vue);
   initAssetRegisters(Vue);
 }
