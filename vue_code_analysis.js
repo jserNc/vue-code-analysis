@@ -6375,28 +6375,33 @@ var KeepAlive = {
   }
 };
 
+
+// 内置组件
 var builtInComponents = {
   KeepAlive: KeepAlive
 };
 
-/*  */
-
+// 初始化全局 api，也就是将一些全局方法挂载到 Vue$3 下
 function initGlobalAPI (Vue) {
   // config
   var configDef = {};
+  // 这里的 config 对象包含 Vue 的全局配置。包括 silent、optionMergeStrategies、devtools ...
   configDef.get = function () { return config; };
   {
     configDef.set = function () {
+	  // 不可以替换整个 Vue.config 对象，只能修改其属性
       warn(
         'Do not replace the Vue.config object, set individual fields instead.'
       );
     };
   }
+  // 定义 Vue.config 是一个对象，包含 Vue 的全局配置
   Object.defineProperty(Vue, 'config', configDef);
 
   // exposed util methods.
   // NOTE: these are not considered part of the public API - avoid relying on
   // them unless you are aware of the risk.
+  // 以下工具方法并不作为公共 api 的一部分。不要依赖这些方法，除非你了解这些方法的风险。
   Vue.util = {
     warn: warn,
     extend: extend,
@@ -6409,6 +6414,18 @@ function initGlobalAPI (Vue) {
   Vue.nextTick = nextTick;
 
   Vue.options = Object.create(null);
+  /*
+	// 配置类型
+	var ASSET_TYPES = [
+	  'component',
+	  'directive',
+	  'filter'
+	];
+	以下相当于：
+	Vue.options['components'] = {};
+	Vue.options['directive'] = {};
+	Vue.options['filter'] = {};
+  */
   ASSET_TYPES.forEach(function (type) {
     Vue.options[type + 's'] = Object.create(null);
   });
@@ -6417,6 +6434,7 @@ function initGlobalAPI (Vue) {
   // components with in Weex's multi-instance scenarios.
   Vue.options._base = Vue;
 
+  // 添加内置组件 KeepAlive
   extend(Vue.options.components, builtInComponents);
 
   // 定义静态方法 Vue$3.use
@@ -6425,15 +6443,18 @@ function initGlobalAPI (Vue) {
   initMixin$1(Vue);
   // 定义静态方法 Vue$3.extend
   initExtend(Vue);
+  // 定义静态方法 Vue$3.component、Vue$3.directive、Vue$3.filter
   initAssetRegisters(Vue);
 }
 
 initGlobalAPI(Vue$3);
 
+// 定义 Vue$3.prototype.$isServer，即是否在服务器环境
 Object.defineProperty(Vue$3.prototype, '$isServer', {
   get: isServerRendering
 });
 
+// 定义 Vue$3.prototype.$ssrContext
 Object.defineProperty(Vue$3.prototype, '$ssrContext', {
   get: function get () {
     /* istanbul ignore next */
@@ -6441,16 +6462,30 @@ Object.defineProperty(Vue$3.prototype, '$ssrContext', {
   }
 });
 
+// 当前版本是 2.4.0
 Vue$3.version = '2.4.0';
 
 /*  */
 
 // these are reserved for web because they are directly compiled away
 // during template compilation
+/*
+ style,class 属性是为 web 保留的。因为在模板编译过程中它们是直接编译的。
+
+ makeMap 方法检验字符串是不是在 str 中，eg:
+ makeMap('aaa,bbb,ccc',true)('aa')  -> undefined
+ makeMap('aaa,bbb,ccc',true)('aaa') -> true
+
+ isReservedAttr 方法用来判断参数是否为 style 或 class
+*/
 var isReservedAttr = makeMap('style,class');
 
 // attributes that should be using props for binding
+// acceptValue 方法用来判断参数是否为 input,textarea,option,select 四者之一
 var acceptValue = makeMap('input,textarea,option,select');
+
+
+// 以下 4 种情况必须用 prop
 var mustUseProp = function (tag, type, attr) {
   return (
     (attr === 'value' && acceptValue(tag)) && type !== 'button' ||
@@ -6460,8 +6495,10 @@ var mustUseProp = function (tag, type, attr) {
   )
 };
 
+// 参数为 contenteditable,draggable,spellcheck 四者之一，说明是可枚举属性
 var isEnumeratedAttr = makeMap('contenteditable,draggable,spellcheck');
 
+// 参数为以下值之一，说明是布尔属性
 var isBooleanAttr = makeMap(
   'allowfullscreen,async,autofocus,autoplay,checked,compact,controls,declare,' +
   'default,defaultchecked,defaultmuted,defaultselected,defer,disabled,' +
@@ -6471,42 +6508,66 @@ var isBooleanAttr = makeMap(
   'truespeed,typemustmatch,visible'
 );
 
+/*
+ 参考：http://www.w3school.com.cn/xlink/xlink_syntax.asp
+
+ ① XLink 是 XML Linking language 的缩写，XLink 用于在 XML 文档中创建超级链接的标准方法，类似于 html 链接，但更强大
+ ② 为了访问 XLink 的属性和特性，我们必须在文档的顶端声明 XLink 命名空间。XLink 的命名空间是："http://www.w3.org/1999/xlink"。
+
+ eg:
+	<?xml version="1.0"?>
+	<homepages xmlns:xlink="http://www.w3.org/1999/xlink">
+		<homepage xlink:type="simple" xlink:href="http://www.w3school.com.cn">Visit W3School</homepage>
+		<homepage xlink:type="simple" xlink:href="http://www.w3.org">Visit W3C</homepage>
+	</homepages>
+
+	<homepage> 元素中的 xlink:type 和 xlink:href 属性定义了来自 XLink 命名空间的 type 和 href 属性。
+	xlink:type="simple" 可创建一个简单的两端链接（意思是“从这里到哪里”）。另外，还有多端链接（多方向）。
+*/
 var xlinkNS = 'http://www.w3.org/1999/xlink';
 
+// 是否为 xlink
 var isXlink = function (name) {
   return name.charAt(5) === ':' && name.slice(0, 5) === 'xlink'
 };
 
+// 获取 xlink 的 prop 名，也就是排除 xlink: 这前 6 个字符
 var getXlinkProp = function (name) {
   return isXlink(name) ? name.slice(6, name.length) : ''
 };
 
+// 是否为假值，即 null、undefined 或 false
 var isFalsyAttrValue = function (val) {
   return val == null || val === false
 };
 
-/*  */
-
+// 生成 class 给 vnode 用
 function genClassForVnode (vnode) {
   var data = vnode.data;
   var parentNode = vnode;
   var childNode = vnode;
+  // 从当前组件开始，逐级向子组件取 class
   while (isDef(childNode.componentInstance)) {
     childNode = childNode.componentInstance._vnode;
     if (childNode.data) {
+	  // 合并子组件和当前组件的 class
       data = mergeClassData(childNode.data, data);
     }
   }
+  // 从当前组件开始，逐级向父组件取 class
   while (isDef(parentNode = parentNode.parent)) {
     if (parentNode.data) {
+	  // 合并当前组件和父组件的 class
       data = mergeClassData(data, parentNode.data);
     }
   }
   return renderClass(data.staticClass, data.class)
 }
 
+// 返回一个 json 对象，包含 staticClass 和 class 等两个属性
 function mergeClassData (child, parent) {
   return {
+	// 静态 class 由父组件和子组件的静态 class 拼接而成 
     staticClass: concat(child.staticClass, parent.staticClass),
     class: isDef(child.class)
       ? [child.class, parent.class]
@@ -6514,40 +6575,54 @@ function mergeClassData (child, parent) {
   }
 }
 
+// 返回 class 
 function renderClass (
   staticClass,
   dynamicClass
 ) {
   if (isDef(staticClass) || isDef(dynamicClass)) {
+	// 拼接静态的和动态的 class
     return concat(staticClass, stringifyClass(dynamicClass))
   }
   /* istanbul ignore next */
   return ''
 }
 
+// 链接字符串 a 和 b，中间用空格分开
 function concat (a, b) {
   return a ? b ? (a + ' ' + b) : a : (b || '')
 }
 
+// 从 value 中提取字符串形式的 class 值
 function stringifyClass (value) {
+  // 数组元素之间空格分开
   if (Array.isArray(value)) {
     return stringifyArray(value)
   }
+  // 对象键名之间空格分开
   if (isObject(value)) {
     return stringifyObject(value)
   }
+  // 字符串返回本身
   if (typeof value === 'string') {
     return value
   }
   /* istanbul ignore next */
+  // 以上都不满足，就返回空字符串
   return ''
 }
 
+/*
+数组转为字符串形式，元素之间用空格分开，例如：
+stringifyArray(['cls1','cls2','cls3']);
+-> "cls1 cls2 cls3"
+*/
 function stringifyArray (value) {
   var res = '';
   var stringified;
   for (var i = 0, l = value.length; i < l; i++) {
     if (isDef(stringified = stringifyClass(value[i])) && stringified !== '') {
+	  // 元素之间用空格分开
       if (res) { res += ' '; }
       res += stringified;
     }
@@ -6555,10 +6630,20 @@ function stringifyArray (value) {
   return res
 }
 
+/*
+对象转为字符串形式，注意只取出对象的键名，用空格分开，例如：
+stringifyObject({
+	cls1 : 'val1',
+	cls2 : 'val2',
+	cls3 : 'val3'
+});
+-> "cls1 cls2 cls3"
+*/ 
 function stringifyObject (value) {
   var res = '';
   for (var key in value) {
     if (value[key]) {
+	  // 键名之间用空格分开
       if (res) { res += ' '; }
       res += key;
     }
@@ -6566,8 +6651,7 @@ function stringifyObject (value) {
   return res
 }
 
-/*  */
-
+// 命名空间映射
 var namespaceMap = {
   svg: 'http://www.w3.org/2000/svg',
   math: 'http://www.w3.org/1998/Math/MathML'
@@ -6590,7 +6674,7 @@ var isHTMLTag = makeMap(
 
 // this map is intentionally selective, only covering SVG elements that may
 // contain child elements.
-// svg 保留标签名
+// svg 保留标签名，这里只是挑选了部分可能包含子元素的 svg 元素
 var isSVG = makeMap(
   'svg,animate,circle,clippath,cursor,defs,desc,ellipse,filter,font-face,' +
   'foreignObject,g,glyph,image,line,marker,mask,missing-glyph,path,pattern,' +
@@ -6598,6 +6682,7 @@ var isSVG = makeMap(
   true
 );
 
+// 是否为 pre 标签
 var isPreTag = function (tag) { return tag === 'pre'; };
 
 // 是否是保留标签
@@ -6605,38 +6690,48 @@ var isReservedTag = function (tag) {
   return isHTMLTag(tag) || isSVG(tag)
 };
 
+// 获取标签的命名空间
 function getTagNamespace (tag) {
   if (isSVG(tag)) {
     return 'svg'
   }
   // basic support for MathML
   // note it doesn't support other MathML elements being component roots
+  // 这里只是对 MathML 最基本的支持。注意，并不支持其他的 MathML 元素
   if (tag === 'math') {
     return 'math'
   }
 }
 
+// 存储未知组件名
 var unknownElementCache = Object.create(null);
+
+// 是否为未知组件名
 function isUnknownElement (tag) {
   /* istanbul ignore if */
+  // 只要不是浏览器环境，就返回 true
   if (!inBrowser) {
     return true
   }
+  // 保留标签，返回 false
   if (isReservedTag(tag)) {
     return false
   }
   tag = tag.toLowerCase();
   /* istanbul ignore if */
+  // 如果有缓存的话，返回缓存结果
   if (unknownElementCache[tag] != null) {
     return unknownElementCache[tag]
   }
   var el = document.createElement(tag);
+  // tag 中包含 '-'，判断 el.constructor 是否为 window.HTMLUnknownElement 或 window.HTMLElement
   if (tag.indexOf('-') > -1) {
     // http://stackoverflow.com/a/28210364/1070244
     return (unknownElementCache[tag] = (
       el.constructor === window.HTMLUnknownElement ||
       el.constructor === window.HTMLElement
     ))
+  // 否则，判断 el.toString() 中是否包含字符串 HTMLUnknownElement
   } else {
     return (unknownElementCache[tag] = /HTMLUnknownElement/.test(el.toString()))
   }
@@ -6647,80 +6742,105 @@ function isUnknownElement (tag) {
 /**
  * Query an element selector if it's not an element already.
  */
+// 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
 function query (el) {
+  // el 为字符串选择器
   if (typeof el === 'string') {
     var selected = document.querySelector(el);
     if (!selected) {
       "development" !== 'production' && warn(
         'Cannot find element: ' + el
       );
+	  // 找不到则新建一个 div 返回
       return document.createElement('div')
     }
     return selected
+  // el 本身就是元素
   } else {
     return el
   }
 }
 
-/*  */
-
+// 创建元素并返回该元素。只有 select 元素会特殊对待
 function createElement$1 (tagName, vnode) {
   var elm = document.createElement(tagName);
   if (tagName !== 'select') {
     return elm
   }
   // false or null will remove the attribute but undefined will not
+  // 当 vnode.data.attrs.multiple 不为 undefined 时，给 select 元素加上 multiple 属性
   if (vnode.data && vnode.data.attrs && vnode.data.attrs.multiple !== undefined) {
     elm.setAttribute('multiple', 'multiple');
   }
   return elm
 }
 
+// 创建一个具有指定的命名空间 namespace 和限定名称 tagName 的元素。
 function createElementNS (namespace, tagName) {
+  /*
+	var namespaceMap = {
+		svg: 'http://www.w3.org/2000/svg',
+		math: 'http://www.w3.org/1998/Math/MathML'
+	};
+  */
   return document.createElementNS(namespaceMap[namespace], tagName)
 }
 
+// 创建文本节点
 function createTextNode (text) {
   return document.createTextNode(text)
 }
 
+// 创建注释节点
 function createComment (text) {
   return document.createComment(text)
 }
 
+// 将 newNode 元素插入到 referenceNode 之前
 function insertBefore (parentNode, newNode, referenceNode) {
   parentNode.insertBefore(newNode, referenceNode);
 }
 
+// 删除子节点
 function removeChild (node, child) {
   node.removeChild(child);
 }
 
+// 添加子节点
 function appendChild (node, child) {
   node.appendChild(child);
 }
 
+// 获取父节点
 function parentNode (node) {
   return node.parentNode
 }
 
+// nextSibling 属性返回指定节点之后紧跟的节点，在相同的树层级中
 function nextSibling (node) {
   return node.nextSibling
 }
 
+// 获取元素标签名（大写字母构成）
 function tagName (node) {
   return node.tagName
 }
 
+// 设置元素的文本
 function setTextContent (node, text) {
   node.textContent = text;
 }
 
+// 设置元素属性
 function setAttribute (node, key, val) {
   node.setAttribute(key, val);
 }
 
-
+/*
+ Object.freeze() 方法可以冻结一个对象，冻结指的是不能向这个对象添加新的属性，
+ 不能修改其已有属性的值，不能删除已有属性，以及不能修改该对象已有属性的可枚举性、可配置性、可写性。
+ 也就是说，这个对象永远是不可变的。该方法返回被冻结的对象。
+*/
 var nodeOps = Object.freeze({
 	createElement: createElement$1,
 	createElementNS: createElementNS,
@@ -6739,37 +6859,48 @@ var nodeOps = Object.freeze({
 /*  */
 
 var ref = {
+  // 添加引用 ref
   create: function create (_, vnode) {
     registerRef(vnode);
   },
+  // 更新引用 ref
   update: function update (oldVnode, vnode) {
+	// oldVnode 和 vnode 的 ref 不一样，则删除旧的，添加新的
     if (oldVnode.data.ref !== vnode.data.ref) {
       registerRef(oldVnode, true);
       registerRef(vnode);
     }
   },
+  // 删除引用 ref
   destroy: function destroy (vnode) {
     registerRef(vnode, true);
   }
 };
 
+// 添加/删除 ref
 function registerRef (vnode, isRemoval) {
   var key = vnode.data.ref;
+  // 如果没有 vnode.data.ref，直接返回
   if (!key) { return }
 
   var vm = vnode.context;
   var ref = vnode.componentInstance || vnode.elm;
   var refs = vm.$refs;
+  // 删除引用
   if (isRemoval) {
     if (Array.isArray(refs[key])) {
       remove(refs[key], ref);
     } else if (refs[key] === ref) {
       refs[key] = undefined;
     }
+  // 添加引用
   } else {
+	// 当 ref 和 v-for 一起使用时，获取到的引用会是一个数组
     if (vnode.data.refInFor) {
+	  // refs[key] 不是数组，初始化为数组
       if (!Array.isArray(refs[key])) {
         refs[key] = [ref];
+	  // refs[key] 是数组，在数组末尾添加 ref 
       } else if (refs[key].indexOf(ref) < 0) {
         // $flow-disable-line
         refs[key].push(ref);
@@ -6788,7 +6919,7 @@ function registerRef (vnode, isRemoval) {
  *
  * modified by Evan You (@yyx990803)
  *
-
+   虚拟节点算法参考的是 Snabbdom
 /*
  * Not type-checking this because this file is perf-critical and the cost
  * of making flow understand it is not worth it.
