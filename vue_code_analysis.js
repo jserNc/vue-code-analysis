@@ -6796,7 +6796,7 @@ function createComment (text) {
   return document.createComment(text)
 }
 
-// 将 newNode 元素插入到 referenceNode 之前
+// 将 newNode 元素插入到参考节点 referenceNode 之前
 function insertBefore (parentNode, newNode, referenceNode) {
   parentNode.insertBefore(newNode, referenceNode);
 }
@@ -6925,14 +6925,18 @@ function registerRef (vnode, isRemoval) {
  * of making flow understand it is not worth it.
  */
 
+// 创建空节点，除了 tag -> ''，data -> {} ，children -> []，其他属性都是 undefined/false
 var emptyNode = new VNode('', {}, []);
 
 var hooks = ['create', 'activate', 'update', 'remove', 'destroy'];
 
+// 判断是否为相同节点
 function sameVnode (a, b) {
   return (
+	// key 相等
     a.key === b.key && (
       (
+		// tag、isComment、data、inputType 等一样
         a.tag === b.tag &&
         a.isComment === b.isComment &&
         isDef(a.data) === isDef(b.data) &&
@@ -6948,14 +6952,18 @@ function sameVnode (a, b) {
 
 // Some browsers do not support dynamically changing type for <input>
 // so they need to be treated as different nodes
+// 有些浏览器不支持动态改变 input 标签的 type。所以，它们需要被当作不同的节点。
 function sameInputType (a, b) {
+  // tag 不为 input，默认为 true
   if (a.tag !== 'input') { return true }
   var i;
   var typeA = isDef(i = a.data) && isDef(i = i.attrs) && i.type;
   var typeB = isDef(i = b.data) && isDef(i = i.attrs) && i.type;
+  // type 相同则返回 true
   return typeA === typeB
 }
 
+// 返回一个映射表
 function createKeyToOldIdx (children, beginIdx, endIdx) {
   var i, key;
   var map = {};
@@ -6963,16 +6971,93 @@ function createKeyToOldIdx (children, beginIdx, endIdx) {
     key = children[i].key;
     if (isDef(key)) { map[key] = i; }
   }
+  /*
+	map 结构大致为：
+	{
+		key0 : idx0,
+		key1 : idx1,
+		key2 : idx2,
+		...
+	}
+  */
   return map
 }
 
+// 创建补丁函数
+/*
+该函数调用时：
+var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
+其中：
+modules -> [attrs,klass,events,domProps,style,transition,ref,directives]
+nodeOps -> Object.freeze({
+	createElement: createElement$1,
+	createElementNS: createElementNS,
+	createTextNode: createTextNode,
+	createComment: createComment,
+	insertBefore: insertBefore,
+	removeChild: removeChild,
+	appendChild: appendChild,
+	parentNode: parentNode,
+	nextSibling: nextSibling,
+	tagName: tagName,
+	setTextContent: setTextContent,
+	setAttribute: setAttribute
+});
+
+更具体点：
+modules -> [
+  {
+	  create: updateAttrs,
+	  update: updateAttrs
+  },
+  {
+	  create: updateClass,
+	  update: updateClass
+  },
+  {
+	  create: updateDOMListeners,
+	  update: updateDOMListeners
+  },
+  {
+	  create: updateDOMProps,
+	  update: updateDOMProps
+  },
+  {
+	  create: updateStyle,
+	  update: updateStyle
+  },
+  {
+	  create: _enter,
+	  activate: _enter,
+	  remove: function remove$$1 (vnode, rm) {}
+  },
+  {
+	  // 添加引用 ref
+	  create: function create (_, vnode) {},
+	  // 更新引用 ref
+	  update: function update (oldVnode, vnode) {},
+	  // 删除引用 ref
+	  destroy: function destroy (vnode) {}
+  },
+  {
+	  create: updateDirectives,
+	  update: updateDirectives,
+	  destroy: function unbindDirectives (vnode) {
+		updateDirectives(vnode, emptyNode);
+	  }
+  }
+]
+*/
 function createPatchFunction (backend) {
   var i, j;
   var cbs = {};
-
+ 
+  // modules 为数组，数组元素为对象，每个对象包括 create、update 等方法
   var modules = backend.modules;
+  // nodeOps 为对象，对象包括 createElement、insertBefore 等 dom 操作方法
   var nodeOps = backend.nodeOps;
-
+ 
+  // hooks = ['create', 'activate', 'update', 'remove', 'destroy']
   for (i = 0; i < hooks.length; ++i) {
     cbs[hooks[i]] = [];
     for (j = 0; j < modules.length; ++j) {
@@ -6981,31 +7066,76 @@ function createPatchFunction (backend) {
       }
     }
   }
+  /*
+	于是，cbs 结构如下：
+	{
+		create : [
+			updateAttrs(oldVnode, vnode)
+			updateClass(oldVnode, vnode)
+			updateDOMListeners(oldVnode, vnode)
+			updateDOMProps(oldVnode, vnode)
+			updateStyle(oldVnode, vnode)
+			_enter(_, vnode)
+			create(_, vnode)
+			updateDirectives(oldVnode, vnode)
+		],
+		activate : [
+			_enter(_, vnode)
+		],
+		update : [
+			updateAttrs(oldVnode, vnode)
+			updateClass(oldVnode, vnode)
+			updateDOMListeners(oldVnode, vnode)
+			updateDOMProps(oldVnode, vnode)
+			updateStyle(oldVnode, vnode)
+			update(oldVnode, vnode)
+			updateDirectives(oldVnode, vnode)
+		],
+		remove : [
+			remove$$1(vnode, rm)
+		],
+		destroy : [
+			destroy(vnode)
+			unbindDirectives(vnode)
+		]
+	}
+  */
 
+  // 根据 elm 元素创建 vnode
   function emptyNodeAt (elm) {
+	// nodeOps.tagName(elm) 获取元素 elm 的 tagName
     return new VNode(nodeOps.tagName(elm).toLowerCase(), {}, [], undefined, elm)
   }
 
+  // 返回函数 remove$$1
   function createRmCb (childElm, listeners) {
+	// 每调用一次该方法，remove$$1.listeners 减 1，当减到 0 时，移除 childElm 元素
     function remove$$1 () {
       if (--remove$$1.listeners === 0) {
+		// 从 dom 中移除 childElm
         removeNode(childElm);
       }
     }
+	// 把 listeners 挂载到函数（对象） remove$$1 下
     remove$$1.listeners = listeners;
     return remove$$1
   }
 
+  // 原生删除节点 el
   function removeNode (el) {
+	// 原生获取 el 元素的父节点
     var parent = nodeOps.parentNode(el);
     // element may have already been removed due to v-html / v-text
     if (isDef(parent)) {
+	  // 原生删除节点 el
       nodeOps.removeChild(parent, el);
     }
   }
 
   var inPre = 0;
+  // 创建元素
   function createElm (vnode, insertedVnodeQueue, parentElm, refElm, nested) {
+	// 是否为根节点插入
     vnode.isRootInsert = !nested; // for transition enter check
     if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
       return
@@ -7014,7 +7144,9 @@ function createPatchFunction (backend) {
     var data = vnode.data;
     var children = vnode.children;
     var tag = vnode.tag;
+	// 元素
     if (isDef(tag)) {
+
       {
         if (data && data.pre) {
           inPre++;
@@ -7022,9 +7154,18 @@ function createPatchFunction (backend) {
         if (
           !inPre &&
           !vnode.ns &&
+		  /*
+			Vue.config.ignoredElements = [
+			  'my-custom-web-component',
+			  'another-web-component',
+			   ...
+			]
+			使 Vue 忽略在 Vue 之外的自定义元素。否则，它会假设你忘记注册全局组件或者拼错了组件名称，从而抛出下面的警告
+		  */
           !(config.ignoredElements.length && config.ignoredElements.indexOf(tag) > -1) &&
           config.isUnknownElement(tag)
         ) {
+		  // 未知类型的自定义元素 <tag> - 你有正确注册这个组件吗？对于递归组件，确保提供了 name 选项
           warn(
             'Unknown custom element: <' + tag + '> - did you ' +
             'register the component correctly? For recursive components, ' +
@@ -7033,46 +7174,74 @@ function createPatchFunction (backend) {
           );
         }
       }
+
+	  /*
+		① 如果有命名空间，就用 createElementNS 方法来创建元素
+		② 否则，用 createElement 方法创建元素
+	  */
       vnode.elm = vnode.ns
         ? nodeOps.createElementNS(vnode.ns, tag)
         : nodeOps.createElement(tag, vnode);
+
+	  // 设置 scope id 属性
       setScope(vnode);
 
       /* istanbul ignore if */
       {
+		// 给 vnode 创建子节点
         createChildren(vnode, children, insertedVnodeQueue);
+
         if (isDef(data)) {
+		  // 调用 create 和 hook
           invokeCreateHooks(vnode, insertedVnodeQueue);
         }
+		// 把新创建的节点插入到参考节点 refElm 之前
         insert(parentElm, vnode.elm, refElm);
       }
 
       if ("development" !== 'production' && data && data.pre) {
         inPre--;
       }
+	// 注释
     } else if (isTrue(vnode.isComment)) {
+	  // 原生方法创建一个注释节点
       vnode.elm = nodeOps.createComment(vnode.text);
+	  // 把新创建的这个注释节点插入到参考节点 refElm 之前
       insert(parentElm, vnode.elm, refElm);
+	// 文本
     } else {
+	  // 原生方法创建一个新的文本节点
       vnode.elm = nodeOps.createTextNode(vnode.text);
+	  // 把新创建的这个文本节点插入到参考节点 refElm 之前
       insert(parentElm, vnode.elm, refElm);
     }
   }
 
+
+  // 创建组件
   function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     var i = vnode.data;
+	// 前提是 vnode.data 必须定义了
     if (isDef(i)) {
       var isReactivated = isDef(vnode.componentInstance) && i.keepAlive;
+
       if (isDef(i = i.hook) && isDef(i = i.init)) {
+		// 此时，i 为 vnode.data.hook.init 方法
         i(vnode, false /* hydrating */, parentElm, refElm);
       }
       // after calling the init hook, if the vnode is a child component
       // it should've created a child instance and mounted it. the child
       // component also has set the placeholder vnode's elm.
       // in that case we can just return the element and be done.
+	  /*
+		 在调用 init 钩子后，如果 vnode 是一个子组件，那它应该创建了一个子实例并且插入过文档中。
+		 这个子组件同样也设置了占位符 vnode 的 elm。这样的话我们直接返回这个元素就好了。
+	  */
       if (isDef(vnode.componentInstance)) {
+		// 初始化组件
         initComponent(vnode, insertedVnodeQueue);
         if (isTrue(isReactivated)) {
+		  // 重新激活组件
           reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm);
         }
         return true
@@ -7080,35 +7249,54 @@ function createPatchFunction (backend) {
     }
   }
 
+  // 初始化组件
   function initComponent (vnode, insertedVnodeQueue) {
     if (isDef(vnode.data.pendingInsert)) {
+	  // 将数组 vnode.data.pendingInsert 中元素依次加到 insertedVnodeQueue 尾部
       insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert);
+	  // 然后，将 vnode.data.pendingInsert 清空
       vnode.data.pendingInsert = null;
     }
     vnode.elm = vnode.componentInstance.$el;
+	// vnode 可修补
     if (isPatchable(vnode)) {
       invokeCreateHooks(vnode, insertedVnodeQueue);
       setScope(vnode);
     } else {
       // empty component root.
       // skip all element-related modules except for ref (#3455)
+	  // 空组件根节点。跳过所有元素相关的模块，除了 ref
+	  // 添加 ref
       registerRef(vnode);
-      // make sure to invoke the insert hook
+      // make sure to invoke the insert hook，确保触发插入钩子
       insertedVnodeQueue.push(vnode);
     }
   }
 
+  // 激活组件
   function reactivateComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     var i;
     // hack for #4339: a reactivated component with inner transition
     // does not trigger because the inner node's created hooks are not called
     // again. It's not ideal to involve module-specific logic in here but
     // there doesn't seem to be a better way to do it.
+	/*
+		一个 transition 内部激活过的组件不会触发。因为内部节点的 created 钩子没有被再次调用。
+		这里牵涉到模块具体的逻辑并不是理想的办法。但是好像也没有更好的办法了
+	*/
+
     var innerNode = vnode;
+	// 递归激活内部节点
     while (innerNode.componentInstance) {
       innerNode = innerNode.componentInstance._vnode;
       if (isDef(i = innerNode.data) && isDef(i = i.transition)) {
+		/*
+		cbs.activate : [
+			_enter(_, vnode)
+		]
+		*/
         for (i = 0; i < cbs.activate.length; ++i) {
+		  // 激活节点
           cbs.activate[i](emptyNode, innerNode);
         }
         insertedVnodeQueue.push(innerNode);
@@ -7117,45 +7305,71 @@ function createPatchFunction (backend) {
     }
     // unlike a newly created component,
     // a reactivated keep-alive component doesn't insert itself
+	// 不同于新建的组件，一个重新激活的 keep-alive 组件不会插入自身
+	// 将节点 vnode.elm 插入到参考节点 refElm 之前
     insert(parentElm, vnode.elm, refElm);
   }
 
+  // 将节点 elm 插入到参考节点 ref$$1 之前
   function insert (parent, elm, ref$$1) {
     if (isDef(parent)) {
       if (isDef(ref$$1)) {
         if (ref$$1.parentNode === parent) {
+		  // 将节点 elm 插入到参考节点 ref$$1 之前
           nodeOps.insertBefore(parent, elm, ref$$1);
         }
       } else {
+		// 如果没有指定参考节点，那就在 parent 末尾插入节点 elm
         nodeOps.appendChild(parent, elm);
       }
     }
   }
 
+  // 创建子元素
   function createChildren (vnode, children, insertedVnodeQueue) {
+	// 如果 children 是数组，则调用 createElm 方法来创建每个子元素
     if (Array.isArray(children)) {
       for (var i = 0; i < children.length; ++i) {
         createElm(children[i], insertedVnodeQueue, vnode.elm, null, true);
       }
+	// 否则给 vnode.elm 添加一个文本节点
     } else if (isPrimitive(vnode.text)) {
       nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(vnode.text));
     }
   }
 
+  // 当前 vnode 是否可修补
   function isPatchable (vnode) {
     while (vnode.componentInstance) {
       vnode = vnode.componentInstance._vnode;
     }
+	// vnode.tag 存在
     return isDef(vnode.tag)
   }
 
+  // 调用 create 和 hook
   function invokeCreateHooks (vnode, insertedVnodeQueue) {
+	/*
+		cbs.create : [
+			updateAttrs(oldVnode, vnode)
+			updateClass(oldVnode, vnode)
+			updateDOMListeners(oldVnode, vnode)
+			updateDOMProps(oldVnode, vnode)
+			updateStyle(oldVnode, vnode)
+			_enter(_, vnode)
+			create(_, vnode)
+			updateDirectives(oldVnode, vnode)
+		]
+	*/
     for (var i$1 = 0; i$1 < cbs.create.length; ++i$1) {
+	  // 依次调用各种更新方法
       cbs.create[i$1](emptyNode, vnode);
     }
     i = vnode.data.hook; // Reuse variable
     if (isDef(i)) {
+	  // 如果定义了 vnode.data.hook.create
       if (isDef(i.create)) { i.create(emptyNode, vnode); }
+	  // 如果定义了 vnode.data.hook.insert
       if (isDef(i.insert)) { insertedVnodeQueue.push(vnode); }
     }
   }
@@ -7163,37 +7377,63 @@ function createPatchFunction (backend) {
   // set scope id attribute for scoped CSS.
   // this is implemented as a special case to avoid the overhead
   // of going through the normal attribute patching process.
+  /*
+	 为 scoped css 设置 scope id 属性
+	 以下的实现方式有点特殊，这么做是为了避免常规的属性修补过程的开销
+  */
   function setScope (vnode) {
     var i;
     var ancestor = vnode;
+	// 遍历祖先元素
     while (ancestor) {
       if (isDef(i = ancestor.context) && isDef(i = i.$options._scopeId)) {
+		// 原生方法给元素 vnode.elm 设置属性 ancestor.context.$options._scopeId，属性值为 ''
         nodeOps.setAttribute(vnode.elm, i, '');
       }
       ancestor = ancestor.parent;
     }
     // for slot content they should also get the scopeId from the host instance.
-    if (isDef(i = activeInstance) &&
-      i !== vnode.context &&
-      isDef(i = i.$options._scopeId)
-    ) {
+	// 对于插槽内容，也应该从宿主实例获取 scopeId
+    if (isDef(i = activeInstance) && i !== vnode.context && isDef(i = i.$options._scopeId)) {
       nodeOps.setAttribute(vnode.elm, i, '');
     }
   }
 
+  // 创建 endIdx - startIdx + 1 个元素
   function addVnodes (parentElm, refElm, vnodes, startIdx, endIdx, insertedVnodeQueue) {
     for (; startIdx <= endIdx; ++startIdx) {
       createElm(vnodes[startIdx], insertedVnodeQueue, parentElm, refElm);
     }
   }
 
+  // invoke 销毁钩子
   function invokeDestroyHook (vnode) {
     var i, j;
     var data = vnode.data;
+
     if (isDef(data)) {
-      if (isDef(i = data.hook) && isDef(i = i.destroy)) { i(vnode); }
-      for (i = 0; i < cbs.destroy.length; ++i) { cbs.destroy[i](vnode); }
+      if (isDef(i = data.hook) && isDef(i = i.destroy)) { 
+		  // 这里的 i 为 vnode.data.hook.destroy
+		  i(vnode); 
+	  }
+
+	  /*
+		试想，如果不这么写，一般的写法为：
+		if (isDef(vnode.data.hook) && isDef(vnode.data.hook.destroy)) { 
+			vnode.data.hook.destroy(vnode); 
+		}
+
+		cbs.destroy : [
+			destroy(vnode)
+			unbindDirectives(vnode)
+		]
+	  */
+      for (i = 0; i < cbs.destroy.length; ++i) { 
+		  cbs.destroy[i](vnode); 
+	  }
     }
+
+    // 对子节点，递归调用 invokeDestroyHook 方法
     if (isDef(i = vnode.children)) {
       for (j = 0; j < vnode.children.length; ++j) {
         invokeDestroyHook(vnode.children[j]);
@@ -7201,23 +7441,34 @@ function createPatchFunction (backend) {
     }
   }
 
+  // 和 addVnodes 作用相反，删除 endIdx - startIdx + 1 个元素
   function removeVnodes (parentElm, vnodes, startIdx, endIdx) {
     for (; startIdx <= endIdx; ++startIdx) {
       var ch = vnodes[startIdx];
       if (isDef(ch)) {
+		// 有标签，普通节点
         if (isDef(ch.tag)) {
+		  // 删除和销毁
           removeAndInvokeRemoveHook(ch);
           invokeDestroyHook(ch);
+		// 没有标签，文本节点
         } else { // Text node
+		  // 原生删除节点 ch.elm
           removeNode(ch.elm);
         }
       }
     }
   }
 
+  // 删除并触发钩子
   function removeAndInvokeRemoveHook (vnode, rm) {
     if (isDef(rm) || isDef(vnode.data)) {
       var i;
+	  /*
+		cbs.remove : [
+			remove$$1(vnode, rm)
+		]
+	  */
       var listeners = cbs.remove.length + 1;
       if (isDef(rm)) {
         // we have a recursively passed down rm callback
@@ -7225,39 +7476,64 @@ function createPatchFunction (backend) {
         rm.listeners += listeners;
       } else {
         // directly removing
+		/*
+			rm 为一个函数，并且 rm.listeners = listeners，每次调用 rm 函数，rm.listeners--
+			当 rm.listeners 为 0 时，移除 vnode.elm
+		*/
         rm = createRmCb(vnode.elm, listeners);
       }
       // recursively invoke hooks on child component root node
+	  // 在子元素根节点上递归调用 removeAndInvokeRemoveHook
       if (isDef(i = vnode.componentInstance) && isDef(i = i._vnode) && isDef(i.data)) {
+		// 这里 i 为 vnode.componentInstance._vnode.data
         removeAndInvokeRemoveHook(i, rm);
       }
+	  /*
+		cbs.remove : [
+			remove$$1(vnode, rm)
+		]
+	  */
       for (i = 0; i < cbs.remove.length; ++i) {
         cbs.remove[i](vnode, rm);
       }
       if (isDef(i = vnode.data.hook) && isDef(i = i.remove)) {
+		// 这里 i 为 vnode.data.hook.remove
         i(vnode, rm);
       } else {
         rm();
       }
     } else {
+	  // 原生删除节点 vnode.elm
       removeNode(vnode.elm);
     }
   }
 
+  // 更新子元素
   function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
     var oldStartIdx = 0;
     var newStartIdx = 0;
+
     var oldEndIdx = oldCh.length - 1;
+	// 旧的开始节点
     var oldStartVnode = oldCh[0];
+	// 旧的结束节点
     var oldEndVnode = oldCh[oldEndIdx];
+
     var newEndIdx = newCh.length - 1;
+	// 新的开始节点
     var newStartVnode = newCh[0];
+	// 新的结束节点
     var newEndVnode = newCh[newEndIdx];
+
     var oldKeyToIdx, idxInOld, elmToMove, refElm;
 
     // removeOnly is a special flag used only by <transition-group>
     // to ensure removed elements stay in correct relative positions
     // during leaving transitions
+	/*
+		removeOnly 是一个只在 <transition-group> 中用的特殊标志。
+		以确保被删除的元素在离开 transitions 过程中保持正确的相对位置。
+	*/
     var canMove = !removeOnly;
 
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
@@ -9199,6 +9475,94 @@ var platformModules = [
 
 // the directive module should be applied last, after all
 // built-in modules have been applied.
+/*
+var baseModules = [
+  ref,
+  directives
+];
+
+modules -> [
+  attrs,
+  klass,
+  events,
+  domProps,
+  style,
+  transition,
+  ref,
+  directives
+]
+
+其中：
+var attrs = {
+  create: updateAttrs,
+  update: updateAttrs
+}
+var klass = {
+  create: updateClass,
+  update: updateClass
+}
+...
+
+于是，modules 为：
+modules -> [
+  {
+	  create: updateAttrs,
+	  update: updateAttrs
+  },
+  {
+	  create: updateClass,
+	  update: updateClass
+  },
+  {
+	  create: updateDOMListeners,
+	  update: updateDOMListeners
+  },
+  {
+	  create: updateDOMProps,
+	  update: updateDOMProps
+  },
+  {
+	  create: updateStyle,
+	  update: updateStyle
+  },
+  {
+	  create: _enter,
+	  activate: _enter,
+	  remove: function remove$$1 (vnode, rm) {}
+  },
+  {
+	  // 添加引用 ref
+	  create: function create (_, vnode) {},
+	  // 更新引用 ref
+	  update: function update (oldVnode, vnode) {},
+	  // 删除引用 ref
+	  destroy: function destroy (vnode) {}
+  },
+  {
+	  create: updateDirectives,
+	  update: updateDirectives,
+	  destroy: function unbindDirectives (vnode) {
+		updateDirectives(vnode, emptyNode);
+	  }
+  }
+]
+
+另外，
+var nodeOps = Object.freeze({
+	createElement: createElement$1,
+	createElementNS: createElementNS,
+	createTextNode: createTextNode,
+	createComment: createComment,
+	insertBefore: insertBefore,
+	removeChild: removeChild,
+	appendChild: appendChild,
+	parentNode: parentNode,
+	nextSibling: nextSibling,
+	tagName: tagName,
+	setTextContent: setTextContent,
+	setAttribute: setAttribute
+});
+*/
 var modules = platformModules.concat(baseModules);
 
 var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
