@@ -2106,6 +2106,7 @@ function mergeOptions (
  * This function is used because child instances need access
  * to assets defined in its ancestor chain.
  */
+// 返回 options[type][id | camelizedId | PascalCaseId]
 function resolveAsset (
   options,
   type,
@@ -2712,7 +2713,7 @@ var normalizeEvent = cached(function (name) {
   }
 });
 
-// 创建函数调用器
+// 创建函数调用器，返回一个函数 invoker，函数 invoker 执行时会依次执行数组 fns 里的函数
 function createFnInvoker (fns) {
   function invoker () {
     var arguments$1 = arguments;
@@ -2793,7 +2794,7 @@ function updateListeners (
   }
 }
 
-// 合并 VNode 钩子
+// 作用是返回将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
 function mergeVNodeHook (def, hookKey, hook) {
   var invoker;
   var oldHook = def[hookKey];
@@ -2809,13 +2810,13 @@ function mergeVNodeHook (def, hookKey, hook) {
   // oldHook 为 undefined 或 null，也就是之前没有对应的钩子
   if (isUndef(oldHook)) {
     // no existing hook
-	// 把函数 wrappedHook 加到调用器 invoker 里
+	// 把函数 wrappedHook 加到调用器 invoker 里，invoker 函数执行，相当于执行 wrappedHook 函数
     invoker = createFnInvoker([wrappedHook]);
   } else {
     /* istanbul ignore if */
 	/*
 	isDef(oldHook.fns) -> oldHook.fns 不为 undefined 且不为 null ?
-	isTrue(oldHook.merged) -> oldHook.merged === true ?
+	isTrue(oldHook.merged) -> oldHook.merged === true
 
 	同时满足这俩条件，用旧的钩子就好了
 	*/
@@ -2824,7 +2825,7 @@ function mergeVNodeHook (def, hookKey, hook) {
       invoker = oldHook;
       invoker.fns.push(wrappedHook);
     } else {
-      // existing plain hook，已经存在一个没合并过的空钩子
+      // existing plain hook，已经存在一个没合并过的空钩子，invoker 函数执行，相当于执行 oldHook 及 wrappedHook 俩函数
       invoker = createFnInvoker([oldHook, wrappedHook]);
     }
   }
@@ -6495,7 +6496,7 @@ var mustUseProp = function (tag, type, attr) {
   )
 };
 
-// 参数为 contenteditable,draggable,spellcheck 四者之一，说明是可枚举属性
+// 参数为 contenteditable,draggable,spellcheck 三者之一，说明是可枚举属性
 var isEnumeratedAttr = makeMap('contenteditable,draggable,spellcheck');
 
 // 参数为以下值之一，说明是布尔属性
@@ -7048,6 +7049,7 @@ modules -> [
   }
 ]
 */
+// 最终返回一个函数（函数名为 patch）
 function createPatchFunction (backend) {
   var i, j;
   var cbs = {};
@@ -7101,7 +7103,7 @@ function createPatchFunction (backend) {
 	}
   */
 
-  // 根据 elm 元素创建 vnode
+  // 根据 elm 元素创建空的 vnode
   function emptyNodeAt (elm) {
 	// nodeOps.tagName(elm) 获取元素 elm 的 tagName
     return new VNode(nodeOps.tagName(elm).toLowerCase(), {}, [], undefined, elm)
@@ -7347,7 +7349,7 @@ function createPatchFunction (backend) {
     return isDef(vnode.tag)
   }
 
-  // 调用 create 和 hook
+  // 调用 create 钩子
   function invokeCreateHooks (vnode, insertedVnodeQueue) {
 	/*
 		cbs.create : [
@@ -7533,52 +7535,92 @@ function createPatchFunction (backend) {
 	/*
 		removeOnly 是一个只在 <transition-group> 中用的特殊标志。
 		以确保被删除的元素在离开 transitions 过程中保持正确的相对位置。
+
+		其他情况下，removeOnly 都是假，意思就是可以移动
 	*/
     var canMove = !removeOnly;
 
+    // 新旧节点索引都小于其数组长度
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+	  // ①【旧的开始节点】不存在，那么取下一个节点作为开始节点
       if (isUndef(oldStartVnode)) {
         oldStartVnode = oldCh[++oldStartIdx]; // Vnode has been moved left
+	  // ②【旧的结束节点】不存在，那么取前一个节点作为结束节点
       } else if (isUndef(oldEndVnode)) {
         oldEndVnode = oldCh[--oldEndIdx];
+      // ③【旧的开始节点】和【新的开始节点】是同一个节点
       } else if (sameVnode(oldStartVnode, newStartVnode)) {
         patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue);
+		// 更新新旧开始节点，并更新新旧开始索引
         oldStartVnode = oldCh[++oldStartIdx];
         newStartVnode = newCh[++newStartIdx];
+	  // ④【旧的结束节点】和【新的结束节点】是同一个节点
       } else if (sameVnode(oldEndVnode, newEndVnode)) {
         patchVnode(oldEndVnode, newEndVnode, insertedVnodeQueue);
+		// 更新新旧结束节点，并更新新旧结束索引
         oldEndVnode = oldCh[--oldEndIdx];
         newEndVnode = newCh[--newEndIdx];
+	  // ⑤【旧的开始节点】和【新的结束节点】是同一个节点
       } else if (sameVnode(oldStartVnode, newEndVnode)) { // Vnode moved right
         patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue);
+		/*
+			将节点 oldStartVnode.elm 插入到 oldEndVnode.elm 的下一个节点之前
+			也就是说，将节点 oldStartVnode.elm 插入到节点 oldEndVnode.elm 之后。
+
+			由于只有 insertBefore 方法，没有 insertAfter 方法，这里相当于实现了 insertAfter 方法，所以这里看起来有点绕
+		*/
         canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm));
         oldStartVnode = oldCh[++oldStartIdx];
         newEndVnode = newCh[--newEndIdx];
+	  // ⑥【旧的结束节点】和【新的开始节点】是同一个节点
       } else if (sameVnode(oldEndVnode, newStartVnode)) { // Vnode moved left
         patchVnode(oldEndVnode, newStartVnode, insertedVnodeQueue);
+		// 将节点 oldEndVnode.elm 插入到 oldStartVnode.elm 节点之前
         canMove && nodeOps.insertBefore(parentElm, oldEndVnode.elm, oldStartVnode.elm);
         oldEndVnode = oldCh[--oldEndIdx];
         newStartVnode = newCh[++newStartIdx];
       } else {
-        if (isUndef(oldKeyToIdx)) { oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx); }
+		/*
+			oldKeyToIdx 结构大致为：
+			{
+				key0 : idx0,
+				key1 : idx1,
+				key2 : idx2,
+				...
+			}
+		*/
+        if (isUndef(oldKeyToIdx)) { 
+			oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx); 
+		}
+
+		// 获取新的开始节点在旧的节点数组里对应的索引
         idxInOld = isDef(newStartVnode.key) ? oldKeyToIdx[newStartVnode.key] : null;
+
+		// 新的开始节点不存在于旧的节点数组里，也就是说这是全新的元素，那就把这个新的节点插入文档就好了
         if (isUndef(idxInOld)) { // New element
           createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm);
           newStartVnode = newCh[++newStartIdx];
+		//【新的开始节点】存在于旧的节点数组里，也就是说新的【新的开始节点】的 key 和某个旧的节点的 key 是相等的
         } else {
+		  // 待移动节点
           elmToMove = oldCh[idxInOld];
           /* istanbul ignore if */
           if ("development" !== 'production' && !elmToMove) {
+			// v-for 列表的每一个列表项应该有唯一的 key 值。否则在更新的时候会出现。
             warn(
               'It seems there are duplicate keys that is causing an update error. ' +
               'Make sure each v-for item has a unique key.'
             );
           }
+		  // 待移动节点和新的开始节点是同一个节点
           if (sameVnode(elmToMove, newStartVnode)) {
             patchVnode(elmToMove, newStartVnode, insertedVnodeQueue);
+			// 丢弃引用
             oldCh[idxInOld] = undefined;
+			// 将节点 elmToMove.elm 移动到节点 oldStartVnode.elm 之前
             canMove && nodeOps.insertBefore(parentElm, elmToMove.elm, oldStartVnode.elm);
             newStartVnode = newCh[++newStartIdx];
+		  // 即便 key 相等，但是节点元素不同，还是当做一个新的元素
           } else {
             // same key but different element. treat as new element
             createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm);
@@ -7587,21 +7629,29 @@ function createPatchFunction (backend) {
         }
       }
     }
+
     if (oldStartIdx > oldEndIdx) {
+	  // 如果 newCh[newEndIdx + 1] 存在，那就取其作为参考节点
       refElm = isUndef(newCh[newEndIdx + 1]) ? null : newCh[newEndIdx + 1].elm;
+	  // 创建 newEndIdx - newStartIdx + 1 个元素
       addVnodes(parentElm, refElm, newCh, newStartIdx, newEndIdx, insertedVnodeQueue);
     } else if (newStartIdx > newEndIdx) {
+	  // 删除 oldEndIdx - oldStartIdx + 1 个元素
       removeVnodes(parentElm, oldCh, oldStartIdx, oldEndIdx);
     }
   }
 
+  // 打补丁，进行 update 操作
   function patchVnode (oldVnode, vnode, insertedVnodeQueue, removeOnly) {
+	// 新旧节点相同，无需处理
     if (oldVnode === vnode) {
       return
     }
-
+	
+	// 以 oldVnode 对应的元素为准
     var elm = vnode.elm = oldVnode.elm;
 
+    // 异步
     if (isTrue(oldVnode.isAsyncPlaceholder)) {
       if (isDef(vnode.asyncFactory.resolved)) {
         hydrate(oldVnode.elm, vnode, insertedVnodeQueue);
@@ -7615,11 +7665,8 @@ function createPatchFunction (backend) {
     // note we only do this if the vnode is cloned -
     // if the new node is not cloned it means the render functions have been
     // reset by the hot-reload-api and we need to do a proper re-render.
-    if (isTrue(vnode.isStatic) &&
-      isTrue(oldVnode.isStatic) &&
-      vnode.key === oldVnode.key &&
-      (isTrue(vnode.isCloned) || isTrue(vnode.isOnce))
-    ) {
+	// 对于静态渲染树可以重利用元素，当然了，前提是这个 vnode 是克隆的。（如果一个新的节点不是克隆的意味着它的渲染函数被热更新 api 重置了，我们需要做一个合适的重新渲染）
+    if (isTrue(vnode.isStatic) && isTrue(oldVnode.isStatic) && vnode.key === oldVnode.key && (isTrue(vnode.isCloned) || isTrue(vnode.isOnce))) {
       vnode.componentInstance = oldVnode.componentInstance;
       return
     }
@@ -7627,37 +7674,76 @@ function createPatchFunction (backend) {
     var i;
     var data = vnode.data;
     if (isDef(data) && isDef(i = data.hook) && isDef(i = i.prepatch)) {
+	  // 这里的 i 为 vnode.data.hook.prepatch
       i(oldVnode, vnode);
     }
 
     var oldCh = oldVnode.children;
     var ch = vnode.children;
     if (isDef(data) && isPatchable(vnode)) {
-      for (i = 0; i < cbs.update.length; ++i) { cbs.update[i](oldVnode, vnode); }
-      if (isDef(i = data.hook) && isDef(i = i.update)) { i(oldVnode, vnode); }
+	  /*
+		cbs.update : [
+			updateAttrs(oldVnode, vnode)
+			updateClass(oldVnode, vnode)
+			updateDOMListeners(oldVnode, vnode)
+			updateDOMProps(oldVnode, vnode)
+			updateStyle(oldVnode, vnode)
+			update(oldVnode, vnode)
+			updateDirectives(oldVnode, vnode)
+		]
+	  */
+      for (i = 0; i < cbs.update.length; ++i) { 
+		  cbs.update[i](oldVnode, vnode); 
+	  }
+      if (isDef(i = data.hook) && isDef(i = i.update)) { 
+		  // 这里的 i 为 vnode.data.hook.update
+		  i(oldVnode, vnode); 
+	  }
     }
+
+	// 没有 text 属性，说明有子节点
     if (isUndef(vnode.text)) {
+	  // ① oldVnode.children 和 vnode.children 都存在
       if (isDef(oldCh) && isDef(ch)) {
-        if (oldCh !== ch) { updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly); }
+        if (oldCh !== ch) { 
+			// 更新子元素
+			updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly); 
+		}
+	  // ② 只有 vnode.children 存在
       } else if (isDef(ch)) {
-        if (isDef(oldVnode.text)) { nodeOps.setTextContent(elm, ''); }
+        if (isDef(oldVnode.text)) { 
+			// 文本清空
+			nodeOps.setTextContent(elm, ''); 
+		}
+		// 创建 ch.length 个新元素
         addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue);
+	  // ③ 只有 oldVnode.children 存在
       } else if (isDef(oldCh)) {
+		// 删除这 oldCh.length 个旧元素
         removeVnodes(elm, oldCh, 0, oldCh.length - 1);
+	  // ① oldVnode.children 和 vnode.children 都不存在，清空文本
       } else if (isDef(oldVnode.text)) {
         nodeOps.setTextContent(elm, '');
       }
+	// 有 text 属性，直接用新的文本覆盖旧的文本就好了
     } else if (oldVnode.text !== vnode.text) {
       nodeOps.setTextContent(elm, vnode.text);
     }
+
+
     if (isDef(data)) {
-      if (isDef(i = data.hook) && isDef(i = i.postpatch)) { i(oldVnode, vnode); }
+      if (isDef(i = data.hook) && isDef(i = i.postpatch)) { 
+		  // 这里的 i 为 vnode.data.hook.postpatch
+		  i(oldVnode, vnode); 
+	  }
     }
   }
 
+  // insert 钩子
   function invokeInsertHook (vnode, queue, initial) {
     // delay insert hooks for component root nodes, invoke them after the
     // element is really inserted
+	// 对于组件根节点延迟插入钩子，在元素真正插入文档后再 invoke 它们
     if (isTrue(initial) && isDef(vnode.parent)) {
       vnode.parent.data.pendingInsert = queue;
     } else {
@@ -7670,16 +7756,29 @@ function createPatchFunction (backend) {
   var bailed = false;
   // list of modules that can skip create hook during hydration because they
   // are already rendered on the client or has no need for initialization
+  // 以下模块可以跳过 create 钩子。因为它们在客户端已经渲染过，或者说它们根本不需要初始化
   var isRenderedModule = makeMap('attrs,style,class,staticClass,staticStyle,key');
 
   // Note: this is a browser-only function so we can assume elms are DOM nodes.
+  // 这个函数只为浏览器定义，elm 可以认为 dom 节点
+  /*
+	说一下 hydrate 这个概念。其字面意思是“水合物，注水”。
+
+	服务器端渲染时，服务器输出的是字符串，而浏览器端需要根据这些字符串完成初始化工作，
+	比如创建组件实例，这样才能响应用户操作。这个过程就叫 hydrate，有时候也会说re-hydrate
+
+	可以把 hydrate 理解成给干瘪的字符串“注水”。一个完整的网页可以看成是干货掺了水的结果，纯数据只是干巴巴的干货，不是给人看的，
+	但是“注水”之后，变成可以展示的 html，就变成浏览器可以解释用户能看的东西了，这过程就是 hydrate。
+  */
   function hydrate (elm, vnode, insertedVnodeQueue) {
+	// 如果是异步节点
     if (isTrue(vnode.isComment) && isDef(vnode.asyncFactory)) {
       vnode.elm = elm;
       vnode.isAsyncPlaceholder = true;
       return true
     }
     {
+	   // elm 和 vnode 类型不匹配（同一个标签，或都是注释，或都是文本），直接返回 false
       if (!assertNodeMatch(elm, vnode)) {
         return false
       }
@@ -7688,22 +7787,34 @@ function createPatchFunction (backend) {
     var tag = vnode.tag;
     var data = vnode.data;
     var children = vnode.children;
+
+	// 初始化
     if (isDef(data)) {
-      if (isDef(i = data.hook) && isDef(i = i.init)) { i(vnode, true /* hydrating */); }
+      if (isDef(i = data.hook) && isDef(i = i.init)) { 
+		  // 这里的 i 为 vnode.data.hook.init
+		  i(vnode, true /* hydrating */); 
+	  }
+
       if (isDef(i = vnode.componentInstance)) {
         // child component. it should have hydrated its own tree.
         initComponent(vnode, insertedVnodeQueue);
         return true
       }
     }
+
+	// 元素
     if (isDef(tag)) {
+	  // 有子元素
       if (isDef(children)) {
         // empty element, allow client to pick up and populate children
+		// hasChildNodes 是原生的 dom 方法，判断元素有没有子元素
         if (!elm.hasChildNodes()) {
+		  // elm 是空元素，很方便地为其创建子元素
           createChildren(vnode, children, insertedVnodeQueue);
         } else {
           var childrenMatch = true;
           var childNode = elm.firstChild;
+		  // 遍历每一个 child，只要有一个不匹配，就将 childrenMatch 置为 false
           for (var i$1 = 0; i$1 < children.length; i$1++) {
             if (!childNode || !hydrate(childNode, children[i$1], insertedVnodeQueue)) {
               childrenMatch = false;
@@ -7713,11 +7824,14 @@ function createPatchFunction (backend) {
           }
           // if childNode is not null, it means the actual childNodes list is
           // longer than the virtual children list.
+		  /*
+			如果 childNode 不是 null，说明真实的 childNodes 列表长度大于虚拟的 children 列表长度
+
+			总之，只要真实的 childNodes 和虚拟的 children 匹配失败，就会执行下面的 if 块
+		  */
           if (!childrenMatch || childNode) {
-            if ("development" !== 'production' &&
-              typeof console !== 'undefined' &&
-              !bailed
-            ) {
+            if ("development" !== 'production' && typeof console !== 'undefined' && !bailed) {
+			  // 开发模式下发出警告：真实节点和虚拟节点不匹配
               bailed = true;
               console.warn('Parent: ', elm);
               console.warn('Mismatching childNodes vs. VNodes: ', elm.childNodes, children);
@@ -7726,32 +7840,46 @@ function createPatchFunction (backend) {
           }
         }
       }
+
+
       if (isDef(data)) {
         for (var key in data) {
+		  // 只要 key 不属于 'attrs,style,class,staticClass,staticStyle,key' 之一，则执行 create 钩子
           if (!isRenderedModule(key)) {
             invokeCreateHooks(vnode, insertedVnodeQueue);
             break
           }
         }
       }
+	// 文本
     } else if (elm.data !== vnode.text) {
       elm.data = vnode.text;
     }
     return true
   }
 
+  // node 和 vnode 类型是否匹配（同一个标签，或都是注释，或都是文本）
   function assertNodeMatch (node, vnode) {
+	// 节点
     if (isDef(vnode.tag)) {
       return (
         vnode.tag.indexOf('vue-component') === 0 ||
         vnode.tag.toLowerCase() === (node.tagName && node.tagName.toLowerCase())
       )
+	// 文本
     } else {
+	  /*
+		对于 dom 节点的 nodeType 属性：
+		① 值为 8 ，节点类型为 Comment，表示注释
+		② 值为 3 ，节点类型为 Text，表示代表元素或属性中的文本内容
+	  */
       return node.nodeType === (vnode.isComment ? 8 : 3)
     }
   }
 
+  // createPatchFunction 函数最终返回的就是这个打补丁函数
   return function patch (oldVnode, vnode, hydrating, removeOnly, parentElm, refElm) {
+	// 如果 vnode 不存在，直接在这里返回（如果 oldVnode 存在，那就销毁 oldVnode 吧）
     if (isUndef(vnode)) {
       if (isDef(oldVnode)) { invokeDestroyHook(oldVnode); }
       return
@@ -7760,29 +7888,47 @@ function createPatchFunction (backend) {
     var isInitialPatch = false;
     var insertedVnodeQueue = [];
 
+	// oldVnode 不存在，说明新的节点，那就创建新的节点（初始化之）
     if (isUndef(oldVnode)) {
       // empty mount (likely as component), create new root element
       isInitialPatch = true;
       createElm(vnode, insertedVnodeQueue, parentElm, refElm);
+	// vnode、oldVnode 都存在，那就打补丁吧
     } else {
+	  // 如果 oldVnode.nodeType 存在，那就说明它是真实节点
       var isRealElement = isDef(oldVnode.nodeType);
+
+	  // 如果不是真实节点
       if (!isRealElement && sameVnode(oldVnode, vnode)) {
-        // patch existing root node
+        // patch existing root node，打补丁，进行 update 操作
         patchVnode(oldVnode, vnode, insertedVnodeQueue, removeOnly);
       } else {
+		// 真实节点
         if (isRealElement) {
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
           // a successful hydration.
+		  /*
+			SSR_ATTR = 'data-server-rendered'，ssr 应该是 server side render 的简称
+			如果是服务器端渲染，就需要进行“注水”了
+		  */
           if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
             oldVnode.removeAttribute(SSR_ATTR);
             hydrating = true;
           }
+		  // 需要“注水”
           if (isTrue(hydrating)) {
+			// “注水”成功
             if (hydrate(oldVnode, vnode, insertedVnodeQueue)) {
+			  // insert 钩子
               invokeInsertHook(vnode, insertedVnodeQueue, true);
               return oldVnode
+		    // “注水”失败
             } else {
+			  /*
+				客户端渲染的虚拟 dom 树和服务端渲染的不匹配。这很有可能是不正确的 html 标记引起的。
+				比如：在 p 标签里有块级元素，少写了 tbody 标签等。
+			  */
               warn(
                 'The client-side rendered virtual DOM tree is not matching ' +
                 'server-rendered content. This is likely caused by incorrect ' +
@@ -7794,8 +7940,11 @@ function createPatchFunction (backend) {
           }
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
+		  // 不是服务端渲染或“注水”失败，那就清空当前节点
           oldVnode = emptyNodeAt(oldVnode);
         }
+
+
         // replacing existing element
         var oldElm = oldVnode.elm;
         var parentElm$1 = nodeOps.parentNode(oldElm);
@@ -7813,25 +7962,43 @@ function createPatchFunction (backend) {
           // component root element replaced.
           // update parent placeholder node element, recursively
           var ancestor = vnode.parent;
+		  // 每个祖先节点 ancestor 的 elm 属性都指向 vnode.elm
           while (ancestor) {
             ancestor.elm = vnode.elm;
             ancestor = ancestor.parent;
           }
+		  // 可修补
           if (isPatchable(vnode)) {
+			/*
+				cbs.create : [
+					updateAttrs(oldVnode, vnode)
+					updateClass(oldVnode, vnode)
+					updateDOMListeners(oldVnode, vnode)
+					updateDOMProps(oldVnode, vnode)
+					updateStyle(oldVnode, vnode)
+					_enter(_, vnode)
+					create(_, vnode)
+					updateDirectives(oldVnode, vnode)
+				]
+			*/
             for (var i = 0; i < cbs.create.length; ++i) {
               cbs.create[i](emptyNode, vnode.parent);
             }
           }
         }
-
+		
+		// 父元素存在
         if (isDef(parentElm$1)) {
+		  // 删除 oldVnode 这一个元素
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
+		// 父元素不存在，那就调用销毁钩子
         } else if (isDef(oldVnode.tag)) {
           invokeDestroyHook(oldVnode);
         }
       }
     }
-
+	
+	// insert 钩子
     invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch);
     return vnode.elm
   }
@@ -7839,6 +8006,7 @@ function createPatchFunction (backend) {
 
 /*  */
 
+// 指令生命周期：create -> update -> destroy
 var directives = {
   create: updateDirectives,
   update: updateDirectives,
@@ -7847,15 +8015,21 @@ var directives = {
   }
 };
 
+// 更新指令
 function updateDirectives (oldVnode, vnode) {
   if (oldVnode.data.directives || vnode.data.directives) {
     _update(oldVnode, vnode);
   }
 }
 
+// 更新
 function _update (oldVnode, vnode) {
+  // oldVnode 是 emptyNode，说明是 create 操作
   var isCreate = oldVnode === emptyNode;
+  // vnode 是 emptyNode，说明是 destroy 操作
   var isDestroy = vnode === emptyNode;
+
+  // 一个 json 对象，即所有指令的集合
   var oldDirs = normalizeDirectives$1(oldVnode.data.directives, oldVnode.context);
   var newDirs = normalizeDirectives$1(vnode.data.directives, vnode.context);
 
@@ -7863,50 +8037,78 @@ function _update (oldVnode, vnode) {
   var dirsWithPostpatch = [];
 
   var key, oldDir, dir;
+  // 遍历 vnode 的所有指令
   for (key in newDirs) {
+	// 新/旧指令
     oldDir = oldDirs[key];
     dir = newDirs[key];
+
+	/*
+		指令定义函数提供了几个钩子函数 (可选)：
+		bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
+		inserted：被绑定元素插入父节点时调用 (父节点存在即可调用，不必存在于 document 中)。
+		update：所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新 (详细的钩子函数参数见下)。
+		componentUpdated：所在组件的 VNode 及其孩子的 VNode 全部更新时调用。
+		unbind：只调用一次，指令与元素解绑时调用。
+	*/
+
+	// 没有对应的旧指令
     if (!oldDir) {
       // new directive, bind
+	  // 执行 dir.def['bind'] 钩子方法，第一次绑定，所以执行指令定义函数的 bind 钩子函数
       callHook$1(dir, 'bind', vnode, oldVnode);
+	  // 如果还定义了 inserted 钩子函数，那就把当前 dir 加入队列吧，后面在元素插入父节点时会用到的
       if (dir.def && dir.def.inserted) {
         dirsWithInsert.push(dir);
       }
+	// 有对应的旧指令
     } else {
       // existing directive, update
       dir.oldValue = oldDir.value;
+	  // 执行 dir.def['update'] 钩子方法
       callHook$1(dir, 'update', vnode, oldVnode);
+	  // 如果还定义了 componentUpdated 钩子函数，那就把当前 dir 加入队列吧，后面在 vnode 及其孩子的 vnode 全部更新时调用时会用到的
       if (dir.def && dir.def.componentUpdated) {
         dirsWithPostpatch.push(dir);
       }
     }
   }
 
+  // inserted 钩子
   if (dirsWithInsert.length) {
     var callInsert = function () {
       for (var i = 0; i < dirsWithInsert.length; i++) {
+		// 执行 dirsWithInsert[i].def.inserted 方法，即依次执行各个指令的 inserted 钩子函数
         callHook$1(dirsWithInsert[i], 'inserted', vnode, oldVnode);
       }
     };
+	// oldVnode 是 emptyNode，即第一次 create 指令
     if (isCreate) {
+	  // 将函数 callInsert 添加到 vnode.data.hook['insert'] 中，那么以后执行 vnode.data.hook['insert'] 这个函数时，就会执行 callInsert 了
       mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'insert', callInsert);
     } else {
       callInsert();
     }
   }
 
+  // componentUpdated 钩子
   if (dirsWithPostpatch.length) {
+	// 将匿名函数添加到 vnode.data.hook['postpatch'] 中，那么以后执行 vnode.data.hook['postpatch'] 这个函数时，就会执行这个匿名函数了
     mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'postpatch', function () {
       for (var i = 0; i < dirsWithPostpatch.length; i++) {
+		// 执行 dirsWithPostpatch[i].def.componentUpdated 方法，即依次执行各个指令的 componentUpdated 钩子函数
         callHook$1(dirsWithPostpatch[i], 'componentUpdated', vnode, oldVnode);
       }
     });
   }
 
+  // oldVnode 不是 emptyNode，说明之前绑定过指令
   if (!isCreate) {
+	// 对于不要的指令进行解绑，会调用 unbind 钩子
     for (key in oldDirs) {
       if (!newDirs[key]) {
         // no longer present, unbind
+		// 执行 oldDirs[key].def.unbind 方法
         callHook$1(oldDirs[key], 'unbind', oldVnode, oldVnode, isDestroy);
       }
     }
@@ -7915,11 +8117,10 @@ function _update (oldVnode, vnode) {
 
 var emptyModifiers = Object.create(null);
 
-function normalizeDirectives$1 (
-  dirs,
-  vm
-) {
+// 返回一个 json 对象，即所有指令的集合
+function normalizeDirectives$1 (dirs, vm) {
   var res = Object.create(null);
+  // 如果 dirs 为假，那就返回空对象
   if (!dirs) {
     return res
   }
@@ -7927,22 +8128,34 @@ function normalizeDirectives$1 (
   for (i = 0; i < dirs.length; i++) {
     dir = dirs[i];
     if (!dir.modifiers) {
+	  // emptyModifiers = Object.create(null)，即空对象
       dir.modifiers = emptyModifiers;
     }
     res[getRawDirName(dir)] = dir;
+	// dir.def 值为 vm.$options['directives'][dir.name]
     dir.def = resolveAsset(vm.$options, 'directives', dir.name, true);
   }
   return res
 }
 
+// 获取原指令名
 function getRawDirName (dir) {
+  /*
+	① dir.rawName 存在，那就直接返回 dir.rawName
+	② 否则，返回 dir.name 和 dir.modifiers 用 '.' 拼起来的字符串
+	   例如：
+	   <div id="hook-arguments-example" v-demo:foo.a.b="message"></div>
+	   demo 指令对应的 modifiers 为：{"a":true,"b":true}
+  */
   return dir.rawName || ((dir.name) + "." + (Object.keys(dir.modifiers || {}).join('.')))
 }
 
+// 执行 dir.def[hook] 方法
 function callHook$1 (dir, hook, vnode, oldVnode, isDestroy) {
   var fn = dir.def && dir.def[hook];
   if (fn) {
     try {
+	  // 这个方法主要就是这一句，即执行 dir.def[hook] 方法
       fn(vnode.elm, dir, vnode, oldVnode, isDestroy);
     } catch (e) {
       handleError(e, vnode.context, ("directive " + (dir.name) + " " + hook + " hook"));
@@ -7950,42 +8163,73 @@ function callHook$1 (dir, hook, vnode, oldVnode, isDestroy) {
   }
 }
 
+
+/*
+var ref = {
+  // 添加引用 ref
+  create: function create (_, vnode) {...},
+  // 更新引用 ref
+  update: function update (oldVnode, vnode) {...},
+  // 删除引用 ref
+  destroy: function destroy (vnode) {...}
+};
+
+var directives = {
+  create: updateDirectives,
+  update: updateDirectives,
+  destroy: function unbindDirectives (vnode) {
+    updateDirectives(vnode, emptyNode);
+  }
+};
+*/
+// 基本模块
 var baseModules = [
   ref,
   directives
 ];
 
-/*  */
-
+// 更新属性
 function updateAttrs (oldVnode, vnode) {
   var opts = vnode.componentOptions;
+  // 构造函数选项的 inheritAttrs 设为 false，那就直接返回吧
   if (isDef(opts) && opts.Ctor.options.inheritAttrs === false) {
     return
   }
+  // 新旧属性都没定义，也直接返回
   if (isUndef(oldVnode.data.attrs) && isUndef(vnode.data.attrs)) {
     return
   }
+
   var key, cur, old;
+  // dom 节点
   var elm = vnode.elm;
   var oldAttrs = oldVnode.data.attrs || {};
   var attrs = vnode.data.attrs || {};
+
+
   // clone observed objects, as the user probably wants to mutate it
   if (isDef(attrs.__ob__)) {
     attrs = vnode.data.attrs = extend({}, attrs);
   }
 
+  // 遍历 attrs，和 oldAttrs 不一样的就设置
   for (key in attrs) {
     cur = attrs[key];
     old = oldAttrs[key];
+	// 新旧属性值不一样，设置属性
     if (old !== cur) {
       setAttr(elm, key, cur);
     }
   }
   // #4391: in IE9, setting type can reset value for input[type=radio]
   /* istanbul ignore if */
+  // ie9 下有个问题，设置 input 的 type 为 radio 时，会重置它的 value 属性值。所以在 ie9 下，新旧 value 值不一样，那就以新的值为准
   if (isIE9 && attrs.value !== oldAttrs.value) {
+	// 例如：<input type="checkbox" name="vehicle" value="Car" checked="checked" /> 别忘了 value 也是一个属性
     setAttr(elm, 'value', attrs.value);
   }
+
+  // 遍历 oldAttrs，删除不要的属性
   for (key in oldAttrs) {
     if (isUndef(attrs[key])) {
       if (isXlink(key)) {
@@ -7995,19 +8239,26 @@ function updateAttrs (oldVnode, vnode) {
       }
     }
   }
+
 }
 
+// 调用原生方法为对象设置属性
 function setAttr (el, key, value) {
+  // key 为 checked、enabled 等需要布尔值的属性
   if (isBooleanAttr(key)) {
     // set attribute for blank value
     // e.g. <option disabled>Select one</option>
+	// value 为 null、undefined 或 false，删除这个属性
     if (isFalsyAttrValue(value)) {
       el.removeAttribute(key);
     } else {
+	  // 例如：<input type="checkbox" name="vehicle" value="Car" checked="checked" />
       el.setAttribute(key, key);
     }
+  // key 为 contenteditable,draggable,spellcheck 三者之一
   } else if (isEnumeratedAttr(key)) {
     el.setAttribute(key, isFalsyAttrValue(value) || value === 'false' ? 'false' : 'true');
+  // key 以 'xlink:' 开头
   } else if (isXlink(key)) {
     if (isFalsyAttrValue(value)) {
       el.removeAttributeNS(xlinkNS, getXlinkProp(key));
@@ -8015,6 +8266,7 @@ function setAttr (el, key, value) {
       el.setAttributeNS(xlinkNS, key, value);
     }
   } else {
+	// value 为 null、undefined 或 false
     if (isFalsyAttrValue(value)) {
       el.removeAttribute(key);
     } else {
@@ -8023,6 +8275,7 @@ function setAttr (el, key, value) {
   }
 }
 
+// 属性的声明周期：create -> update
 var attrs = {
   create: updateAttrs,
   update: updateAttrs
@@ -9565,6 +9818,7 @@ var nodeOps = Object.freeze({
 */
 var modules = platformModules.concat(baseModules);
 
+// patch 函数由 createPatchFunction 函数返回，格式为：function patch (oldVnode, vnode, hydrating, removeOnly, parentElm, refElm) {...}
 var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
 
 /**
