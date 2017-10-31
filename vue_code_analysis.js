@@ -8679,28 +8679,29 @@ function getAndRemoveAttr (el, name) {
 /**
  * Cross-platform code generation for component v-model
  */
-function genComponentModel (
-  el,
-  value,
-  modifiers
-) {
+ // 对于组件，给 el.model 对象赋值
+function genComponentModel ( el, value, modifiers) {
   var ref = modifiers || {};
   var number = ref.number;
   var trim = ref.trim;
 
   var baseValueExpression = '$$v';
   var valueExpression = baseValueExpression;
+  // 去掉左右两端空格
   if (trim) {
     valueExpression =
       "(typeof " + baseValueExpression + " === 'string'" +
         "? " + baseValueExpression + ".trim()" +
         ": " + baseValueExpression + ")";
   }
+  // 转为数值
   if (number) {
     valueExpression = "_n(" + valueExpression + ")";
   }
+  // 字符串形式的执行语句
   var assignment = genAssignmentCode(value, valueExpression);
 
+  // 最终生成这个对象
   el.model = {
     value: ("(" + value + ")"),
     expression: ("\"" + value + "\""),
@@ -8711,10 +8712,15 @@ function genComponentModel (
 /**
  * Cross-platform codegen helper for generating v-model value assignment code.
  */
-function genAssignmentCode (
-  value,
-  assignment
-) {
+// 返回一个字符串形式的执行语句
+function genAssignmentCode (value, assignment) {
+  /*
+	parseModel(value) 返回一个 json 对象
+	{
+      exp: expValue,
+      idx: idxValue
+    }
+  */
   var modelRs = parseModel(value);
   if (modelRs.idx === null) {
     return (value + "=" + assignment)
@@ -8744,11 +8750,17 @@ var index$1;
 var expressionPos;
 var expressionEndPos;
 
+// 返回一个 json 对象
 function parseModel (val) {
   str = val;
   len = str.length;
   index$1 = expressionPos = expressionEndPos = 0;
+ 
+  /*
+	lastIndexOf() 方法可返回一个指定的字符串值最后出现的位置
 
+	没有方括号，或方括号完整关闭，直接返回一个 json
+  */
   if (val.indexOf('[') < 0 || val.lastIndexOf(']') < len - 1) {
     return {
       exp: val,
@@ -8758,43 +8770,60 @@ function parseModel (val) {
 
   while (!eof()) {
     chr = next();
-    /* istanbul ignore if */
+	// 遇到左引号，就向后走，直至关闭该引号
     if (isStringStart(chr)) {
       parseString(chr);
+	// '\x5B' -> "["，遇到左括号，就向后走，直至关闭该括号
     } else if (chr === 0x5B) {
       parseBracket(chr);
     }
   }
 
+  // expressionPos 是方括号开始的位置，expressionEndPos 是方括号结束的位置
   return {
+	// [] 之前的内容
     exp: val.substring(0, expressionPos),
+	// [] 里的内容
     idx: val.substring(expressionPos + 1, expressionEndPos)
   }
 }
 
+/*
+	charCodeAt() 方法可返回指定位置的字符的 Unicode 编码。这个返回值是 0 - 65535 之间的整数。
+	charCodeAt() 与 charAt() 方法执行的操作相似，只不过前者返回的是位于指定位置的字符的编码，而后者返回的是字符子串。
+*/
 function next () {
   return str.charCodeAt(++index$1)
 }
 
+// eof -> end of file ?
 function eof () {
   return index$1 >= len
 }
 
+// 字符串起始
 function isStringStart (chr) {
+  // '\x22' -> "  '\x27' -> '
   return chr === 0x22 || chr === 0x27
 }
 
+// 解析括弧
 function parseBracket (chr) {
   var inBracket = 1;
   expressionPos = index$1;
+  // 没超过结束字符
   while (!eof()) {
     chr = next();
+	// 如果遇到引号（单引号或双引号），就一直向后走，直到引号关闭
     if (isStringStart(chr)) {
       parseString(chr);
       continue
     }
+	// '\x5B' -> [
     if (chr === 0x5B) { inBracket++; }
+	// '\x5B' -> ]
     if (chr === 0x5D) { inBracket--; }
+	// 方括号关闭
     if (inBracket === 0) {
       expressionEndPos = index$1;
       break
@@ -8802,6 +8831,7 @@ function parseBracket (chr) {
   }
 }
 
+// 解析字符串，从引号开始到引号结束
 function parseString (chr) {
   var stringQuote = chr;
   while (!eof()) {
@@ -8818,23 +8848,31 @@ var warn$1;
 
 // in some cases, the event used has to be determined at runtime
 // so we used some reserved tokens during compile.
+// 在某些情况下，事件必须在运行时才能确定，所以在编译期间我们使用一些保留 token
 var RANGE_TOKEN = '__r';
 var CHECKBOX_RADIO_TOKEN = '__c';
 
-function model (
-  el,
-  dir,
-  _warn
-) {
+function model (el,dir,_warn) {
   warn$1 = _warn;
   var value = dir.value;
   var modifiers = dir.modifiers;
   var tag = el.tag;
+  /*
+	el.attrsMap 是一个 json 对象，结构大概是：
+	{
+		name1 : value1,
+		name2 : value2,
+		name3 : value3,
+		...
+	}
+  */
   var type = el.attrsMap.type;
 
   {
+	// 动态 type
     var dynamicType = el.attrsMap['v-bind:type'] || el.attrsMap[':type'];
     if (tag === 'input' && dynamicType) {
+	  // v-model 不支持动态的 input 类型。建议用 v-if 分支来代替
       warn$1(
         "<input :type=\"" + dynamicType + "\" v-model=\"" + value + "\">:\n" +
         "v-model does not support dynamic input types. Use v-if branches instead."
@@ -8842,6 +8880,7 @@ function model (
     }
     // inputs with type="file" are read only and setting the input's
     // value will throw an error.
+	// 当 input 的 type="file" 时，是只读的，如果设置其 value 值是会报错的
     if (tag === 'input' && type === 'file') {
       warn$1(
         "<" + (el.tag) + " v-model=\"" + value + "\" type=\"file\">:\n" +
@@ -8851,6 +8890,7 @@ function model (
   }
 
   if (el.component) {
+	// 生成 el.model 对象
     genComponentModel(el, value, modifiers);
     // component v-model doesn't need extra runtime
     return false
@@ -8867,6 +8907,7 @@ function model (
     // component v-model doesn't need extra runtime
     return false
   } else {
+	// 并不是所有的元素标签都支持 v-model
     warn$1(
       "<" + (el.tag) + " v-model=\"" + value + "\">: " +
       "v-model is not supported on this element type. " +
@@ -8879,23 +8920,58 @@ function model (
   return true
 }
 
-function genCheckboxModel (
-  el,
-  value,
-  modifiers
-) {
+// 为 tag === 'input' && type === 'checkbox' 的元素生成 model
+function genCheckboxModel (el,value,modifiers) {
   var number = modifiers && modifiers.number;
+  // :value 或 v-bind:value 的值
   var valueBinding = getBindingAttr(el, 'value') || 'null';
+  // :true-value 或 v-bind:true-value 的值
   var trueValueBinding = getBindingAttr(el, 'true-value') || 'true';
+  // :true-value 或 v-bind:true-value 的值
   var falseValueBinding = getBindingAttr(el, 'false-value') || 'false';
+ 
+  // addProp (el, name, value) -> (el.props || (el.props = [])).push({ name: name, value: value })
   addProp(el, 'checked',
     "Array.isArray(" + value + ")" +
-      "?_i(" + value + "," + valueBinding + ")>-1" + (
+      "?_i(" + value + "," + valueBinding + ")>-1" + 
+	  (
         trueValueBinding === 'true'
           ? (":(" + value + ")")
           : (":_q(" + value + "," + trueValueBinding + ")")
       )
+	  /*
+		简化一下 addProp 的第三个参数，value 值如下：
+		① trueValueBinding === 'true'
+		   Array.isArray( value ) ? _i(value , valueBinding) > -1 : value
+		② trueValueBinding !== 'true' 
+		   Array.isArray( value ) ? _i(value , valueBinding) > -1 : _q(value , trueValueBinding)
+	  */
   );
+  /*
+	CHECKBOX_RADIO_TOKEN = '__c'
+	
+	addHandler 函数的大致作用为：
+	addHandler (el,name,value,modifiers,important,warn) 
+	-> el.events[name] = el.events[name].push({ value: value, modifiers: modifiers })
+
+	这的 value 为:
+	var $$a = value,
+		$$el = $event.target,
+		$$c = $$el.checked ? trueValueBinding : falseValueBinding;
+
+	if(Array.isArray($$a)){
+		var $$v = number ? _n(valueBinding): valueBinding,
+			$$i = _i($$a,$$v);
+		
+		if($$c){
+			$$i < 0 && (value = $$a.concat($$v))
+		} else {
+			$$i > -1 && (value = $$a.slice(0,$$i).concat($$a.slice($$i+1)))
+		}
+	} else {
+		genAssignmentCode(value, '$$c');
+	}
+  */
   addHandler(el, CHECKBOX_RADIO_TOKEN,
     "var $$a=" + value + "," +
         '$$el=$event.target,' +
