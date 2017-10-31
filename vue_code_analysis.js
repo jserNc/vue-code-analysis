@@ -8332,7 +8332,7 @@ parseFilters("message | filterA('arg1', arg2)")
 -> "_f("filterA")(message,'arg1', arg2)"
 
 parseFilters("message | filterA | filterB")
-"_f("filterB")(_f("filterA")(message))"
+-> "_f("filterB")(_f("filterA")(message))"
  */
 function parseFilters (exp) {
   var inSingle = false;
@@ -8528,6 +8528,7 @@ function addDirective (
   (el.directives || (el.directives = [])).push({ name: name, rawName: rawName, value: value, arg: arg, modifiers: modifiers });
 }
 
+// 其实就是 el.events[name] = el.events[name].push({ value: value, modifiers: modifiers })
 function addHandler (
   el,
   name,
@@ -8542,25 +8543,46 @@ function addHandler (
     "development" !== 'production' && warn &&
     modifiers && modifiers.prevent && modifiers.passive
   ) {
+	// passive 和 prevent 不能一起用。passive 处理函数不能阻止默认事件。
     warn(
       'passive and prevent can\'t be used together. ' +
       'Passive handler can\'t prevent default event.'
     );
   }
+
+  /*
+	dom 新的规范规定，addEventListener() 的第三个参数可以是个对象值了，该对象可用的属性有三个：
+	addEventListener(type, listener, {
+		capture: false,   // 等价于以前的 useCapture 参数
+		passive: false,	  // true 表明该监听器是一次性的
+		once: false       // true 表明不会调用 preventDefault 函数来阻止默认滑动行为
+	})
+
+	当属性 passive 的值为 true 的时候，代表该监听器内部不会调用 preventDefault 函数来阻止默认滑动行为，
+	Chrome 浏览器称这类型的监听器为顺从(passive)监听器。目前 Chrome 主要利用该特性来优化页面的滑动性能，
+	所以 Passive Event Listeners 特性当前仅支持 mousewheel/touch 相关事件。
+  */
+
+  // 第①步: 修正 name 和 modifiers
   // check capture modifier
   if (modifiers && modifiers.capture) {
     delete modifiers.capture;
-    name = '!' + name; // mark the event as captured
+	// mark the event as captured 该事件为事件捕获模式
+    name = '!' + name; 
   }
   if (modifiers && modifiers.once) {
     delete modifiers.once;
-    name = '~' + name; // mark the event as once
+	// mark the event as once 该事件只会触发一次
+    name = '~' + name; 
   }
   /* istanbul ignore if */
   if (modifiers && modifiers.passive) {
     delete modifiers.passive;
-    name = '&' + name; // mark the event as passive
+	// mark the event as passive 该事件是顺从的
+    name = '&' + name; 
   }
+
+  // 第②步: 获取 events
   var events;
   if (modifiers && modifiers.native) {
     delete modifiers.native;
@@ -8568,28 +8590,42 @@ function addHandler (
   } else {
     events = el.events || (el.events = {});
   }
+
   var newHandler = { value: value, modifiers: modifiers };
   var handlers = events[name];
-  /* istanbul ignore if */
+  
+  // 第③步: 往 events 中添加 { value: value, modifiers: modifiers }
+  // handlers 是数组。如果 important 为 true 那就把 newHandler 加到数组 handlers 前边，否则加到数组 handlers 后边
   if (Array.isArray(handlers)) {
     important ? handlers.unshift(newHandler) : handlers.push(newHandler);
+  // handlers 存在，但不是数组，那就强制把 events[name] 改成数组。newHandler 和 handlers 的顺序由 important 决定
   } else if (handlers) {
     events[name] = important ? [newHandler, handlers] : [handlers, newHandler];
+  // handlers 不存在
   } else {
     events[name] = newHandler;
   }
 }
 
+// 首先获取动态值，获取失败再获取静态值
 function getBindingAttr (
   el,
   name,
   getStatic
 ) {
-  var dynamicValue =
-    getAndRemoveAttr(el, ':' + name) ||
-    getAndRemoveAttr(el, 'v-bind:' + name);
+  /*
+	① 获取 el 元素的 :name 属性，并删除该属性
+	② 若 ① 中获取的属性为假，就获取 v-bind:name 属性，然后删除该属性
+  */
+  var dynamicValue = getAndRemoveAttr(el, ':' + name) || getAndRemoveAttr(el, 'v-bind:' + name);
+
   if (dynamicValue != null) {
+	/*
+	例如：
+	parseFilters("message | filterA | filterB") -> "_f("filterB")(_f("filterA")(message))"
+	*/
     return parseFilters(dynamicValue)
+  // 动态值获取失败，再获取静态值
   } else if (getStatic !== false) {
     var staticValue = getAndRemoveAttr(el, name);
     if (staticValue != null) {
@@ -8598,17 +8634,43 @@ function getBindingAttr (
   }
 }
 
+// 删除一个 attr，并返回对应的值
 function getAndRemoveAttr (el, name) {
   var val;
+  /*
+	① el.attrsMap 是一个 json 对象，结构大概是：
+	{
+		name1 : value1,
+		name2 : value2,
+		name3 : value3,
+		...
+	}
+
+	② el.attrsList 是一个数组，结构大概是：
+	[
+		{
+			name : name1,
+			value : value1
+		},
+		{
+			name : name2,
+			value : value2
+		}
+		...
+	]
+
+  */
   if ((val = el.attrsMap[name]) != null) {
     var list = el.attrsList;
     for (var i = 0, l = list.length; i < l; i++) {
+	  // 从 list 删除一项
       if (list[i].name === name) {
         list.splice(i, 1);
         break
       }
     }
   }
+  // 最终返回值
   return val
 }
 
@@ -11573,15 +11635,15 @@ function parseModifiers (name) {
   }
 }
 
+// 返回一个 json 对象，键名是属性名，键值是属性值
 function makeAttrsMap (attrs) {
   var map = {};
   for (var i = 0, l = attrs.length; i < l; i++) {
-    if (
-      "development" !== 'production' &&
-      map[attrs[i].name] && !isIE && !isEdge
-    ) {
+	// 重复属性发出警告
+    if ("development" !== 'production' && map[attrs[i].name] && !isIE && !isEdge) {
       warn$2('duplicate attribute: ' + attrs[i].name);
     }
+	// 添加到 map 
     map[attrs[i].name] = attrs[i].value;
   }
   return map
