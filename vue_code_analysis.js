@@ -8712,7 +8712,7 @@ function genComponentModel ( el, value, modifiers) {
 /**
  * Cross-platform codegen helper for generating v-model value assignment code.
  */
-// 返回一个字符串形式的执行语句
+// 返回一个字符串形式的执行语句，其实就是一个 set 操作
 function genAssignmentCode (value, assignment) {
   /*
 	parseModel(value) 返回一个 json 对象
@@ -8852,6 +8852,7 @@ var warn$1;
 var RANGE_TOKEN = '__r';
 var CHECKBOX_RADIO_TOKEN = '__c';
 
+// 给表单元素 el 添加属性并监听属性 
 function model (el,dir,_warn) {
   warn$1 = _warn;
   var value = dir.value;
@@ -8894,14 +8895,19 @@ function model (el,dir,_warn) {
     genComponentModel(el, value, modifiers);
     // component v-model doesn't need extra runtime
     return false
+  // 下拉列表
   } else if (tag === 'select') {
     genSelect(el, value, modifiers);
+  // 多选框
   } else if (tag === 'input' && type === 'checkbox') {
     genCheckboxModel(el, value, modifiers);
+  // 单选框
   } else if (tag === 'input' && type === 'radio') {
     genRadioModel(el, value, modifiers);
+  // 一般的 input/textarea
   } else if (tag === 'input' || tag === 'textarea') {
     genDefaultModel(el, value, modifiers);
+  // 组件
   } else if (!config.isReservedTag(tag)) {
     genComponentModel(el, value, modifiers);
     // component v-model doesn't need extra runtime
@@ -8986,24 +8992,40 @@ function genCheckboxModel (el,value,modifiers) {
   );
 }
 
-function genRadioModel (
-    el,
-    value,
-    modifiers
-) {
+// 为 tag === 'input' && type === 'radio' 的元素生成 model
+function genRadioModel (el,value,modifiers) {
   var number = modifiers && modifiers.number;
+  // :value 或 v-bind:value 的值
   var valueBinding = getBindingAttr(el, 'value') || 'null';
+
+  // 如果有 number 修饰符，就转为数值
   valueBinding = number ? ("_n(" + valueBinding + ")") : valueBinding;
+
+  // 向数组 el.props 中添加 { name: 'checked', value: ("_q(" + value + "," + valueBinding + ")") }
   addProp(el, 'checked', ("_q(" + value + "," + valueBinding + ")"));
+
+  /*
+	CHECKBOX_RADIO_TOKEN = '__c'
+	
+	addHandler 函数的大致作用为：
+	addHandler (el,name,value,modifiers,important,warn) 
+	-> el.events[name] = el.events[name].push({ value: value, modifiers: modifiers })
+  */
   addHandler(el, CHECKBOX_RADIO_TOKEN, genAssignmentCode(value, valueBinding), null, true);
 }
 
-function genSelect (
-    el,
-    value,
-    modifiers
-) {
+// 为 tag === 'select' 的元素生成 model
+function genSelect (el,value,modifiers) {
   var number = modifiers && modifiers.number;
+  /*
+	var selectedVal = Array.prototype.filter
+				      .call($event.target.options , function(o){return o.selected})
+				      .map(function(o){
+					     var val = "_value" in o ? o._value : o.value;
+					     return (number ? _n(val) : val) 
+					  });
+	可以看到，selectedVal 是一个数组
+  */
   var selectedVal = "Array.prototype.filter" +
     ".call($event.target.options,function(o){return o.selected})" +
     ".map(function(o){var val = \"_value\" in o ? o._value : o.value;" +
@@ -9011,21 +9033,32 @@ function genSelect (
 
   var assignment = '$event.target.multiple ? $$selectedVal : $$selectedVal[0]';
   var code = "var $$selectedVal = " + selectedVal + ";";
+  // genAssignmentCode 其实就是一个 set 操作，value = $event.target.multiple ? $$selectedVal : $$selectedVal[0]
   code = code + " " + (genAssignmentCode(value, assignment));
+  // el 的 change 事件发送会执行 code
   addHandler(el, 'change', code, null, true);
 }
 
-function genDefaultModel (
-  el,
-  value,
-  modifiers
-) {
+// 为 tag === 'input' || tag === 'textarea' 的元素生成 model
+function genDefaultModel (el,value,modifiers) {
   var type = el.attrsMap.type;
   var ref = modifiers || {};
+  // 在默认情况下，v-model 在 input 事件中同步输入框的值与数据，有了修饰符 lazy ，从而转变为在 change 事件中同步
   var lazy = ref.lazy;
+  // 如果想自动将用户的输入值转为 Number 类型 (如果原值的转换结果为 NaN 则返回原值)，可以添加一个修饰符 number 给 v-model 来处理输入值
   var number = ref.number;
+  // 如果要自动过滤用户输入的首尾空格，可以添加 trim 修饰符到 v-model 上过滤输入
   var trim = ref.trim;
   var needCompositionGuard = !lazy && type !== 'range';
+
+  /*
+	RANGE_TOKEN = '__r'
+
+	① 有 lazy 修饰符，监听 change 事件
+	② 没有 lazy 修饰符
+	   a. type === 'range'，监听 __r 事件
+	   a. type !== 'range'，监听 input 事件 
+  */
   var event = lazy
     ? 'change'
     : type === 'range'
@@ -9039,14 +9072,19 @@ function genDefaultModel (
   if (number) {
     valueExpression = "_n(" + valueExpression + ")";
   }
-
+  // 赋值语句，给 value 赋值为 valueExpression 的结果
   var code = genAssignmentCode(value, valueExpression);
+
+  // 如果 !lazy && type !== 'range'，多加个判断条件
   if (needCompositionGuard) {
     code = "if($event.target.composing)return;" + code;
   }
-
+  // 给 el 添加 value 属性
   addProp(el, 'value', ("(" + value + ")"));
+  // 监听 el 的 event 事件
   addHandler(el, event, code, null, true);
+
+  // 监听失去焦点事件
   if (trim || number) {
     addHandler(el, 'blur', '$forceUpdate()');
   }
@@ -9058,18 +9096,32 @@ function genDefaultModel (
 // it's important to place the event as the first in the array because
 // the whole point is ensuring the v-model callback gets called before
 // user-attached handlers.
+// 把 v-model 事件放在事件数组的最前面是很有必要的。这样才能保证 v-model 的回调函数可以在用户自定义的监听函数前执行。
 function normalizeEvents (on) {
   var event;
-  /* istanbul ignore if */
+
+  // RANGE_TOKEN = '__r'
   if (isDef(on[RANGE_TOKEN])) {
-    // IE input[type=range] only supports `change` event
+    // IE input[type=range] only supports `change` event。在 ie 下，input[type=range] 只支持 change 事件
     event = isIE ? 'change' : 'input';
+	/*
+		concat() 方法用于连接两个或多个数组。
+		arrayObject.concat(arrayX,arrayX,......,arrayX)
+
+		例如：
+		[].concat([1,2],[3,4,5]) -> [1, 2, 3, 4, 5]
+
+		所以，以下操作是将 on[RANGE_TOKEN] 这个处理函数放在 on[event] 数组的最前边
+	*/
     on[event] = [].concat(on[RANGE_TOKEN], on[event] || []);
     delete on[RANGE_TOKEN];
   }
+
+  // CHECKBOX_RADIO_TOKEN = '__c'
   if (isDef(on[CHECKBOX_RADIO_TOKEN])) {
     // Chrome fires microtasks in between click/change, leads to #4521
     event = isChrome ? 'click' : 'change';
+	// 同理，将 on[CHECKBOX_RADIO_TOKEN] 这个处理函数放在 on[event] 数组的最前边
     on[event] = [].concat(on[CHECKBOX_RADIO_TOKEN], on[event] || []);
     delete on[CHECKBOX_RADIO_TOKEN];
   }
@@ -9077,13 +9129,9 @@ function normalizeEvents (on) {
 
 var target$1;
 
-function add$1 (
-  event,
-  handler,
-  once$$1,
-  capture,
-  passive
-) {
+// 调用原生 api 事件绑定
+function add$1 (event,handler,once$$1,capture,passive) {
+  // 如果规定事件回调只执行一次，那就修正 handler
   if (once$$1) {
     var oldHandler = handler;
     var _target = target$1; // save current target element in closure
@@ -9091,20 +9139,31 @@ function add$1 (
       var res = arguments.length === 1
         ? oldHandler(ev)
         : oldHandler.apply(null, arguments);
+	  // 执行一次就解除监听
       if (res !== null) {
         remove$2(event, handler, capture, _target);
       }
     };
   }
+  /*
+	dom 新规范规定，addEventListener() 的第三个参数可以是个对象值了：
+	addEventListener(type, listener, {
+		capture: false,
+		passive: false,
+		once: false
+	})
+  */
   target$1.addEventListener(
     event,
     handler,
+	// 全局变量，标志是否支持 passive
     supportsPassive
       ? { capture: capture, passive: passive }
       : capture
   );
 }
 
+// 解除事件绑定
 function remove$2 (
   event,
   handler,
@@ -9114,28 +9173,37 @@ function remove$2 (
   (_target || target$1).removeEventListener(event, handler, capture);
 }
 
+// 更新节点事件监听
 function updateDOMListeners (oldVnode, vnode) {
   var isComponentRoot = isDef(vnode.componentOptions);
+  // 绑定的事件
   var oldOn = isComponentRoot ? oldVnode.data.nativeOn : oldVnode.data.on;
   var on = isComponentRoot ? vnode.data.nativeOn : vnode.data.on;
+  // 如果新旧节点都没绑定过事件，那就直接返回
   if (isUndef(oldOn) && isUndef(on)) {
     return
   }
+
+  // 只要 oldOn 和 on 有一个不是 undefined 就会走到这，初始化 on/oldOn 为 {} 
   on = on || {};
   oldOn = oldOn || {};
+
   target$1 = vnode.elm;
+  // 将 v-model 回调函数放到回调函数队列最前面
   normalizeEvents(on);
+  // 更新事件监听
   updateListeners(on, oldOn, add$1, remove$2, vnode.context);
 }
 
+// event 生命周期 create -> update
 var events = {
   create: updateDOMListeners,
   update: updateDOMListeners
 };
 
-/*  */
-
+// 更新 props
 function updateDOMProps (oldVnode, vnode) {
+  // 如果新旧节点都没 props，那就谈不上更新了，返回吧
   if (isUndef(oldVnode.data.domProps) && isUndef(vnode.data.domProps)) {
     return
   }
@@ -9143,32 +9211,42 @@ function updateDOMProps (oldVnode, vnode) {
   var elm = vnode.elm;
   var oldProps = oldVnode.data.domProps || {};
   var props = vnode.data.domProps || {};
+
+
   // clone observed objects, as the user probably wants to mutate it
   if (isDef(props.__ob__)) {
+	// 复制一份 props，以免被改变了？
     props = vnode.data.domProps = extend({}, props);
   }
 
+  // 新的属性不存在，则将对应的属性值置为 ''
   for (key in oldProps) {
     if (isUndef(props[key])) {
       elm[key] = '';
     }
   }
+
   for (key in props) {
     cur = props[key];
     // ignore children if the node has textContent or innerHTML,
     // as these will throw away existing DOM nodes and cause removal errors
     // on subsequent patches (#3360)
+	// 如果有 textContent/innerHTML 属性，就强制清除子元素
     if (key === 'textContent' || key === 'innerHTML') {
       if (vnode.children) { vnode.children.length = 0; }
+	  // 和旧值相等，那就不操作了
       if (cur === oldProps[key]) { continue }
     }
 
     if (key === 'value') {
       // store value as _value as well since
       // non-string values will be stringified
+	  // 保留原始值，因为后面会将不是字符串的值会强制改为字符串
       elm._value = cur;
       // avoid resetting cursor position when value is the same
+	  // 将值强制改为字符串
       var strCur = isUndef(cur) ? '' : String(cur);
+	  // 判断是否应该更新 value
       if (shouldUpdateValue(elm, vnode, strCur)) {
         elm.value = strCur;
       }
@@ -9180,7 +9258,7 @@ function updateDOMProps (oldVnode, vnode) {
 
 // check platforms/web/util/attrs.js acceptValue
 
-
+// 是否应该更新 value
 function shouldUpdateValue (
   elm,
   vnode,
@@ -9193,38 +9271,59 @@ function shouldUpdateValue (
   ))
 }
 
+// 当 elm 失去焦点，并且 checkVal 不等于 elm 当前的值，返回 true
 function isDirty (elm, checkVal) {
   // return true when textbox (.number and .trim) loses focus and its value is
   // not equal to the updated value
   return document.activeElement !== elm && elm.value !== checkVal
 }
 
+// elm 的旧值和 newVal 是否相等
 function isInputChanged (elm, newVal) {
   var value = elm.value;
   var modifiers = elm._vModifiers; // injected by v-model runtime
+  // 数值化
   if (isDef(modifiers) && modifiers.number) {
     return toNumber(value) !== toNumber(newVal)
   }
+  // 去掉前后空格
   if (isDef(modifiers) && modifiers.trim) {
     return value.trim() !== newVal.trim()
   }
   return value !== newVal
 }
 
+// props 生命周期 create -> update
 var domProps = {
   create: updateDOMProps,
   update: updateDOMProps
 };
 
-/*  */
 
+// 将一段 css 文本转为 json 对象形式的 css（就像写在样式表里一样）
 var parseStyleText = cached(function (cssText) {
   var res = {};
+  /*
+	/;(?![^(]*\))/
+	; 后面跟的不是（若干个非左括号加一个右括号）
+
+	/:(.+)/
+	: 后跟一个或多个不是换行符的字符
+  */
   var listDelimiter = /;(?![^(]*\))/g;
   var propertyDelimiter = /:(.+)/;
   cssText.split(listDelimiter).forEach(function (item) {
     if (item) {
       var tmp = item.split(propertyDelimiter);
+	  /*
+		res 结构为：
+		{
+			p1 : val1,
+			p1 : val1,
+			p1 : val1,
+			...
+		}
+	  */
       tmp.length > 1 && (res[tmp[0].trim()] = tmp[1].trim());
     }
   });
@@ -9232,20 +9331,33 @@ var parseStyleText = cached(function (cssText) {
 });
 
 // merge static and dynamic style data on the same vnode
+// 合并静态的和动态的 style 数据
 function normalizeStyleData (data) {
   var style = normalizeStyleBinding(data.style);
   // static style is pre-processed into an object during compilation
   // and is always a fresh object, so it's safe to merge into it
+  // 静态 style 在编译过程中会预处理到一个对象里，而这个对象总是一个新对象，所以把动态 style 合并到这个对象里是安全的
   return data.staticStyle
     ? extend(data.staticStyle, style)
     : style
 }
 
 // normalize possible array / string values into Object
+// 将数组/字符串形式的数据转成 json 对象形式
 function normalizeStyleBinding (bindingStyle) {
   if (Array.isArray(bindingStyle)) {
+	/*
+		arr = [
+			{ book : 'js' },
+			{ edition : 3 },
+			{ author : 'nanc' }
+		];
+		toObject(arr)
+		-> { book: "js", edition: 3, author: "nanc" }	
+	*/
     return toObject(bindingStyle)
   }
+  // 将 css 文本转为 json 对象形式的 css（就像写在样式表里一样）
   if (typeof bindingStyle === 'string') {
     return parseStyleText(bindingStyle)
   }
@@ -9256,12 +9368,14 @@ function normalizeStyleBinding (bindingStyle) {
  * parent component style should be after child's
  * so that parent component's style could override it
  */
+// 返回一个 json 对象。父组件的 style 应该在子组件的后面。这样父组件的 style 就可以覆盖前面的。
 function getStyle (vnode, checkChild) {
   var res = {};
   var styleData;
 
   if (checkChild) {
     var childNode = vnode;
+	// 遍历子节点，将子节点的 styleData 都合并到 res 中
     while (childNode.componentInstance) {
       childNode = childNode.componentInstance._vnode;
       if (childNode.data && (styleData = normalizeStyleData(childNode.data))) {
@@ -9270,10 +9384,12 @@ function getStyle (vnode, checkChild) {
     }
   }
 
+  // 当前组件 styleData，这样就可以覆盖子组件的样式
   if ((styleData = normalizeStyleData(vnode.data))) {
     extend(res, styleData);
   }
 
+  // 遍历祖先组件，后面的覆盖前面的
   var parentNode = vnode;
   while ((parentNode = parentNode.parent)) {
     if (parentNode.data && (styleData = normalizeStyleData(parentNode.data))) {
@@ -9283,22 +9399,33 @@ function getStyle (vnode, checkChild) {
   return res
 }
 
-/*  */
 
 var cssVarRE = /^--/;
 var importantRE = /\s*!important$/;
+// 设置 style 属性
 var setProp = function (el, name, val) {
-  /* istanbul ignore if */
+  // name 以 -- 开头
   if (cssVarRE.test(name)) {
+	// 调用原生的 setProperty 方法设置样式
     el.style.setProperty(name, val);
   } else if (importantRE.test(val)) {
+	// setProperty 可接受第三个参数为 'important'
     el.style.setProperty(name, val.replace(importantRE, ''), 'important');
   } else {
+	// 属性名转为 style 对象接受的驼峰化
     var normalizedName = normalize(name);
     if (Array.isArray(val)) {
       // Support values array created by autoprefixer, e.g.
       // {display: ["-webkit-box", "-ms-flexbox", "flex"]}
       // Set them one by one, and the browser will only set those it can recognize
+	  /*
+		例如 {display: ["-webkit-box", "-ms-flexbox", "flex"]}
+		会依次设置：
+		el.style["display"] = "-webkit-box";
+		el.style["display"] = "-ms-flexbox";
+		el.style["display"] = "flex";
+		虽然是连续设置了 3 次，但是浏览器只会真正执行它“认识”的属性值
+	  */
       for (var i = 0, len = val.length; i < len; i++) {
         el.style[normalizedName] = val[i];
       }
@@ -9309,15 +9436,19 @@ var setProp = function (el, name, val) {
 };
 
 var vendorNames = ['Webkit', 'Moz', 'ms'];
-
 var emptyStyle;
+// 将普通的 css 属性名转为 style 对象中合法的属性名
 var normalize = cached(function (prop) {
+  // 初始化一个 style 对象
   emptyStyle = emptyStyle || document.createElement('div').style;
+  // 将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
   prop = camelize(prop);
+  // 合法的 prop
   if (prop !== 'filter' && (prop in emptyStyle)) {
     return prop
   }
   var capName = prop.charAt(0).toUpperCase() + prop.slice(1);
+  // 以 prop 为 margin-top 为例，依次用 WebkitMarginTop、MozMarginTop、msMarginTop 类匹配 emptyStyle 里的属性名，匹配上了就是合法的
   for (var i = 0; i < vendorNames.length; i++) {
     var name = vendorNames[i] + capName;
     if (name in emptyStyle) {
@@ -9326,22 +9457,24 @@ var normalize = cached(function (prop) {
   }
 });
 
+// 更新 style
 function updateStyle (oldVnode, vnode) {
   var data = vnode.data;
   var oldData = oldVnode.data;
 
-  if (isUndef(data.staticStyle) && isUndef(data.style) &&
-    isUndef(oldData.staticStyle) && isUndef(oldData.style)
-  ) {
+  // 如果没有 style 数据，就谈不上更新了
+  if (isUndef(data.staticStyle) && isUndef(data.style) && isUndef(oldData.staticStyle) && isUndef(oldData.style)) {
     return
   }
 
   var cur, name;
   var el = vnode.elm;
+  // 旧的 style
   var oldStaticStyle = oldData.staticStyle;
   var oldStyleBinding = oldData.normalizedStyle || oldData.style || {};
 
   // if static style exists, stylebinding already merged into it when doing normalizeStyleData
+  // normalizeStyleData 函数已经把动态 style 合并到静态 style 中了，所以这里取 oldStaticStyle 就够了
   var oldStyle = oldStaticStyle || oldStyleBinding;
 
   var style = normalizeStyleBinding(vnode.data.style) || {};
@@ -9349,17 +9482,21 @@ function updateStyle (oldVnode, vnode) {
   // store normalized style under a different key for next diff
   // make sure to clone it if it's reactive, since the user likley wants
   // to mutate it.
+  // 如果 style 对象被观察，那就克隆一份
   vnode.data.normalizedStyle = isDef(style.__ob__)
     ? extend({}, style)
     : style;
 
+  // 返回静态 style 和动态 style 的集合
   var newStyle = getStyle(vnode, true);
 
+  // newStyle 不存在的属性，属性值置为 ''
   for (name in oldStyle) {
     if (isUndef(newStyle[name])) {
       setProp(el, name, '');
     }
   }
+  // 新旧属性不一样，更新之
   for (name in newStyle) {
     cur = newStyle[name];
     if (cur !== oldStyle[name]) {
@@ -9369,12 +9506,12 @@ function updateStyle (oldVnode, vnode) {
   }
 }
 
+// style 生命周期 create -> update
 var style = {
   create: updateStyle,
   update: updateStyle
 };
 
-/*  */
 
 /**
  * Add class with compatibility for SVG since classList is not supported on
