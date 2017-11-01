@@ -9517,14 +9517,15 @@ var style = {
  * Add class with compatibility for SVG since classList is not supported on
  * SVG elements in IE
  */
+// 把 cls 添加到 el 的 class 属性里
 function addClass (el, cls) {
-  /* istanbul ignore if */
+  // cls 必须存在
   if (!cls || !(cls = cls.trim())) {
     return
   }
 
-  /* istanbul ignore else */
   if (el.classList) {
+    // cls 是空格分开的多个 class 构成，逐个添加
     if (cls.indexOf(' ') > -1) {
       cls.split(/\s+/).forEach(function (c) { return el.classList.add(c); });
     } else {
@@ -9532,6 +9533,7 @@ function addClass (el, cls) {
     }
   } else {
     var cur = " " + (el.getAttribute('class') || '') + " ";
+    // 如果当前 class 属性不包括 cls，那就加上
     if (cur.indexOf(' ' + cls + ' ') < 0) {
       el.setAttribute('class', (cur + cls).trim());
     }
@@ -9543,28 +9545,32 @@ function addClass (el, cls) {
  * SVG elements in IE
  */
 function removeClass (el, cls) {
-  /* istanbul ignore if */
+  // cls 必须存在
   if (!cls || !(cls = cls.trim())) {
     return
   }
 
   /* istanbul ignore else */
   if (el.classList) {
+    // cls 是空格分开的多个 class 构成，逐个删除
     if (cls.indexOf(' ') > -1) {
       cls.split(/\s+/).forEach(function (c) { return el.classList.remove(c); });
     } else {
       el.classList.remove(cls);
     }
+    // 如果 classList 长度为 0，那就移除 class 属性
     if (!el.classList.length) {
       el.removeAttribute('class');
     }
   } else {
     var cur = " " + (el.getAttribute('class') || '') + " ";
     var tar = ' ' + cls + ' ';
+    // 把 cls 从 class 中移除
     while (cur.indexOf(tar) >= 0) {
       cur = cur.replace(tar, ' ');
     }
     cur = cur.trim();
+    // 如果移除 cls 后 class 还有值，那就重新设置 class。否则把 class 属性移除掉。
     if (cur) {
       el.setAttribute('class', cur);
     } else {
@@ -9573,13 +9579,12 @@ function removeClass (el, cls) {
   }
 }
 
-/*  */
-
+// 返回一个 json 对象
 function resolveTransition (def$$1) {
   if (!def$$1) {
     return
   }
-  /* istanbul ignore else */
+  // def$$1 是对象，也是返回一个 json 对象，除了 6 个 class，还有包括 def$$1 的所有可枚举属性
   if (typeof def$$1 === 'object') {
     var res = {};
     if (def$$1.css !== false) {
@@ -9587,11 +9592,13 @@ function resolveTransition (def$$1) {
     }
     extend(res, def$$1);
     return res
+  // def$$1 是字符串，那就返回 6 个 class 组成的 json 对象
   } else if (typeof def$$1 === 'string') {
     return autoCssTransition(def$$1)
   }
 }
 
+// 返回 transition 所需的 6 个 class 组成的 json 对象
 var autoCssTransition = cached(function (name) {
   return {
     enterClass: (name + "-enter"),
@@ -9612,100 +9619,142 @@ var transitionProp = 'transition';
 var transitionEndEvent = 'transitionend';
 var animationProp = 'animation';
 var animationEndEvent = 'animationend';
+
+// 浏览器环境，并且非 ie9
 if (hasTransition) {
   /* istanbul ignore if */
-  if (window.ontransitionend === undefined &&
-    window.onwebkittransitionend !== undefined
-  ) {
+  // 修正 transitionProp 和 transitionEndEvent
+  if (window.ontransitionend === undefined && window.onwebkittransitionend !== undefined) {
     transitionProp = 'WebkitTransition';
     transitionEndEvent = 'webkitTransitionEnd';
   }
-  if (window.onanimationend === undefined &&
-    window.onwebkitanimationend !== undefined
-  ) {
+
+  // 修正 animationProp 和 animationEndEvent
+  if (window.onanimationend === undefined && window.onwebkitanimationend !== undefined) {
     animationProp = 'WebkitAnimation';
     animationEndEvent = 'webkitAnimationEnd';
   }
 }
 
 // binding to window is necessary to make hot reload work in IE in strict mode
+// 对于严格模式下的 ie 进行热更新，把 window.requestAnimationFrame 方法的 this 绑定到 window 对象是必要的
 var raf = inBrowser && window.requestAnimationFrame
   ? window.requestAnimationFrame.bind(window)
   : setTimeout;
 
+/*
+看一下 window.requestAnimationFrame 方法的基本用法：
+
+var start = null;
+var element = document.getElementById('SomeElementYouWantToAnimate');
+element.style.position = 'absolute';
+
+function step(timestamp) {
+  if (!start) start = timestamp;
+  var progress = timestamp - start;
+  element.style.left = Math.min(progress / 10, 200) + 'px';
+  if (progress < 2000) {
+    window.requestAnimationFrame(step);
+  }
+}
+
+window.requestAnimationFrame(step);
+ */
+
+// raf 是 requestAnimationFrame 的简称
 function nextFrame (fn) {
   raf(function () {
     raf(fn);
   });
 }
 
+// 添加动画 class
 function addTransitionClass (el, cls) {
   var transitionClasses = el._transitionClasses || (el._transitionClasses = []);
+  // 一方面把 cls 加入到数组 el._transitionClasse 里，另一方面把 cls 应用到 class 属性里
   if (transitionClasses.indexOf(cls) < 0) {
     transitionClasses.push(cls);
     addClass(el, cls);
   }
 }
 
+// 移除动画 class
 function removeTransitionClass (el, cls) {
   if (el._transitionClasses) {
+    // 从数组 el._transitionClasses 里删除 cls
     remove(el._transitionClasses, cls);
   }
+  // 把 cls 从 class 属性里删除
   removeClass(el, cls);
 }
 
-function whenTransitionEnds (
-  el,
-  expectedType,
-  cb
-) {
+// 过渡/动画结束处理
+function whenTransitionEnds (el,expectedType,cb) {
+  // 包含过渡信息的 json 对象
   var ref = getTransitionInfo(el, expectedType);
   var type = ref.type;
   var timeout = ref.timeout;
   var propCount = ref.propCount;
+
+  // 没有 type，直接执行回调函数 cb
   if (!type) { return cb() }
+
+  // transitionEndEvent = 'transitionend'; animationEndEvent = 'animationend';
   var event = type === TRANSITION ? transitionEndEvent : animationEndEvent;
   var ended = 0;
+
   var end = function () {
     el.removeEventListener(event, onEnd);
     cb();
   };
   var onEnd = function (e) {
     if (e.target === el) {
+      // 动画属性执行完毕，那就解除监听
       if (++ended >= propCount) {
         end();
       }
     }
   };
+  // 过渡/动画设定的最长时间结束后，如果 ended 还是小于 propCount，那还是解除监听，并执行回调函数 cb
   setTimeout(function () {
     if (ended < propCount) {
       end();
     }
   }, timeout + 1);
+  // 监听过渡/动画结束事件
   el.addEventListener(event, onEnd);
 }
 
 var transformRE = /\b(transform|all)(,|$)/;
 
+// 获取过渡相关信息
 function getTransitionInfo (el, expectedType) {
   var styles = window.getComputedStyle(el);
+
+  // transitionProp = 'transition';
   var transitionDelays = styles[transitionProp + 'Delay'].split(', ');
   var transitionDurations = styles[transitionProp + 'Duration'].split(', ');
+  // 获得 [过渡延迟时间] + [过渡持续时间] 的最大值
   var transitionTimeout = getTimeout(transitionDelays, transitionDurations);
+
+  // var animationProp = 'animation';
   var animationDelays = styles[animationProp + 'Delay'].split(', ');
   var animationDurations = styles[animationProp + 'Duration'].split(', ');
+  // 获得 [动画延迟时间] + [动画持续时间] 的最大值
   var animationTimeout = getTimeout(animationDelays, animationDurations);
 
   var type;
   var timeout = 0;
   var propCount = 0;
-  /* istanbul ignore if */
+  
+  // TRANSITION = 'transition'，过渡
   if (expectedType === TRANSITION) {
     if (transitionTimeout > 0) {
       type = TRANSITION;
       timeout = transitionTimeout;
       propCount = transitionDurations.length;
     }
+  // ANIMATION = 'animation'，动画
   } else if (expectedType === ANIMATION) {
     if (animationTimeout > 0) {
       type = ANIMATION;
@@ -9713,7 +9762,9 @@ function getTransitionInfo (el, expectedType) {
       propCount = animationDurations.length;
     }
   } else {
+    // 过渡耗时和动画耗时之间的最大值
     timeout = Math.max(transitionTimeout, animationTimeout);
+    // type 取决于哪个耗时更大
     type = timeout > 0
       ? transitionTimeout > animationTimeout
         ? TRANSITION
@@ -9725,9 +9776,8 @@ function getTransitionInfo (el, expectedType) {
         : animationDurations.length
       : 0;
   }
-  var hasTransform =
-    type === TRANSITION &&
-    transformRE.test(styles[transitionProp + 'Property']);
+  // transformRE = /\b(transform|all)(,|$)/
+  var hasTransform = type === TRANSITION && transformRE.test(styles[transitionProp + 'Property']);
   return {
     type: type,
     timeout: timeout,
@@ -9736,18 +9786,40 @@ function getTransitionInfo (el, expectedType) {
   }
 }
 
+/*
+取出 [延迟时间] + [持续时间] 的最大值
+例如：
+getTimeout(['10s','30s','50s'],['20s','40s']) -> 70000
+getTimeout(['10s','30s','50s'],['20s','40s','60s']) -> 110000
+ */
 function getTimeout (delays, durations) {
   /* istanbul ignore next */
+
+  // 这个操作使得数组 delays 长度大于等于 durations 的长度
   while (delays.length < durations.length) {
     delays = delays.concat(delays);
   }
 
+  /*
+    array.map(callback[, thisArg])
+
+    参数
+    callback : 原数组中的元素经过该方法后返回一个新的元素。
+    currentValue : callback 的第一个参数，数组中当前被传递的元素。
+    index : callback 的第二个参数，数组中当前被传递的元素的索引。
+    array : callback 的第三个参数，调用 map 方法的数组。
+    thisArg : 执行 callback 函数时 this 指向的对象。
+   */
+
+  // 遍历数组 durations，获取 toMs(d) + toMs(delays[i]) 的最大值
   return Math.max.apply(null, durations.map(function (d, i) {
     return toMs(d) + toMs(delays[i])
   }))
 }
 
+// toMs('123s') -> 123000
 function toMs (s) {
+  // 'abc'.slice(0, -1) -> 'ab'
   return Number(s.slice(0, -1)) * 1000
 }
 
