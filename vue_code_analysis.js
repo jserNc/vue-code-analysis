@@ -2794,7 +2794,7 @@ function updateListeners (
   }
 }
 
-// 作用是返回将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+// 作用是将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
 function mergeVNodeHook (def, hookKey, hook) {
   var invoker;
   var oldHook = def[hookKey];
@@ -9823,49 +9823,66 @@ function toMs (s) {
   return Number(s.slice(0, -1)) * 1000
 }
 
-/*  */
-
+// 过渡/动画进入
 function enter (vnode, toggleDisplay) {
   var el = vnode.elm;
 
-  // call leave callback now
+  // call leave callback now，调用离开的回调函数
   if (isDef(el._leaveCb)) {
     el._leaveCb.cancelled = true;
     el._leaveCb();
   }
 
+  // 6 个 class 、css、type 等组成的 json 对象
   var data = resolveTransition(vnode.data.transition);
   if (isUndef(data)) {
     return
   }
 
-  /* istanbul ignore if */
+  // 如果存在 el._enterCb 或节点类型为 Element，返回
   if (isDef(el._enterCb) || el.nodeType !== 1) {
     return
   }
 
   var css = data.css;
   var type = data.type;
+
+  // enter 相关 class
   var enterClass = data.enterClass;
   var enterToClass = data.enterToClass;
   var enterActiveClass = data.enterActiveClass;
+
+  // appear 相关 class
   var appearClass = data.appearClass;
   var appearToClass = data.appearToClass;
   var appearActiveClass = data.appearActiveClass;
+
+  // enter 相关钩子
   var beforeEnter = data.beforeEnter;
   var enter = data.enter;
   var afterEnter = data.afterEnter;
   var enterCancelled = data.enterCancelled;
+
+  // appear 相关钩子
   var beforeAppear = data.beforeAppear;
   var appear = data.appear;
   var afterAppear = data.afterAppear;
   var appearCancelled = data.appearCancelled;
+
+  // 持续时间
   var duration = data.duration;
 
   // activeInstance will always be the <transition> component managing this
   // transition. One edge case to check is when the <transition> is placed
   // as the root node of a child component. In that case we need to check
   // <transition>'s parent for appear check.
+
+  /*
+	当前被激活的实例将会是管理着过渡的 <transition> 组件。
+	不过，当 <transition> 作为子组件的根节点时，我们需要去检查 <transition> 的父节点
+  */
+
+
   var context = activeInstance;
   var transitionNode = activeInstance.$vnode;
   while (transitionNode && transitionNode.parent) {
@@ -9873,58 +9890,86 @@ function enter (vnode, toggleDisplay) {
     context = transitionNode.context;
   }
 
+  // 没有被插入过文档？
   var isAppear = !context._isMounted || !vnode.isRootInsert;
 
+  // 返回
   if (isAppear && !appear && appear !== '') {
     return
   }
 
+  // 元素被插入时生效，下一帧移除
   var startClass = isAppear && appearClass
     ? appearClass
     : enterClass;
+
+  // 在过渡过程中生效，比如定义过渡时间，延迟和曲线函数等
   var activeClass = isAppear && appearActiveClass
     ? appearActiveClass
     : enterActiveClass;
+  
+  // 在元素被插入一帧后生效，在 transition/animation 完成之后移除
   var toClass = isAppear && appearToClass
     ? appearToClass
     : enterToClass;
 
+  // 进入之前钩子
   var beforeEnterHook = isAppear
     ? (beforeAppear || beforeEnter)
     : beforeEnter;
+
+  // 进入钩子
   var enterHook = isAppear
     ? (typeof appear === 'function' ? appear : enter)
     : enter;
+
+  // 进入之后钩子
   var afterEnterHook = isAppear
     ? (afterAppear || afterEnter)
     : afterEnter;
+
+  // 进入取消钩子
   var enterCancelledHook = isAppear
     ? (appearCancelled || enterCancelled)
     : enterCancelled;
 
+  // 进入持续时间，数值
   var explicitEnterDuration = toNumber(
     isObject(duration)
       ? duration.enter
       : duration
   );
 
+  // 开发模式下，检验 explicitEnterDuration 是否是有效的数值（类型为 number，并且不为 NaN）
   if ("development" !== 'production' && explicitEnterDuration != null) {
     checkDuration(explicitEnterDuration, 'enter', vnode);
   }
 
+  /*
+	推荐对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。这也可以避免过渡过程中 CSS 的影响。
+
+	当 css 不为 false，并且不为 ie9 时，expectsCSS 为 true
+  */
   var expectsCSS = css !== false && !isIE9;
+  // enterHook 函数形参个数是否大于 1
   var userWantsControl = getHookArgumentsLength(enterHook);
 
+  // once(fn) 确保 fn 只被执行 1 次
   var cb = el._enterCb = once(function () {
     if (expectsCSS) {
+	  // 移除 toClass、activeClass
       removeTransitionClass(el, toClass);
       removeTransitionClass(el, activeClass);
     }
+	// 进入取消
     if (cb.cancelled) {
       if (expectsCSS) {
+		// 移除 startClass
         removeTransitionClass(el, startClass);
       }
+	  // 进入取消钩子
       enterCancelledHook && enterCancelledHook(el);
+	// 进入之后钩子
     } else {
       afterEnterHook && afterEnterHook(el);
     }
@@ -9933,31 +9978,38 @@ function enter (vnode, toggleDisplay) {
 
   if (!vnode.data.show) {
     // remove pending leave element on enter by injecting an insert hook
+	// mergeVNodeHook (def, hookKey, hook) 的作用是将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
     mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'insert', function () {
       var parent = el.parentNode;
       var pendingNode = parent && parent._pending && parent._pending[vnode.key];
-      if (pendingNode &&
-        pendingNode.tag === vnode.tag &&
-        pendingNode.elm._leaveCb
-      ) {
+
+      if (pendingNode && pendingNode.tag === vnode.tag && pendingNode.elm._leaveCb) {
         pendingNode.elm._leaveCb();
       }
+	  // 进入钩子
       enterHook && enterHook(el, cb);
     });
   }
 
-  // start enter transition
+  // start enter transition，开始进入过渡，调用进入前钩子
   beforeEnterHook && beforeEnterHook(el);
+
   if (expectsCSS) {
+	// 添加 startClass、activeClass
     addTransitionClass(el, startClass);
     addTransitionClass(el, activeClass);
+    
+	// 下一帧，添加 toClass，移除 startClass
     nextFrame(function () {
       addTransitionClass(el, toClass);
       removeTransitionClass(el, startClass);
       if (!cb.cancelled && !userWantsControl) {
+		// isValidDuration (explicitEnterDuration)，判断 explicitEnterDuration 是否为有效的数组（类型为 number，且不为 NaN）
         if (isValidDuration(explicitEnterDuration)) {
+		  // 过渡结束后调用回调
           setTimeout(cb, explicitEnterDuration);
         } else {
+		  // 过渡结束处理
           whenTransitionEnds(el, type, cb);
         }
       }
@@ -9965,72 +10017,100 @@ function enter (vnode, toggleDisplay) {
   }
 
   if (vnode.data.show) {
+	// toggleDisplay 为 enter 方法的第二个形参
     toggleDisplay && toggleDisplay();
+	// 进入钩子
     enterHook && enterHook(el, cb);
   }
-
+  
+  /*
+  ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
+  ② userWantsControl 为 true 表示 enterHook 函数形参个数大于 1
+  */
   if (!expectsCSS && !userWantsControl) {
     cb();
   }
 }
 
+// 过渡/动画离开
 function leave (vnode, rm) {
   var el = vnode.elm;
 
-  // call enter callback now
+  // call enter callback now，调用进入的回调函数
   if (isDef(el._enterCb)) {
     el._enterCb.cancelled = true;
     el._enterCb();
   }
 
+  // 6 个 class 、css、type 等组成的 json 对象
   var data = resolveTransition(vnode.data.transition);
   if (isUndef(data)) {
     return rm()
   }
 
-  /* istanbul ignore if */
+  // 如果存在 el._enterCb 或节点类型为 Element，返回
   if (isDef(el._leaveCb) || el.nodeType !== 1) {
     return
   }
 
   var css = data.css;
   var type = data.type;
+  
+  // leave 相关 class
   var leaveClass = data.leaveClass;
   var leaveToClass = data.leaveToClass;
   var leaveActiveClass = data.leaveActiveClass;
+
+  // leave 相关钩子
   var beforeLeave = data.beforeLeave;
   var leave = data.leave;
   var afterLeave = data.afterLeave;
   var leaveCancelled = data.leaveCancelled;
+
+  // 延迟时间和持续时间
   var delayLeave = data.delayLeave;
   var duration = data.duration;
 
+  /*
+	推荐对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。这也可以避免过渡过程中 CSS 的影响。
+
+	当 css 不为 false，并且不为 ie9 时，expectsCSS 为 true
+  */
   var expectsCSS = css !== false && !isIE9;
+  // leave 函数形参个数是否大于 1
   var userWantsControl = getHookArgumentsLength(leave);
 
+  // 离开持续时间，数值
   var explicitLeaveDuration = toNumber(
     isObject(duration)
       ? duration.leave
       : duration
   );
 
+  // 开发模式下，检验 explicitLeaveDuration 是否是有效的数值（类型为 number，并且不为 NaN）
   if ("development" !== 'production' && isDef(explicitLeaveDuration)) {
     checkDuration(explicitLeaveDuration, 'leave', vnode);
   }
 
+  // once(fn) 确保 fn 只被执行 1 次
   var cb = el._leaveCb = once(function () {
     if (el.parentNode && el.parentNode._pending) {
       el.parentNode._pending[vnode.key] = null;
     }
     if (expectsCSS) {
+	  // 移除 leaveToClass、leaveActiveClass
       removeTransitionClass(el, leaveToClass);
       removeTransitionClass(el, leaveActiveClass);
     }
+	// 离开取消
     if (cb.cancelled) {
       if (expectsCSS) {
+		// 移除 leaveClass
         removeTransitionClass(el, leaveClass);
       }
+	  // 离开取消钩子
       leaveCancelled && leaveCancelled(el);
+	// 离开之后钩子
     } else {
       rm();
       afterLeave && afterLeave(el);
@@ -10038,38 +10118,52 @@ function leave (vnode, rm) {
     el._leaveCb = null;
   });
 
+  // 延迟
   if (delayLeave) {
     delayLeave(performLeave);
   } else {
     performLeave();
   }
-
+  
+  // 执行离开过渡
   function performLeave () {
     // the delayed leave may have already been cancelled
     if (cb.cancelled) {
       return
     }
-    // record leaving element
+    // record leaving element，记录正在离开的元素
     if (!vnode.data.show) {
       (el.parentNode._pending || (el.parentNode._pending = {}))[(vnode.key)] = vnode;
     }
+	// 离开前钩子
     beforeLeave && beforeLeave(el);
     if (expectsCSS) {
+	  // 添加 leaveClass、leaveActiveClass
       addTransitionClass(el, leaveClass);
       addTransitionClass(el, leaveActiveClass);
+
+	  // 下一帧，添加 leaveToClass，移除 leaveClass
       nextFrame(function () {
         addTransitionClass(el, leaveToClass);
         removeTransitionClass(el, leaveClass);
         if (!cb.cancelled && !userWantsControl) {
+		  // isValidDuration (explicitLeaveDuration)，判断 explicitLeaveDuration 是否为有效的数组（类型为 number，且不为 NaN）
           if (isValidDuration(explicitLeaveDuration)) {
+			// 过渡结束后调用回调
             setTimeout(cb, explicitLeaveDuration);
           } else {
+			// 过渡结束处理
             whenTransitionEnds(el, type, cb);
           }
         }
       });
     }
+	// 离开钩子
     leave && leave(el, cb);
+	/*
+	 ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
+     ② userWantsControl 为 true 表示 leave 函数形参个数大于 1
+    */
     if (!expectsCSS && !userWantsControl) {
       cb();
     }
@@ -10077,13 +10171,16 @@ function leave (vnode, rm) {
 }
 
 // only used in dev mode
+// 只在开发模式下会用到
 function checkDuration (val, name, vnode) {
+  // val 必须是 number 类型
   if (typeof val !== 'number') {
     warn(
       "<transition> explicit " + name + " duration is not a valid number - " +
       "got " + (JSON.stringify(val)) + ".",
       vnode.context
     );
+  // val 还不能是 NaN
   } else if (isNaN(val)) {
     warn(
       "<transition> explicit " + name + " duration is NaN - " +
@@ -10093,6 +10190,7 @@ function checkDuration (val, name, vnode) {
   }
 }
 
+// 有效的持续时间，也就是 val 是有效的数值
 function isValidDuration (val) {
   return typeof val === 'number' && !isNaN(val)
 }
@@ -10103,6 +10201,7 @@ function isValidDuration (val) {
  * - a wrapped component method (check ._length)
  * - a plain function (.length)
  */
+ // 判断钩子函数形参个数是否大于 1
 function getHookArgumentsLength (fn) {
   if (isUndef(fn)) {
     return false
@@ -10116,22 +10215,26 @@ function getHookArgumentsLength (fn) {
         : invokerFns
     )
   } else {
+	// 实质就这一句
     return (fn._length || fn.length) > 1
   }
 }
 
+// 过渡/动画进入
 function _enter (_, vnode) {
   if (vnode.data.show !== true) {
     enter(vnode);
   }
 }
 
+// transition 生命周期 create -> activate -> remove。仅仅在浏览器环境下存在。
 var transition = inBrowser ? {
-  create: _enter,
-  activate: _enter,
+  create: _enter,   // 进入
+  activate: _enter, // 进入
   remove: function remove$$1 (vnode, rm) {
     /* istanbul ignore else */
     if (vnode.data.show !== true) {
+	  // 离开
       leave(vnode, rm);
     } else {
       rm();
@@ -10139,6 +10242,7 @@ var transition = inBrowser ? {
   }
 } : {};
 
+// 模块
 var platformModules = [
   attrs,
   klass,
@@ -10250,40 +10354,64 @@ var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
  * properties to Elements.
  */
 
+// <input> 的 type 类型为下列值之一
 var isTextInputType = makeMap('text,number,password,search,email,tel,url');
 
 /* istanbul ignore if */
 if (isIE9) {
   // http://www.matts411.com/post/internet-explorer-9-oninput/
+  // ie9 下，如果一个元素有 v-model 属性，那这个元素的 selectionchange 事件就转交给 input 事件
   document.addEventListener('selectionchange', function () {
     var el = document.activeElement;
     if (el && el.vmodel) {
+	  // 触发 input 方法
       trigger(el, 'input');
     }
   });
 }
 
+/*
+指令定义函数提供了几个钩子函数 (可选)：
+
+bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
+inserted：被绑定元素插入父节点时调用 (父节点存在即可调用，不必存在于 document 中)。
+update：所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新 (详细的钩子函数参数见下)。
+componentUpdated：所在组件的 VNode 及其孩子的 VNode 全部更新时调用。
+unbind：只调用一次，指令与元素解绑时调用。
+*/
+// 这里其实就是定义 model 指令
 var model$1 = {
+  // 被绑定元素插入父节点时调用
   inserted: function inserted (el, binding, vnode) {
+	// <select> 标签
     if (vnode.tag === 'select') {
       var cb = function () {
+		// 设置下拉列表选项
         setSelected(el, binding, vnode.context);
       };
       cb();
-      /* istanbul ignore if */
+      // 为什么要再执行一遍呢？
       if (isIE || isEdge) {
         setTimeout(cb, 0);
       }
+	// <textarea> 标签或者 <input> 标签，并且 type 为 text,number,password,search,email,tel,url 之一
     } else if (vnode.tag === 'textarea' || isTextInputType(el.type)) {
+	  // binding.modifiers ：一个包含修饰符的对象。例如：v-my-directive.foo.bar, 修饰符对象 modifiers 的值是 { foo: true, bar: true }
       el._vModifiers = binding.modifiers;
+	  // 触发 input 事件
       if (!binding.modifiers.lazy) {
         // Safari < 10.2 & UIWebView doesn't fire compositionend when
         // switching focus before confirming composition choice
         // this also fixes the issue where some browsers e.g. iOS Chrome
         // fires "change" instead of "input" on autocomplete.
+
+		// onCompositionEnd 函数会触发 input 事件
         el.addEventListener('change', onCompositionEnd);
+		// 非 Android
         if (!isAndroid) {
+		  // compositionstart 事件触发于一段文字的输入之前
           el.addEventListener('compositionstart', onCompositionStart);
+		  // 当文本段落的组成完成或取消时, compositionend 事件将被激发。onCompositionEnd 函数会触发 input 事件
           el.addEventListener('compositionend', onCompositionEnd);
         }
         /* istanbul ignore if */
@@ -10293,28 +10421,51 @@ var model$1 = {
       }
     }
   },
+  // 所在组件的 VNode 及其孩子的 VNode 全部更新时调用
   componentUpdated: function componentUpdated (el, binding, vnode) {
+	// <select> 标签
     if (vnode.tag === 'select') {
+	  // 设置下拉列表选项
       setSelected(el, binding, vnode.context);
       // in case the options rendered by v-for have changed,
       // it's possible that the value is out-of-sync with the rendered options.
       // detect such cases and filter out values that no longer has a matching
       // option in the DOM.
+
+      /*
+		 ① select 为多选列表：
+		    binding.value 为数组，只要这个数组中有一个没有匹配的 option，那就需要重置了
+		 ② select 为单选列表：
+		    a. 新值不等于旧值
+			b. 新值没有匹配的 option
+
+			只有 a 和 b 两个条件同时满足时就需要重置了。
+
+			1. 假设只有 a 满足，新值虽然不等于旧值，而新值和 option 匹配上了，这就是“歪打正着”吧，不需要重置。
+			2. 假设只有 b 满足，虽然没有和新值匹配的 option，但是旧值也不匹配啊，所以就维持一个都没选中的状态好了，不需要重置。
+	  */
       var needReset = el.multiple
         ? binding.value.some(function (v) { return hasNoMatchingOption(v, el.options); })
         : binding.value !== binding.oldValue && hasNoMatchingOption(binding.value, el.options);
-      if (needReset) {
+      
+	  // 需要重置，触发 change 事件
+	  if (needReset) {
         trigger(el, 'change');
       }
     }
   }
 };
 
+// 设置下拉列表选项
 function setSelected (el, binding, vm) {
+  // binding.value ：指令的绑定值，例如：v-my-directive="1 + 1", value 的值是 2
   var value = binding.value;
+  // 是否是多选下拉
   var isMultiple = el.multiple;
   if (isMultiple && !Array.isArray(value)) {
+	// 多选下拉的值应该是一个数组
     "development" !== 'production' && warn(
+	  // binding.expression ：绑定值的字符串形式。例如 v-my-directive="1 + 1" ，expression 的值是 "1 + 1"
       "<select multiple v-model=\"" + (binding.expression) + "\"> " +
       "expects an Array value for its binding, but got " + (Object.prototype.toString.call(value).slice(8, -1)),
       vm
@@ -10324,12 +10475,17 @@ function setSelected (el, binding, vm) {
   var selected, option;
   for (var i = 0, l = el.options.length; i < l; i++) {
     option = el.options[i];
+	// 多选列表
     if (isMultiple) {
+	  // 这里 value 是一个数组，getValue(option) 是 option 的值。也就是说，若 option 的值在数组 value 中，selected 就为 true
       selected = looseIndexOf(value, getValue(option)) > -1;
+	  // 如果和旧值不相等，就更新值
       if (option.selected !== selected) {
         option.selected = selected;
       }
+	// 单选列表
     } else {
+	  // 匹配到了第一个选项，并且和之前的不一样，就更新，并结束循环
       if (looseEqual(getValue(option), value)) {
         if (el.selectedIndex !== i) {
           el.selectedIndex = i;
@@ -10338,13 +10494,16 @@ function setSelected (el, binding, vm) {
       }
     }
   }
+  // 单选列表，一个都没匹配到，那就将 selectedIndex 强制写为 -1
   if (!isMultiple) {
     el.selectedIndex = -1;
   }
 }
 
+// select 的 option 中没有与 value 对应的匹配项
 function hasNoMatchingOption (value, options) {
   for (var i = 0, l = options.length; i < l; i++) {
+	// 只要有一个匹配上了，就返回 false
     if (looseEqual(getValue(options[i]), value)) {
       return false
     }
@@ -10352,16 +10511,19 @@ function hasNoMatchingOption (value, options) {
   return true
 }
 
+// 获取 option 的值
 function getValue (option) {
   return '_value' in option
     ? option._value
     : option.value
 }
 
+// 标记 e.target.composing 为 true
 function onCompositionStart (e) {
   e.target.composing = true;
 }
 
+// 标记 e.target.composing 为 false，并触发 input 事件。所以，我们看到，反思调用 onCompositionEnd 函数都会触发 input 事件
 function onCompositionEnd (e) {
   // prevent triggering an input event for no reason
   if (!e.target.composing) { return }
@@ -10369,76 +10531,102 @@ function onCompositionEnd (e) {
   trigger(e.target, 'input');
 }
 
+// 老式写法，自定义事件
 function trigger (el, type) {
+  // 新建 HTMLEvents 实例
   var e = document.createEvent('HTMLEvents');
+  // 事件初始化，type 为事件名称
   e.initEvent(type, true, true);
+  // 触发事件
   el.dispatchEvent(e);
 }
 
 /*  */
 
 // recursively search for possible transition defined inside the component root
+// 从当前 vnode 递归查找组件根节点里定义 transition 的 vnode。找到了就返回那个 vnode
 function locateNode (vnode) {
   return vnode.componentInstance && (!vnode.data || !vnode.data.transition)
+	  // 递归
     ? locateNode(vnode.componentInstance._vnode)
     : vnode
 }
 
+// v-show 指令
 var show = {
+  // bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
   bind: function bind (el, ref, vnode) {
+	// value：指令的绑定值，例如：v-my-directive="1 + 1", value 的值是 2
     var value = ref.value;
 
+	// 找到定义了 transition 的 vnode
     vnode = locateNode(vnode);
+
     var transition$$1 = vnode.data && vnode.data.transition;
-    var originalDisplay = el.__vOriginalDisplay =
-      el.style.display === 'none' ? '' : el.style.display;
+
+    /*
+		① el.style.display === 'none'，originalDisplay 为 ''，也就是默认值
+		② el.style.display !== 'none'，originalDisplay 为 el.style.display
+	*/
+    var originalDisplay = el.__vOriginalDisplay = el.style.display === 'none' ? '' : el.style.display;
+
+    // 过渡
     if (value && transition$$1 && !isIE9) {
       vnode.data.show = true;
+	  // 动画/过渡进入
       enter(vnode, function () {
         el.style.display = originalDisplay;
       });
+	// 直接显示/隐藏
     } else {
       el.style.display = value ? originalDisplay : 'none';
     }
   },
 
+  // 所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新
   update: function update (el, ref, vnode) {
     var value = ref.value;
+	// oldVnode：上一个虚拟节点，仅在 update 和 componentUpdated 钩子中可用
     var oldValue = ref.oldValue;
 
-    /* istanbul ignore if */
-    if (value === oldValue) { return }
+    // 新旧虚拟节点相同，那就不更新了，在此返回
+    if (value === oldValue) { 
+		return 
+	}
+
+	// 找到定义了 transition 的 vnode
     vnode = locateNode(vnode);
     var transition$$1 = vnode.data && vnode.data.transition;
+	// 过渡
     if (transition$$1 && !isIE9) {
       vnode.data.show = true;
       if (value) {
+		// 进入过渡
         enter(vnode, function () {
           el.style.display = el.__vOriginalDisplay;
         });
       } else {
+		// 离开过渡
         leave(vnode, function () {
           el.style.display = 'none';
         });
       }
+	// 直接显示/隐藏
     } else {
       el.style.display = value ? el.__vOriginalDisplay : 'none';
     }
   },
 
-  unbind: function unbind (
-    el,
-    binding,
-    vnode,
-    oldVnode,
-    isDestroy
-  ) {
+  // unbind：只调用一次，指令与元素解绑时调用。
+  unbind: function unbind (el, binding, vnode, oldVnode, isDestroy) {
+	// 恢复之前的 display 属性
     if (!isDestroy) {
       el.style.display = el.__vOriginalDisplay;
     }
   }
 };
 
+// 系统给我们定义好的指令
 var platformDirectives = {
   model: model$1,
   show: show
@@ -10449,44 +10637,58 @@ var platformDirectives = {
 // Provides transition support for a single element/component.
 // supports transition mode (out-in / in-out)
 
+// 过渡相关的 prop
 var transitionProps = {
   name: String,
   appear: Boolean,
   css: Boolean,
-  mode: String,
+  mode: String,     // out-in / in-out
   type: String,
+ 
+  // 进入相关 class 
   enterClass: String,
   leaveClass: String,
   enterToClass: String,
+
+  // 离开相关 class
   leaveToClass: String,
   enterActiveClass: String,
   leaveActiveClass: String,
+
+  // 出现相关 class
   appearClass: String,
   appearActiveClass: String,
   appearToClass: String,
+ 
+  // 持续时间
   duration: [Number, String, Object]
 };
 
 // in case the child is also an abstract component, e.g. <keep-alive>
 // we want to recursively retrieve the real component to be rendered
+// 我们需要递归地检索出真正需要被重新渲染的组件，以免子组件也是一个抽象组件（例如 <keep-alive>）。返回需要被重新渲染的 vnode
 function getRealChild (vnode) {
   var compOptions = vnode && vnode.componentOptions;
+  // 如果子组件也是抽象组件，那就递归检索
   if (compOptions && compOptions.Ctor.options.abstract) {
+	// getFirstComponentChild() 用来获取第一个子组件
     return getRealChild(getFirstComponentChild(compOptions.children))
   } else {
     return vnode
   }
 }
 
+// 提取 transition 数据，返回一个 json 对象
 function extractTransitionData (comp) {
   var data = {};
   var options = comp.$options;
-  // props
+  // 提取 props
   for (var key in options.propsData) {
     data[key] = comp[key];
   }
   // events.
   // extract listeners and pass them directly to the transition methods
+  // 提取监听函数
   var listeners = options._parentListeners;
   for (var key$1 in listeners) {
     data[camelize(key$1)] = listeners[key$1];
@@ -10494,6 +10696,7 @@ function extractTransitionData (comp) {
   return data
 }
 
+// 占位符
 function placeholder (h, rawChild) {
   if (/\d-keep-alive$/.test(rawChild.tag)) {
     return h('keep-alive', {
@@ -10502,6 +10705,7 @@ function placeholder (h, rawChild) {
   }
 }
 
+// 只要有一个父组件有 transition 数据，就返回 true
 function hasParentTransition (vnode) {
   while ((vnode = vnode.parent)) {
     if (vnode.data.transition) {
@@ -10510,10 +10714,12 @@ function hasParentTransition (vnode) {
   }
 }
 
+// 新旧节点的 key 和 tag 都相同，就认为是同一个子节点
 function isSameChild (child, oldChild) {
   return oldChild.key === child.key && oldChild.tag === child.tag
 }
 
+// 同时拥有 isComment、asyncFactory 等两个属性就认为是异步占位符
 function isAsyncPlaceholder (node) {
   return node.isComment && node.asyncFactory
 }
