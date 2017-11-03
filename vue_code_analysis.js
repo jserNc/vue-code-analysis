@@ -3300,7 +3300,7 @@ function eventsMixin (Vue) {
   Vue.prototype.$once = function (event, fn) {
     var vm = this;
     function on () {
-	  // on 执行时就会将事件接触监听，也就是说，fn 只能执行一次
+	  // on 执行时就会将事件解除监听，也就是说，fn 只能执行一次
       vm.$off(event, on);
       fn.apply(vm, arguments);
     }
@@ -9512,6 +9512,64 @@ var style = {
   update: updateStyle
 };
 
+/*
+说一说 classList 属性：
+
+ ① 传统方法
+	在操作类名的时候，需要通过className属性添加、删除和替换类名。如下面例子：
+	<p class="bd user disabled">...</p>
+
+	这个p中一共有三个类名，要从中删掉一个类名，需要把这三个类分别拆开，然后进行处理，处理过程如下：
+	
+    <script>
+	   var className=p.className.split(/\s+/);
+	   //找到要删掉的类名
+	   var pos=-1,i,len;
+
+	   for (var i = 0; i < className.length; i++) {
+		   if(className[i]=="user"){
+			  pos=i;
+			  break;
+		   }
+	   };
+	   className.splice(i,1);
+	   //将余下的类名重新拼装
+	   p.className=className.join(" ");
+	</script>
+
+ ② html5 新增方法 classList()，可以完全摆脱 className 属性
+
+	<p id="myDiv" class="init">Hello world!</p>
+	<input type="button" value="Add class" onclick="addClass()">
+	<input type="button" value="Remove class" onclick="removeClass()">
+	<input type="button" value="Toggle class" onclick="toggleClass()">
+	<input type="button" value="Contains class?" onclick="containsClass()">
+	<p>This demo works in Firefox 3.6 and Chrome 8.</p>
+	 
+	<script type="text/javascript">
+		function addClass(){
+			var myDiv = document.getElementById("myDiv");
+			myDiv.classList.add("highlight");
+		}
+	 
+		function removeClass(){
+			var myDiv = document.getElementById("myDiv");
+			myDiv.classList.remove("highlight");
+		}
+	 
+		function toggleClass(){
+			var myDiv = document.getElementById("myDiv");
+			myDiv.classList.toggle("highlight");
+		}
+	 
+		function containsClass(){
+			var myDiv = document.getElementById("myDiv");
+			alert(myDiv.classList.contains("highlight"));
+		}
+	</script>
+
+	可以看到，使用 classList 来修改 class 是多么便捷
+*/
 
 /**
  * Add class with compatibility for SVG since classList is not supported on
@@ -9645,8 +9703,70 @@ var raf = inBrowser && window.requestAnimationFrame
 /*
 看一下 window.requestAnimationFrame 方法的基本用法：
 
+requestAnimationFrame 的用法与 settimeout 很相似，只是不需要设置时间间隔而已。
+requestAnimationFrame 使用一个回调函数作为参数，这个回调函数会在浏览器重绘之前调用。
+它返回一个整数，表示定时器的编号，这个值可以传递给 cancelAnimationFrame 用于取消这个函数的执行
+
+用法：requestID = requestAnimationFrame(callback); 
+callback 方法在执行动画之前调用 1 次。
+
+例1，小红块自下向上运动 5 秒：
+<div id="app"></div>
+<style>
+    #app{
+		position: absolute;
+		width:20px;
+		height:20px;
+		background: red;
+	}
+
+	.animate-on-transforms{
+		transition: all 5s;
+	}
+</style>
+<script>
+	var app = document.getElementById('app');
+
+	app.style.transform = `translateY(30px)`;
+
+	var timer = requestAnimationFrame(function() {
+		app.classList.add('animate-on-transforms');
+		app.style.transform = '';
+		console.log('动画开始前执行该函数');
+	});
+</script>
+
+以上几句简单的代码就可以实现一个小红块从下到上移动 30px 的动画。
+
+注意，这里的 requestAnimationFrame 函数执行 1 次，callback 函数也是执行 1 次，就可以让动画动起来。
+
+问题来了，动画产生的原因是什么？
+① 首先给 app 添加了一个 transform 属性： translateY(30px)，那么 app 会突变到相对原位置向下 30px 的位置；
+② 然后，执行 requestAnimationFrame 方法，会调用 callback 方法；
+③ 在 callback 方法中，将 app 的 transform 属性置空，那么意味着 app 会移动回到它最开始的位置，即 top 属性由 30px 变为 0;
+④ 除此之外，callback 方法中还给 app 添加了一个新的 class: animate-on-transforms，这个属性 class 限定所有的属性变化时长为 5s;
+⑤ 于是，我们就可以看到一个时长 5s 的动画了
+
+另外，我们可以用 cancelAnimationFrame(timer) 来取消定时器
+
+
+例2，小红块自左向右运动 2 秒 ：
+<div id="app"></div>
+<style>
+    #app{
+		position: absolute;
+		width:20px;
+		height:20px;
+		background: red;
+	}
+
+	.animate-on-transforms{
+		transition: all 5s;
+	}
+</style>
+<script>
 var start = null;
-var element = document.getElementById('SomeElementYouWantToAnimate');
+var element = document.getElementById('app');
 element.style.position = 'absolute';
 
 function step(timestamp) {
@@ -9659,6 +9779,18 @@ function step(timestamp) {
 }
 
 window.requestAnimationFrame(step);
+</script>
+
+这个例子中涉及到多次递归调用 requestAnimationFrame 方法，好像比例子 1 更复杂一些。为什么需要多次调用呢？
+
+这就有点像 setTimeout 函数的用法了。 
+① 首先执行 window.requestAnimationFrame(step) 方法，会执行 1 次 step 方法；
+② step 方法使得 element 位置突变到 Math.min(progress / 10, 200) + 'px'，如果不再调用 requestAnimationFrame 方法，就会停止在这个位置；
+③ 于是，在 step 方法里又调用 requestAnimationFrame 方法，requestAnimationFrame 方法又调用 step 方法来突变位置；
+④ 由于位置突变频率很高，所以看起来就是一个连贯的动画了；
+⑤ 2 秒后，step 方法不再调用 requestAnimationFrame 方法，动画终止。
+
+另外，回调函数 step 有一个传参 timestamp，它表示 step 回调函数第一次执行到现在的时间（单位毫秒）。
  */
 
 // raf 是 requestAnimationFrame 的简称
@@ -10724,27 +10856,35 @@ function isAsyncPlaceholder (node) {
   return node.isComment && node.asyncFactory
 }
 
+// 定义 Transition 组件
 var Transition = {
   name: 'transition',
   props: transitionProps,
+  // 抽象组件
   abstract: true,
 
   render: function render (h) {
     var this$1 = this;
 
+    // 如果没有子元素，就返回
     var children = this.$options._renderChildren;
     if (!children) {
       return
     }
 
     // filter out text nodes (possible whitespaces)
-    children = children.filter(function (c) { return c.tag || isAsyncPlaceholder(c); });
-    /* istanbul ignore if */
+	// 剔除文本子元素（可能是空白）
+    children = children.filter(function (c) { 
+		return c.tag || isAsyncPlaceholder(c); 
+	});
+    
+	// 如果剔除文本子元素后不剩下子元素了，那就返回
     if (!children.length) {
       return
     }
 
     // warn multiple elements
+	// <transition> 只能用于单一的元素，<transition-group> 可以用于列表
     if ("development" !== 'production' && children.length > 1) {
       warn(
         '<transition> can only be used on a single element. Use ' +
@@ -10753,34 +10893,42 @@ var Transition = {
       );
     }
 
+	/*
+		in-out：新元素先进行过渡，完成之后当前元素过渡离开。
+		out-in：当前元素先进行过渡，完成之后新元素过渡进入。
+	*/
     var mode = this.mode;
 
     // warn invalid mode
-    if ("development" !== 'production' &&
-      mode && mode !== 'in-out' && mode !== 'out-in'
-    ) {
+	// mode 必须是 in-out/out-in 二者之一
+    if ("development" !== 'production' && mode && mode !== 'in-out' && mode !== 'out-in') {
       warn(
         'invalid <transition> mode: ' + mode,
         this.$parent
       );
     }
 
+	// 原元素
     var rawChild = children[0];
 
     // if this is a component root node and the component's
     // parent container node also has transition, skip.
+	// 如果父容器节点也有 transition，那就返回
     if (hasParentTransition(this.$vnode)) {
       return rawChild
     }
 
     // apply transition data to child
     // use getRealChild() to ignore abstract components e.g. keep-alive
+	// getRealChild() 方法会忽略抽象组件，找到真正需要被渲染的组件
     var child = getRealChild(rawChild);
-    /* istanbul ignore if */
+
+	// 如果除了抽象组件不剩下什么，那就返回
     if (!child) {
       return rawChild
     }
 
+	// 正在离开...占位？
     if (this._leaving) {
       return placeholder(h, rawChild)
     }
@@ -10788,7 +10936,23 @@ var Transition = {
     // ensure a key that is unique to the vnode type and to this transition
     // component instance. This key will be used to remove pending leaving nodes
     // during entering.
+	
+	// 确保 key 对于某种 vnode 类型或者对于组件实例是唯一的。在 entering 过程中这个 key 会被用来移除 pending leaving 节点
+
     var id = "__transition-" + (this._uid) + "-";
+	/*
+		① child.key == null
+		   a. child.isComment == true
+			  child.key = "__transition-" + (this._uid) + "-comment"
+		   b. child.isComment != true
+		      child.key = "__transition-" + (this._uid) + child.tag
+
+		② child.key != null
+		   a. child.key 是数值或字符串
+		      child.key = "__transition-" + (this._uid) + child.key
+		   b. child.key 是其他值
+			  child.key = child.key
+	*/
     child.key = child.key == null
       ? child.isComment
         ? id + 'comment'
@@ -10796,43 +10960,58 @@ var Transition = {
       : isPrimitive(child.key)
         ? (String(child.key).indexOf(id) === 0 ? child.key : id + child.key)
         : child.key;
+	
 
+	/*
+		extractTransitionData() 方法用于提取 props 和 listeners，返回一个 json 对象
+
+		把这个 json 对象赋值给 child.data.transition
+	*/
     var data = (child.data || (child.data = {})).transition = extractTransitionData(this);
+
+	// 旧的原元素
     var oldRawChild = this._vnode;
+	// getRealChild() 方法会忽略抽象组件，找到真正需要被渲染的组件
     var oldChild = getRealChild(oldRawChild);
 
     // mark v-show
     // so that the transition module can hand over the control to the directive
+	// 只要有一个指令的名称为 'show'，那就把 child.data.show 标记为 true
     if (child.data.directives && child.data.directives.some(function (d) { return d.name === 'show'; })) {
       child.data.show = true;
     }
 
-    if (
-      oldChild &&
-      oldChild.data &&
-      !isSameChild(child, oldChild) &&
-      !isAsyncPlaceholder(oldChild)
-    ) {
+	// 新旧节点不相同，并且旧节点不是异步占位符
+    if (oldChild && oldChild.data && !isSameChild(child, oldChild) && !isAsyncPlaceholder(oldChild)) {
       // replace old child transition data with fresh one
       // important for dynamic transitions!
+	  // 用 child.data.transition 的属性覆盖 oldChild.data.transition 的属性
       var oldData = oldChild && (oldChild.data.transition = extend({}, data));
-      // handle transition mode
+
+      // handle transition mode，当前元素先进行过渡，完成之后新元素过渡进入
       if (mode === 'out-in') {
         // return placeholder node and queue update when leave finishes
         this._leaving = true;
+		// mergeVNodeHook (def, hookKey, hook) 将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
         mergeVNodeHook(oldData, 'afterLeave', function () {
+		  // render 函数最开始有定义：var this$1 = this
           this$1._leaving = false;
           this$1.$forceUpdate();
         });
+		// 用 rawChild.componentOptions.propsData 数据渲染一个 <keep-alive> ?
         return placeholder(h, rawChild)
+	  // 新元素先进行过渡，完成之后当前元素过渡离开
       } else if (mode === 'in-out') {
         if (isAsyncPlaceholder(child)) {
           return oldRawChild
         }
         var delayedLeave;
         var performLeave = function () { delayedLeave(); };
+		// child.data.transition['afterEnter'] 发生时，会调用 performLeave 函数
         mergeVNodeHook(data, 'afterEnter', performLeave);
+		// child.data.transition['enterCancelled'] 发生时，会调用 performLeave 函数
         mergeVNodeHook(data, 'enterCancelled', performLeave);
+		// child.data.transition['delayLeave'] 发生时，会调用 function (leave) { delayedLeave = leave; } 函数
         mergeVNodeHook(oldData, 'delayLeave', function (leave) { delayedLeave = leave; });
       }
     }
@@ -10845,6 +11024,109 @@ var Transition = {
 
 // Provides transition support for list items.
 // supports move transitions using the FLIP technique.
+/*
+   FLIP 代表 First、Last、Invert、Play
+
+   F: first，参加过渡元素的初始状态。
+   L: last，元素的终止状态。
+   I: invert，这是 flip 的核心。你通过这个元素的初始状态和终止状态计算出元素改变了什么，比如它的宽、高及透明度，然后你翻转这个改变；举个例子，如果一个元素的初始状态和终止状态之间偏移 90px，你应该设置这个元素 transform: translateY(-90px)。这个元素好像是在它的初始位置，其实正好相反。
+   P: play，为你要改变的任何 css 属性启用 tansition，移除你 invert 的改变。这时你的元素会做动画从起始点到终止点。
+
+   FLIP 来实现动画，是对 JavaScript 和 CSS 的很好结合。用 JavaScript 计算，但让 CSS 为你处理动画。
+   你不必使用 CSS 去完成动画，不过，你可以用 animations  API 或 JavaScript 自身来完成，觉得哪种容易就用哪种。
+   关键要减少每帧动画的复杂性（推荐使用 transform 和 opacity），尽力让用户得到最好的体验。 
+   
+   其中：
+   ① transform 指的是变换，一个东西的拉伸，压缩，旋转，偏移等就是使用这个属性。
+      
+	  transform 可以设置这些函数：
+
+	  rotate：将元素进行 2D 旋转，单位为 deg。如 transform:rotate(7deg);
+	  rotateX(angle)：定义沿着 X 轴的 3D 旋转。如 transform:rotateX(10deg);
+	  rotateY(angle)：定义沿着 Y 轴的 3D 旋转。如 transform:rotateY(10deg);
+
+	  translate：将元素进行平移（X，Y 轴同时平移）。如 transform:translate(10px,20px);
+	  translateX(x)：X 轴平移。如 transform:translateX(10px); 
+	  translateY(y)：Y 轴平移。如 transform:translateY(10px);
+
+	  scale：将元素进行放大或缩小（X，Y 轴同时缩放）。记住，这里的放大和缩小不一定是维持比例的。如 transform:scale(1.1,1.1);
+	  scaleX(x)：通过设置 X 轴的值来定义缩放转换。如 transform:scaleX(1.1);
+	  scaleY(y)：通过设置 Y 轴的值来定义缩放转换。如 transform:scaleY(1.1);
+
+	  skew(x-angle,y-angle)	定义沿着 X 和 Y 轴的 2D 倾斜转换。如 transform:skew(10deg,10deg);
+	  skewX(angle)：定义沿着 X 轴的 2D 倾斜转换。如 transform:skewX(10deg);
+	  skewY(angle)：定义沿着 Y 轴的 2D 倾斜转换。如 transform:skewY(10deg);
+		
+   ② opacity 指透明度，可以利用这个属性来实现元素的隐藏与显现。
+
+    另外，不要把 transform 和 transition 属性弄混淆了。
+	
+	应用于宽度属性的过渡效果，时长为 2 秒
+	div {
+		transition: width 2s; 
+	}
+
+	如需向多个样式添加过渡效果，请添加多个属性，由逗号隔开：
+	div {
+		transition: width 2s, height 2s, transform 2s;
+	}
+
+	举个利用 FLIP 的实例：
+	参考：
+	https://segmentfault.com/a/1190000008907850
+	http://web.jobbole.com/83598/
+
+	<div id="app"></div>
+	<style>
+	  #app{
+		position: absolute;
+		width:20px;
+		height:20px;
+		background: red;
+	  }
+	  .app-to-end{
+		top: 100px;
+	  }
+	  .animate-on-transforms{
+		transition: all 5s;
+	  }
+	</style>
+	<script>
+		var app = document.getElementById('app');
+
+		var first = app.getBoundingClientRect();
+		// 从 0px 处突变到 100px 处
+		app.classList.add('app-to-end');
+
+		var last = app.getBoundingClientRect();
+
+		var invert = first.top - last.top;
+
+		// 从终点（100px）突变到起点（0px 处），使元素看起来好像在起点
+		app.style.transform = `translateY(${invert}px)`;
+
+		requestAnimationFrame(function() {
+		  // 启用 tansition 属性（设置属性的变化时长，曲线等）
+		  app.classList.add('animate-on-transforms');
+		  // 从 0px 处突变到 100px 处，但由于有了 tansition 限制属性变化时长，所以会连续缓慢变化
+		  app.style.transform = '';
+		});
+
+		// 动画结束，移除 tansition 属性。其实，不移除也不会影响动画执行。
+		app.addEventListener('transitionend', () => {
+		  app.classList.remove('animate-on-transforms');
+		})
+	</script>
+
+	可以看到，FLIP 的思路是：
+	将动画翻转过来，而不是直接过渡（因为这需要对每帧进行昂贵的计算）。通过动态预计算动画，可以让它更轻松地完成。
+
+	使用flip的好处：
+	参考图：https://sfault-image.b0.upaiyun.com/222/397/2223977382-58de14ea163ac_articlex
+
+	在用户与网站交互后有 100ms 的空闲时间，如果我们利用这 100ms 做预计算操作，
+	然后使用 css3 的 transform 和 opacity 执行动画，用户会觉得你的网站响应非常快。
+*/
 
 // Because the vdom's children update algorithm is "unstable" - i.e.
 // it doesn't guarantee the relative positioning of removed elements,
@@ -10854,31 +11136,50 @@ var Transition = {
 // into the final desired state. This way in the second pass removed
 // nodes will remain where they should be.
 
+/*
+   虚拟 dom 的子元素更新算法是不稳定的，也就是说它不能保证被删除元素的相对顺序。
+   这里将 transition-group 更新子元素的过程分成两步：
+   ① 移除所有需要移除的元素，并触发它们的离开 transition；
+   ② 依次节点添加/删除元素，使得它们出现在正确的位置。
+   这样下来，被删除的元素就能出现在正确的位置上。
+*/
+
+// TransitionGroup 组件的 props 基本继承自 transitionProps
 var props = extend({
   tag: String,
   moveClass: String
 }, transitionProps);
 
+// transitionProps 不要过渡模式
 delete props.mode;
 
+// 定义 transitionProps 组件
 var TransitionGroup = {
   props: props,
 
+  // 渲染组件
   render: function render (h) {
+	// 默认的标签是 <span>
     var tag = this.tag || this.$vnode.data.tag || 'span';
     var map = Object.create(null);
     var prevChildren = this.prevChildren = this.children;
     var rawChildren = this.$slots.default || [];
     var children = this.children = [];
+	// extractTransitionData() 方法用于提取 props 和 listeners，返回一个 json 对象
     var transitionData = extractTransitionData(this);
 
+	// 遍历所有子元素，删除元素，并触发它们的离开 transition ？
     for (var i = 0; i < rawChildren.length; i++) {
       var c = rawChildren[i];
       if (c.tag) {
+		// c.key 存在并且不是以 __vlist 开头
         if (c.key != null && String(c.key).indexOf('__vlist') !== 0) {
+		  // 修改 children 就是修改 this.children，也就是修改 this.prevChildren（prevChildren）
           children.push(c);
-          map[c.key] = c
-          ;(c.data || (c.data = {})).transition = transitionData;
+          map[c.key] = c;
+		  // c.data.transition = transitionData
+		  (c.data || (c.data = {})).transition = transitionData;
+		// 报错：<transition-group> 的子元素必须有 key 属性
         } else {
           var opts = c.componentOptions;
           var name = opts ? (opts.Ctor.options.name || opts.tag || '') : c.tag;
@@ -10893,55 +11194,86 @@ var TransitionGroup = {
       for (var i$1 = 0; i$1 < prevChildren.length; i$1++) {
         var c$1 = prevChildren[i$1];
         c$1.data.transition = transitionData;
+		/*
+			getBoundingClientRect 方法返回元素的大小及其相对于视口的位置
+
+			eg:
+			div = $('div')[0];
+			div.getBoundingClientRect()
+			-> { top: 287.625, right: 308, bottom: 387.625, left: 8 ,height: 100, width: 300 }
+		*/
         c$1.data.pos = c$1.elm.getBoundingClientRect();
+		// 有 key 的保留
         if (map[c$1.key]) {
           kept.push(c$1);
+		// 没 key 的删除
         } else {
           removed.push(c$1);
         }
       }
+	  // 创建保留的节点
       this.kept = h(tag, null, kept);
       this.removed = removed;
     }
-
+	
+	// 返回创建的元素
     return h(tag, null, children)
   },
 
+  // 调用 patch 函数
   beforeUpdate: function beforeUpdate () {
     // force removing pass
+	// Vue$3.prototype.__patch__ = inBrowser ? patch : noop，补丁函数更新
     this.__patch__(
       this._vnode,
       this.kept,
       false, // hydrating
       true // removeOnly (!important, avoids unnecessary moves)
     );
+	// 更新 this._vnode
     this._vnode = this.kept;
   },
 
+  // 更新
   updated: function updated () {
     var children = this.prevChildren;
     var moveClass = this.moveClass || ((this.name || 'v') + '-move');
+	
+	// 不存在子组件或不支持 move 效果？
     if (!children.length || !this.hasMove(children[0].elm, moveClass)) {
       return
     }
 
     // we divide the work into three loops to avoid mixing DOM reads and writes
     // in each iteration - which helps prevent layout thrashing.
+	// 每个 child 依次执行 _moveCb()、_enterCb()
     children.forEach(callPendingCbs);
+	// 记录每个 child 的终点位置
     children.forEach(recordPosition);
+	// 对每个 child 依次水平/竖直偏移（由 transform:translate(x px,y px) 来实现）
     children.forEach(applyTranslation);
 
     // force reflow to put everything in position
     var body = document.body;
+	/*
+	clientHeight：内容高度 + padding 高度
+	offsetHeight：内容高度 + padding 高度 + 边框宽度 
+	*/
     var f = body.offsetHeight; // eslint-disable-line
 
     children.forEach(function (c) {
+	  // 当前 c 执行过 applyTranslation 方法，c.data.moved 就为 true，表示偏移过
       if (c.data.moved) {
         var el = c.elm;
         var s = el.style;
+		// 添加 moveClass 这个过渡 class
         addTransitionClass(el, moveClass);
+		// transform 重置为默认值，会触发过渡，以使得元素移回到默认位置？
         s.transform = s.WebkitTransform = s.transitionDuration = '';
+		
+		// transitionEndEvent = 'transitionend'，监听 transitionend 事件（过渡结束事件）
         el.addEventListener(transitionEndEvent, el._moveCb = function cb (e) {
+		  // 删除 class，解除绑定
           if (!e || /transform$/.test(e.propertyName)) {
             el.removeEventListener(transitionEndEvent, cb);
             el._moveCb = null;
@@ -10953,8 +11285,9 @@ var TransitionGroup = {
   },
 
   methods: {
+	// 返回一个布尔值，表示是否有 move 效果？
     hasMove: function hasMove (el, moveClass) {
-      /* istanbul ignore if */
+      // hasTransition = inBrowser && !isIE9，如果当前环境不支持 transition，直接返回 false
       if (!hasTransition) {
         return false
       }
@@ -10967,48 +11300,86 @@ var TransitionGroup = {
       // transition at this very moment, we make a clone of it and remove
       // all other transition classes applied to ensure only the move class
       // is applied.
+	  /*
+		检测应用 move class 的元素是否拥有 css transitions.
+
+		由于这个元素此刻可能在某个 entering transition 内部，所以这里就把它克隆一份，
+		并且移除所有其他的 transition classes，以确保只有 move class 在应用
+	  */
+
+	  // 克隆 el 元素
       var clone = el.cloneNode();
+	  // 移除所有 transition classes
       if (el._transitionClasses) {
         el._transitionClasses.forEach(function (cls) { removeClass(clone, cls); });
       }
+	  // 添加 moveClass
       addClass(clone, moveClass);
       clone.style.display = 'none';
+	
+	  
       this.$el.appendChild(clone);
+	  /*
+		getTransitionInfo(clone) 返回：
+		{
+			type: type,
+			timeout: timeout,
+			propCount: propCount,
+			hasTransform: hasTransform
+		}
+	  */
       var info = getTransitionInfo(clone);
       this.$el.removeChild(clone);
+
       return (this._hasMove = info.hasTransform)
     }
   }
 };
 
+// 执行回调
 function callPendingCbs (c) {
-  /* istanbul ignore if */
+  // 执行 c.elm._moveCb()
   if (c.elm._moveCb) {
     c.elm._moveCb();
   }
-  /* istanbul ignore if */
+  // 执行 c.elm._enterCb()
   if (c.elm._enterCb) {
     c.elm._enterCb();
   }
 }
 
+/*
+	getBoundingClientRect 方法返回元素的大小及其相对于视口的位置
+
+	eg:
+	div = $('div')[0];
+	div.getBoundingClientRect()
+	-> { top: 287.625, right: 308, bottom: 387.625, left: 8 ,height: 100, width: 300 }
+*/
+// 记录位置
 function recordPosition (c) {
   c.data.newPos = c.elm.getBoundingClientRect();
 }
 
+// 执行水平/竖直偏移运动
 function applyTranslation (c) {
   var oldPos = c.data.pos;
   var newPos = c.data.newPos;
+  // 水平偏移
   var dx = oldPos.left - newPos.left;
+  // 竖直偏移
   var dy = oldPos.top - newPos.top;
   if (dx || dy) {
+	// 标志偏移过
     c.data.moved = true;
     var s = c.elm.style;
+	// 设置 transform 属性，执行偏移
     s.transform = s.WebkitTransform = "translate(" + dx + "px," + dy + "px)";
     s.transitionDuration = '0s';
   }
 }
 
+// Transition 和 TransitionGroup 组件
 var platformComponents = {
   Transition: Transition,
   TransitionGroup: TransitionGroup
