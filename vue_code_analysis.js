@@ -3712,14 +3712,13 @@ function mountComponent (
     vm.$options.render = createEmptyVNode;
     {
       /* istanbul ignore if */
-      if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') ||
-        vm.$options.el || el) {
-		/*
-		发出警告：你正在用只包含运行时的版本，这个版本的模板编译器是不可用的。
-		可采取的方式有两种：
-		① 将模板预编译成渲染函数；
-		② 用包含模板编译器的版本
-		*/
+      if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') || vm.$options.el || el) {
+  		/*
+    		发出警告：你正在用只包含运行时的版本，这个版本的模板编译器是不可用的。
+    		可采取的方式有两种：
+    		① 将模板预编译成渲染函数；
+  		  ② 用包含模板编译器的版本
+  		*/
         warn(
           'You are using the runtime-only build of Vue where the template ' +
           'compiler is not available. Either pre-compile the templates into ' +
@@ -3727,7 +3726,7 @@ function mountComponent (
           vm
         );
       } else {
-		// 警告，组件安装失败：未定义模板或者渲染函数
+		    // 警告，组件安装失败：未定义模板或者渲染函数
         warn(
           'Failed to mount component: template or render function not defined.',
           vm
@@ -6396,7 +6395,25 @@ function initGlobalAPI (Vue) {
       );
     };
   }
-  // 定义 Vue.config 是一个对象，包含 Vue 的全局配置
+  /*
+     定义 Vue.config 是一个对象，包含 Vue 的全局配置
+
+     之前定义了一个全局的 config 对象，包含 silent、optionMergeStrategies、devtools、mustUseProp、isReservedTag、isReservedAttr ... 等属性/方法
+
+     不过，这个全局 config 的很多方法都是没有具体定义的，一般是空方法。
+    
+     这里相当于定义：Vue.config = config（获取 Vue.config 属性，就会返回全局的 config 对象）
+
+     后面又定义了以下语句：
+
+     Vue$3.config.mustUseProp = mustUseProp;
+     Vue$3.config.isReservedTag = isReservedTag;
+     Vue$3.config.isReservedAttr = isReservedAttr;
+     Vue$3.config.getTagNamespace = getTagNamespace;
+     Vue$3.config.isUnknownElement = isUnknownElement;
+
+     也就是说，定义了一些真正有作用的函数，覆盖了之前 config 的默认值
+   */
   Object.defineProperty(Vue, 'config', configDef);
 
   // exposed util methods.
@@ -11388,6 +11405,7 @@ var platformComponents = {
 /*  */
 
 // install platform specific utils
+// 全局的 config 对象定义了以下方法（空函数，没具体作用），后来又定义了 Vue$3.config = config，所以这里相当于覆盖原来全局 config 对象定义的默认方法
 Vue$3.config.mustUseProp = mustUseProp;
 Vue$3.config.isReservedTag = isReservedTag;
 Vue$3.config.isReservedAttr = isReservedAttr;
@@ -11395,10 +11413,25 @@ Vue$3.config.getTagNamespace = getTagNamespace;
 Vue$3.config.isUnknownElement = isUnknownElement;
 
 // install platform runtime directives & components
+/*
+  var platformDirectives = {
+    model: model$1,
+    show: show
+  };
+  把 model、show 等指令添到 Vue$3.options.directives 中
+ */
 extend(Vue$3.options.directives, platformDirectives);
+/*
+  var platformComponents = {
+    Transition: Transition,
+    TransitionGroup: TransitionGroup
+  };
+  把 Transition、TransitionGroup 等组件添加到 Vue$3.options.components 中
+ */
 extend(Vue$3.options.components, platformComponents);
 
 // install platform patch function
+// 把 pacth 方法挂载在 Vue 原型上，这样 Vue 的实例可以调用 patch 方法了
 Vue$3.prototype.__patch__ = inBrowser ? patch : noop;
 
 // public mount method
@@ -11406,27 +11439,31 @@ Vue$3.prototype.$mount = function (
   el,
   hydrating
 ) {
+  // query(el) 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
   el = el && inBrowser ? query(el) : undefined;
+  // 安装组件
   return mountComponent(this, el, hydrating)
 };
 
 // devtools global hook
 /* istanbul ignore next */
+// 控制台提示，setTimeout(f,0) 可以让后面的同步代码先执行，然后再执行 f 函数
 setTimeout(function () {
   if (config.devtools) {
+    // 如果安装了 Devtools，初始化
     if (devtools) {
       devtools.emit('init', Vue$3);
+    // 否则就调用 Chrome 的 console.log 方法提示用户安装 Devtools
     } else if ("development" !== 'production' && isChrome) {
+      // 优先用 console.log 方法，如果不存在，那就用 console.log 方法吧
       console[console.info ? 'info' : 'log'](
         'Download the Vue Devtools extension for a better development experience:\n' +
         'https://github.com/vuejs/vue-devtools'
       );
     }
   }
-  if ("development" !== 'production' &&
-    config.productionTip !== false &&
-    inBrowser && typeof console !== 'undefined'
-  ) {
+  // 开发模式下提示：你正在开发模式下使用 Vue，别忘了在生产环境下使用生产模式
+  if ("development" !== 'production' && config.productionTip !== false && inBrowser && typeof console !== 'undefined') {
     console[console.info ? 'info' : 'log'](
       "You are running Vue in development mode.\n" +
       "Make sure to turn on production mode when deploying for production.\n" +
@@ -11435,34 +11472,74 @@ setTimeout(function () {
   }
 }, 0);
 
-/*  */
+/* 
+<div title="abc&#10;def">test</div>
+其中 "&#10;" 是换行符的 HTML 转义字符。
+
+转义字符有3个组成部分：
+（1）&
+（2）实体名称，或“#实体编号”
+（3）;
+
+例如 
+空格 &nbsp; 或 &#160; 
+换行 &#10;
+
+（其中 160，10 指的是 ASCII码值（十进制））
+
+使用实体名称表示转义字符，比实体编号更容易记忆。但是，并不是所有浏览器都支持最新的实体名称，而几乎所有的浏览器对实体编号的支持都很好。
+
+*/
 
 // check whether current browser encodes a char inside attribute values
+// 判断一个字符是否会转码，例如，属性中有换行符是，ie 会将这个换行符转成转义字符
 function shouldDecode (content, encoded) {
   var div = document.createElement('div');
+  window.d = div;
   div.innerHTML = "<div a=\"" + content + "\"/>";
   return div.innerHTML.indexOf(encoded) > 0
 }
 
 // #3663
 // IE encodes newlines inside attribute values while other browsers don't
+// 如果属性值中有换行符，ie 会将换行符替换为转义字符，其他浏览器不会
 var shouldDecodeNewlines = inBrowser ? shouldDecode('\n', '&#10;') : false;
 
-/*  */
+/*
+  /\{\{((?:.|\n)+?)\}\}/g
+  其中 . 表示任意字符，除了换行符，\n 表示换行符，合一起就表示任意字符了
 
+  所以，这个正则的匹配的是 {{ 任意字符 1 次或多次 }}
+ */
 var defaultTagRE = /\{\{((?:.|\n)+?)\}\}/g;
+// 匹配以下字符之一 - . * + ? ^ $ { } ( ) [ ] / \
 var regexEscapeRE = /[-.*+?^${}()|[\]\/\\]/g;
 
+// 创建正则表达式
 var buildRegex = cached(function (delimiters) {
+  /*
+    对于 stringObject.replace(regexp|substr,replacement)，replacement 中的 $ 有特殊含义：
+
+    $$ // 插入一个 "$"
+    $& // 插入与 regexp 匹配的子串
+    $` // 插入当前匹配的子串左边的内容
+    $' // 插入当前匹配的子串右边的内容
+    $1、$2、...、$99 // 与 regexp 中的第 1 到第 99 个子表达式相匹配的文本
+
+    所以 '\\$&' 表示在原字符串开头加上 \，例如：
+    "Enjoy javascript".replace(re, "\\$&")
+    -> "\Enjoy javascript"
+
+    所以这个方法的作用是将 - . * + ? ^ $ { } ( ) [ ] / \ 等字符前加一个 \，然后拼接锦字符串，再生成正则表达式
+
+    例如 buildRegex(['{{','}}']) -> /\{\{((?:.|\n)+?)\}\}/g
+   */
   var open = delimiters[0].replace(regexEscapeRE, '\\$&');
   var close = delimiters[1].replace(regexEscapeRE, '\\$&');
   return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
 });
 
-function parseText (
-  text,
-  delimiters
-) {
+function parseText (text, delimiters) {
   var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
   if (!tagRE.test(text)) {
     return
