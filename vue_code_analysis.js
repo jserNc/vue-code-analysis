@@ -13,7 +13,6 @@ Building to a different directory: 改变构建目录
 Essential Git: 一些git操作
 
 
-
 看一个例子，了解双向绑定机制：
 出处：https://github.com/bison1994
 
@@ -73,7 +72,7 @@ Essential Git: 一些git操作
             // 给 vm[name] 属性赋值，进而触发该属性的 set 方法
             vm[name] = e.target.value;
           });
-		  // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
+		      // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
           node.value = vm[name]; 
           node.removeAttribute('v-model');
         }
@@ -8680,7 +8679,7 @@ function getAndRemoveAttr (el, name) {
   if ((val = el.attrsMap[name]) != null) {
     var list = el.attrsList;
     for (var i = 0, l = list.length; i < l; i++) {
-	  // 从 list 删除一项
+	    // 从 list 删除一项
       if (list[i].name === name) {
         list.splice(i, 1);
         break
@@ -11539,39 +11538,71 @@ var buildRegex = cached(function (delimiters) {
   return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
 });
 
+// 解析文本，json 格式的文本转为普通字符串？
 function parseText (text, delimiters) {
+  // 匹配文本的正则
   var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
+  // 匹配失败，就此返回
   if (!tagRE.test(text)) {
     return
   }
   var tokens = [];
   var lastIndex = tagRE.lastIndex = 0;
   var match, index;
+  /*
+    看一看：RegExpObject.exec(string)
+
+    ① 正则 RegExpObject 不含 g 参数，也就是非全局的匹配
+
+       如果 exec() 找到了匹配的文本，则返回一个结果数组。否则，返回 null。
+       此数组的第 0 个元素是与正则表达式相匹配的文本，第 1 个元素是与 RegExpObject 的第 1 个子表达式相匹配的文本（如果有的话），
+       第 2 个元素是与 RegExpObject 的第 2 个子表达式相匹配的文本（如果有的话），以此类推。
+       除了数组元素和 length 属性之外，exec() 方法还返回两个属性。index 属性声明的是匹配文本的第一个字符的位置。
+       input 属性则存放的是被检索的字符串 string。
+
+       我们可以看得出，在调用非全局的 RegExp 对象的 exec() 方法时，返回的数组与调用方法 String.match() 返回的数组是相同的。
+
+    ② 正则 RegExpObject 含有 g 参数，也就是全局匹配
+       
+       它会在 RegExpObject 的 lastIndex 属性指定的字符处开始检索字符串 string。
+       当 exec() 找到了与表达式相匹配的文本时，在匹配后，它将把 RegExpObject 的 lastIndex 属性设置为匹配文本的最后一个字符的下一个位置。
+       这就是说，您可以通过反复调用 exec() 方法来遍历字符串中的所有匹配文本。
+       当 exec() 再也找不到匹配的文本时，它将返回 null，并把 lastIndex 属性重置为 0。
+   */
   while ((match = tagRE.exec(text))) {
     index = match.index;
     // push text token
+    // text 中未被 tagRE 匹配的部分？
     if (index > lastIndex) {
       tokens.push(JSON.stringify(text.slice(lastIndex, index)));
     }
     // tag token
+    /*
+        例如：
+        parseFilters("message | filterA | filterB")
+        -> "_f("filterB")(_f("filterA")(message))"
+     */
     var exp = parseFilters(match[1].trim());
     tokens.push(("_s(" + exp + ")"));
     lastIndex = index + match[0].length;
   }
+  // text 中剩余部分
   if (lastIndex < text.length) {
     tokens.push(JSON.stringify(text.slice(lastIndex)));
   }
   return tokens.join('+')
 }
 
-/*  */
-
+// 转变节点，修正 el.staticClass 和 el.classBinding 属性
 function transformNode (el, options) {
+  // 警告函数
   var warn = options.warn || baseWarn;
+  // 返回 el.attrsMap['class']，并从 el.attrsList 中删除 'class' 这一项
   var staticClass = getAndRemoveAttr(el, 'class');
   if ("development" !== 'production' && staticClass) {
     var expression = parseText(staticClass, options.delimiters);
     if (expression) {
+      // <div class="{{ val }}"> 属性内的插值这种写法已经不支持了。推荐使用 <div :class="val">
       warn(
         "class=\"" + staticClass + "\": " +
         'Interpolation inside attributes has been removed. ' +
@@ -11580,42 +11611,50 @@ function transformNode (el, options) {
       );
     }
   }
+  // 静态 class
   if (staticClass) {
     el.staticClass = JSON.stringify(staticClass);
   }
+  // 动态 class，:class 或 v-bind:class 的值
   var classBinding = getBindingAttr(el, 'class', false /* getStatic */);
   if (classBinding) {
     el.classBinding = classBinding;
   }
 }
 
+// 返回一个字符串
 function genData (el) {
   var data = '';
+  // 静态 class
   if (el.staticClass) {
     data += "staticClass:" + (el.staticClass) + ",";
   }
+  // 动态绑定的 class
   if (el.classBinding) {
     data += "class:" + (el.classBinding) + ",";
   }
   return data
 }
 
+// class 相关方法
 var klass$1 = {
   staticKeys: ['staticClass'],
   transformNode: transformNode,
   genData: genData
 };
 
-/*  */
-
+// 转变节点，修正 el.staticStyle 和 el.styleBinding 属性
 function transformNode$1 (el, options) {
+  // 警告方法
   var warn = options.warn || baseWarn;
+  // 返回 el.attrsMap['style']，并从 el.attrsList 中删除 'style' 这一项
   var staticStyle = getAndRemoveAttr(el, 'style');
   if (staticStyle) {
     /* istanbul ignore if */
     {
       var expression = parseText(staticStyle, options.delimiters);
       if (expression) {
+        // <div style="{{ val }}"> 属性内的插值这种写法已经不支持了。推荐使用 <div :style="val">
         warn(
           "style=\"" + staticStyle + "\": " +
           'Interpolation inside attributes has been removed. ' +
@@ -11624,61 +11663,69 @@ function transformNode$1 (el, options) {
         );
       }
     }
+    // 静态 style
     el.staticStyle = JSON.stringify(parseStyleText(staticStyle));
   }
 
+  // 动态 style，:style 或 v-bind:style 的值
   var styleBinding = getBindingAttr(el, 'style', false /* getStatic */);
+  // 动态 style
   if (styleBinding) {
     el.styleBinding = styleBinding;
   }
 }
 
+// 返回一个字符串
 function genData$1 (el) {
   var data = '';
+  // 静态 style
   if (el.staticStyle) {
     data += "staticStyle:" + (el.staticStyle) + ",";
   }
+  // 动态绑定的 style
   if (el.styleBinding) {
     data += "style:(" + (el.styleBinding) + "),";
   }
   return data
 }
 
+// style 相关方法
 var style$1 = {
   staticKeys: ['staticStyle'],
   transformNode: transformNode$1,
   genData: genData$1
 };
 
+// class 和 style 模块
 var modules$1 = [
   klass$1,
   style$1
 ];
 
-/*  */
-
+// el.textContent
 function text (el, dir) {
   if (dir.value) {
+    // 添加 el.textContent 属性
     addProp(el, 'textContent', ("_s(" + (dir.value) + ")"));
   }
 }
 
-/*  */
-
+// el.innerHTML
 function html (el, dir) {
   if (dir.value) {
+    // 添加 el.innerHTML 属性
     addProp(el, 'innerHTML', ("_s(" + (dir.value) + ")"));
   }
 }
 
+// 指令
 var directives$1 = {
   model: model,
   text: text,
   html: html
 };
 
-/*  */
-
+// 单标签（不需要闭合标签）
 var isUnaryTag = makeMap(
   'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,' +
   'link,meta,param,source,track,wbr'
@@ -11686,12 +11733,14 @@ var isUnaryTag = makeMap(
 
 // Elements that you can, intentionally, leave open
 // (and which close themselves)
+// 会自动闭合的标签
 var canBeLeftOpenTag = makeMap(
   'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
 );
 
 // HTML5 tags https://html.spec.whatwg.org/multipage/indices.html#elements-3
 // Phrasing Content https://html.spec.whatwg.org/multipage/dom.html#phrasing-content
+// 非段落元素
 var isNonPhrasingTag = makeMap(
   'address,article,aside,base,blockquote,body,caption,col,colgroup,dd,' +
   'details,dialog,div,dl,dt,fieldset,figcaption,figure,footer,form,' +
@@ -11700,18 +11749,33 @@ var isNonPhrasingTag = makeMap(
   'title,tr,track'
 );
 
-/*  */
 
+// 基本选项
 var baseOptions = {
   expectHTML: true,
+  // class、style 模块
   modules: modules$1,
+  // model、text、html 指令
   directives: directives$1,
+  // 是否为 pre 标签
   isPreTag: isPreTag,
+  // 是否为单标签
   isUnaryTag: isUnaryTag,
   mustUseProp: mustUseProp,
+  // 会自动闭合的标签
   canBeLeftOpenTag: canBeLeftOpenTag,
   isReservedTag: isReservedTag,
   getTagNamespace: getTagNamespace,
+  /*
+    将一组对象的 staticKeys 数组合并成一个字符串，举个例子：
+    modules = [
+      { staticKeys : ['mod11','mod12'] },
+      { staticKeys : ['mod21','mod22'] },
+      { staticKeys : ['mod31','mod32'] }
+    ];
+    genStaticKeys(modules)
+    -> "mod11,mod12,mod21,mod22,mod31,mod32"
+  */
   staticKeys: genStaticKeys(modules$1)
 };
 
@@ -11720,6 +11784,7 @@ var baseOptions = {
 var decoder;
 
 var he = {
+  // 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
   decode: function decode (html) {
     decoder = decoder || document.createElement('div');
     decoder.innerHTML = html;
@@ -11738,43 +11803,62 @@ var he = {
  * http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
  */
 
-// Regular Expressions for parsing tags and attributes
+// Regular Expressions for parsing tags and attributes，解析 tag 和 attribute 的正则表达式
+
+// 匹配不是以下字符 空白字符 " ' <> / = 1次或多次
 var singleAttrIdentifier = /([^\s"'<>/=]+)/;
+// 匹配 =
 var singleAttrAssign = /(?:=)/;
 var singleAttrValues = [
-  // attr value double quotes
+  // attr value double quotes，双引号
   /"([^"]*)"+/.source,
-  // attr value, single quotes
+  // attr value, single quotes，单引号
   /'([^']*)'+/.source,
-  // attr value, no quotes
+  // attr value, no quotes，没引号
   /([^\s"'=<>`]+)/.source
 ];
+// 匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
 var attribute = new RegExp(
+  // 属性名
   '^\\s*' + singleAttrIdentifier.source +
+  // 等于号
   '(?:\\s*(' + singleAttrAssign.source + ')' +
+  // 属性值
   '\\s*(?:' + singleAttrValues.join('|') + '))?'
 );
 
 // could use https://www.w3.org/TR/1999/REC-xml-names-19990114/#NT-QName
 // but for Vue templates we can enforce a simple charset
+// 字母或下划线后跟若干个 word/-/.
 var ncname = '[a-zA-Z_][\\w\\-\\.]*';
 var qnameCapture = '((?:' + ncname + '\\:)?' + ncname + ')';
+// 开始标签开头
 var startTagOpen = new RegExp('^<' + qnameCapture);
+// 开始标签结尾
 var startTagClose = /^\s*(\/?)>/;
+// 结束标签
 var endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>');
+// 文档类型
 var doctype = /^<!DOCTYPE [^>]+>/i;
+// 注释
 var comment = /^<!--/;
+// 条件注释
 var conditionalComment = /^<!\[/;
 
+// 正则表达式捕获是否损坏，默认没有
 var IS_REGEX_CAPTURING_BROKEN = false;
+
 'x'.replace(/x(.)?/g, function (m, g) {
+  // 例如在 Chrome 浏览器下，是不会捕获这个分组的，也就是说 g 为 undefined
   IS_REGEX_CAPTURING_BROKEN = g === '';
 });
 
 // Special Elements (can contain anything)
+// 纯文本元素
 var isPlainTextElement = makeMap('script,style,textarea', true);
 var reCache = {};
 
+// 解码的时候用到的映射表
 var decodingMap = {
   '&lt;': '<',
   '&gt;': '>',
@@ -11782,13 +11866,19 @@ var decodingMap = {
   '&amp;': '&',
   '&#10;': '\n'
 };
+// 匹配 < > " &
 var encodedAttr = /&(?:lt|gt|quot|amp);/g;
+// 匹配 < > " & \n
 var encodedAttrWithNewLines = /&(?:lt|gt|quot|amp|#10);/g;
 
 // #5992
+// pre、textarea 标签会忽略换行
 var isIgnoreNewlineTag = makeMap('pre,textarea', true);
+
+// pre、textarea 标签，并且 html 首字符是换行符，那就忽略这个换行
 var shouldIgnoreFirstNewline = function (tag, html) { return tag && isIgnoreNewlineTag(tag) && html[0] === '\n'; };
 
+// 字符实体解码，如果 '&lt;' -> '<'
 function decodeAttr (value, shouldDecodeNewlines) {
   var re = shouldDecodeNewlines ? encodedAttrWithNewLines : encodedAttr;
   return value.replace(re, function (match) { return decodingMap[match]; })
@@ -13709,3 +13799,5 @@ Vue$3.compile = compileToFunctions;
 return Vue$3;
 
 })));
+
+// 有空的时候看看 http://www.cnblogs.com/QH-Jimmy/p/6862539.html#3770924
