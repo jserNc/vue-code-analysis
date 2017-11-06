@@ -12375,39 +12375,49 @@ function parse (template,options) {
       }
 
       if (!inVPre) {
-		// 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
+		    // 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
         processPre(element);
-		// 如果 element.pre 为 true，那就把 inVPre 标记为 true
+		    // 如果 element.pre 为 true，那就把 inVPre 标记为 true
         if (element.pre) {
           inVPre = true;
         }
       }
 
-	  // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
+	     // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
       if (platformIsPreTag(element.tag)) {
         inPre = true;
       }
 
-	  // pre 标签
+	    // pre 标签
       if (inVPre) {
         processRawAttrs(element);
       } else {
-		// 解析 v-for 属性
+		    // 解析 v-for 属性
         processFor(element);
+        // 解析 v-if 属性
         processIf(element);
+        // 标记 el.once
         processOnce(element);
+        // 标记 el.key
         processKey(element);
 
         // determine whether this is a plain element after
         // removing structural attributes
+        // 是否移除结构和的 attribute 和 key 后，该元素不存在属性
         element.plain = !element.key && !attrs.length;
 
+        // 标记 el.ref
         processRef(element);
+        // slot 相关属性
         processSlot(element);
+        // 标记 el.component、el.inlineTemplate 
         processComponent(element);
+
+        // 依次调用各个模块的 transformNode 函数
         for (var i$1 = 0; i$1 < transforms.length; i$1++) {
           transforms[i$1](element, options);
         }
+        // 处理 attribute
         processAttrs(element);
       }
 
@@ -12578,9 +12588,11 @@ function processRawAttrs (el) {
   }
 }
 
+// 添加 el.key
 function processKey (el) {
   var exp = getBindingAttr(el, 'key');
   if (exp) {
+    // <template> 标签不能添加 key 属性，只能在真实元素节点上添加
     if ("development" !== 'production' && el.tag === 'template') {
       warn$2("<template> cannot be keyed. Place the key on real elements instead.");
     }
@@ -12588,10 +12600,12 @@ function processKey (el) {
   }
 }
 
+// 标记 el.ref
 function processRef (el) {
   var ref = getBindingAttr(el, 'ref');
   if (ref) {
     el.ref = ref;
+    // el 的祖先元素中是否有 for 属性
     el.refInFor = checkInFor(el);
   }
 }
@@ -12610,17 +12624,17 @@ function processFor (el) {
       );
       return
     }
-	// 'in' 或 'of'
+	  // 'in' 或 'of'
     el.for = inMatch[2].trim();
-	// 'item' 或 '(value, key)'
+	  // 'item' 或 '(value, key)'
     var alias = inMatch[1].trim();
-	// v-for="(value, key) in object" 这种形式
+	  // v-for="(value, key) in object" 这种形式
     var iteratorMatch = alias.match(forIteratorRE);
-	// '(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
+	  // '(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
     if (iteratorMatch) {
-	  // "value"
+	    // "value"
       el.alias = iteratorMatch[1].trim();
-	  // "key"
+	    // "key"
       el.iterator1 = iteratorMatch[2].trim();
       if (iteratorMatch[3]) {
         el.iterator2 = iteratorMatch[3].trim();
@@ -12632,18 +12646,23 @@ function processFor (el) {
   }
 }
 
+// v-if 属性
 function processIf (el) {
   var exp = getAndRemoveAttr(el, 'v-if');
+  // v-if
   if (exp) {
     el.if = exp;
+    // el.ifConditions.push(condition)
     addIfCondition(el, {
       exp: exp,
       block: el
     });
   } else {
+    // v-else
     if (getAndRemoveAttr(el, 'v-else') != null) {
       el.else = true;
     }
+    // v-else-if
     var elseif = getAndRemoveAttr(el, 'v-else-if');
     if (elseif) {
       el.elseif = elseif;
@@ -12683,6 +12702,7 @@ function findPrevElement (children) {
   }
 }
 
+// 添加 if 条件
 function addIfCondition (el, condition) {
   if (!el.ifConditions) {
     el.ifConditions = [];
@@ -12690,6 +12710,7 @@ function addIfCondition (el, condition) {
   el.ifConditions.push(condition);
 }
 
+// 标记 el.once
 function processOnce (el) {
   var once$$1 = getAndRemoveAttr(el, 'v-once');
   if (once$$1 != null) {
@@ -12697,10 +12718,13 @@ function processOnce (el) {
   }
 }
 
+// slot 相关属性
 function processSlot (el) {
+  // slot 标签
   if (el.tag === 'slot') {
     el.slotName = getBindingAttr(el, 'name');
     if ("development" !== 'production' && el.key) {
+      // <slot> 标签上的 key 不起作用
       warn$2(
         "`key` does not work on <slot> because slots are abstract outlets " +
         "and can possibly expand into multiple elements. " +
@@ -12710,6 +12734,7 @@ function processSlot (el) {
   } else {
     var slotTarget = getBindingAttr(el, 'slot');
     if (slotTarget) {
+      // 若 slotTarget 为 '""'，则取 '"default"'
       el.slotTarget = slotTarget === '""' ? '"default"' : slotTarget;
     }
     if (el.tag === 'template') {
@@ -12718,71 +12743,109 @@ function processSlot (el) {
   }
 }
 
+// 标记 el.component、el.inlineTemplate 
 function processComponent (el) {
   var binding;
+  // is 属性
   if ((binding = getBindingAttr(el, 'is'))) {
     el.component = binding;
   }
+  // inline-template 属性
   if (getAndRemoveAttr(el, 'inline-template') != null) {
     el.inlineTemplate = true;
   }
 }
 
+// 属性处理
 function processAttrs (el) {
+  /*
+    el.attrsList 是一个数组，结构大概是：
+    [
+      {
+        name : name1,
+        value : value1
+      },
+      {
+        name : name2,
+        value : value2
+      }
+      ...
+    ]
+   */
   var list = el.attrsList;
   var i, l, name, rawName, value, modifiers, isProp;
+  // 遍历 attributes
   for (i = 0, l = list.length; i < l; i++) {
     name = rawName = list[i].name;
     value = list[i].value;
+
+    // 匹配指令 dirRE = /^v-|^@|^:/;
     if (dirRE.test(name)) {
       // mark element as dynamic
       el.hasBindings = true;
-      // modifiers
+      // modifiers，解析修饰符，返回一个 json，键名是各修饰符，键值是 true
       modifiers = parseModifiers(name);
+
       if (modifiers) {
+        // 匹配修饰符 modifierRE = /\.[^.]+/g，去掉修饰符
         name = name.replace(modifierRE, '');
       }
+      // 匹配 bind bindRE = /^:|^v-bind:/，去掉 v-bind
       if (bindRE.test(name)) { // v-bind
         name = name.replace(bindRE, '');
+        // 解析过滤器，返回一个字符串
         value = parseFilters(value);
         isProp = false;
         if (modifiers) {
+          // prop
           if (modifiers.prop) {
             isProp = true;
             name = camelize(name);
+            // 修正 'innerHtml' -> 'innerHTML'
             if (name === 'innerHtml') { name = 'innerHTML'; }
           }
+          // 驼峰化
           if (modifiers.camel) {
             name = camelize(name);
           }
+          // 事件绑定
           if (modifiers.sync) {
-            addHandler(
-              el,
-              ("update:" + (camelize(name))),
-              genAssignmentCode(value, "$event")
-            );
+            /*
+              addHandler 函数的大致作用为：
+              addHandler (el,name,value,modifiers,important,warn) 
+              -> el.events[name] = el.events[name].push({ value: value, modifiers: modifiers })
+
+              genAssignmentCode(value, "$event") 返回一个字符串形式的执行语句，其实就是一个 set 操作
+             */
+            addHandler(el, ("update:" + (camelize(name))), genAssignmentCode(value, "$event"));
           }
         }
-        if (!el.component && (
-          isProp || platformMustUseProp(el.tag, el.attrsMap.type, name)
-        )) {
+        if (!el.component && (isProp || platformMustUseProp(el.tag, el.attrsMap.type, name))) {
+          // el.props.push({ name: name, value: value })
           addProp(el, name, value);
         } else {
+          // el.attrs.push({ name: name, value: value })
           addAttr(el, name, value);
         }
+      // 事件绑定 onRE = /^@|^v-on:/
       } else if (onRE.test(name)) { // v-on
         name = name.replace(onRE, '');
         addHandler(el, name, value, modifiers, false, warn$2);
+      // 匹配指令 dirRE = /^v-|^@|^:/;
       } else { // normal directives
         name = name.replace(dirRE, '');
         // parse arg
+        // 匹配参数 argRE = /:(.*)$/，如 <div v-bind:class="[activeClass, errorClass]"></div>
         var argMatch = name.match(argRE);
         var arg = argMatch && argMatch[1];
         if (arg) {
+          // 如 'v-bind:class' 中的 'class'
           name = name.slice(0, -(arg.length + 1));
         }
+        // 添加指令
         addDirective(el, name, rawName, value, arg, modifiers);
         if ("development" !== 'production' && name === 'model') {
+          // 检测 el 及其所有祖先元素
           checkForAliasModel(el, value);
         }
       }
@@ -12791,6 +12854,7 @@ function processAttrs (el) {
       {
         var expression = parseText(value, delimiters);
         if (expression) {
+          // <div class="{{ val }}"> 属性内的插值这种写法已经不支持了。推荐使用 <div :class="val">
           warn$2(
             name + "=\"" + value + "\": " +
             'Interpolation inside attributes has been removed. ' +
@@ -12799,13 +12863,16 @@ function processAttrs (el) {
           );
         }
       }
+      // 直接添加 attr
       addAttr(el, name, JSON.stringify(value));
     }
   }
 }
 
+// 只要祖先元素中存在 for 属性，那就返回 true
 function checkInFor (el) {
   var parent = el;
+  // 遍历祖先元素，只要有一个元素的 for 属性存在就返回 true
   while (parent) {
     if (parent.for !== undefined) {
       return true
@@ -12815,10 +12882,19 @@ function checkInFor (el) {
   return false
 }
 
+// 解析修饰符，返回一个 json，键名是各修饰符，键值是 true
 function parseModifiers (name) {
+  // 匹配修饰符 modifierRE = /\.[^.]+/g;
   var match = name.match(modifierRE);
   if (match) {
     var ret = {};
+    /*
+      ret : {
+        modifier1 : true,
+        modifier2 : true,
+        ...
+      }
+     */
     match.forEach(function (m) { ret[m.slice(1)] = true; });
     return ret
   }
@@ -12873,10 +12949,12 @@ function guardIESVGBug (attrs) {
   return res
 }
 
+// 检测 el 及其所有祖先元素，如果源数组绑定到 el 上，发出警告
 function checkForAliasModel (el, value) {
   var _el = el;
   while (_el) {
     if (_el.for && _el.alias === value) {
+      // 在 v-for 列表里使用 v-model 是不能够修改 v-for 的源数组的
       warn$2(
         "<" + (el.tag) + " v-model=\"" + value + "\">: " +
         "You are binding v-model directly to a v-for iteration alias. " +
