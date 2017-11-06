@@ -8509,11 +8509,8 @@ function baseWarn (msg) {
   console.error(("[Vue compiler]: " + msg));
 }
 
-// 返回一个 module[key] 组成的数组
-function pluckModuleFunction (
-  modules,
-  key
-) {
+// 返回一个 module[key] 组成的数组，即 [ module1.key,  module2.key,  module2.key, ...]
+function pluckModuleFunction (modules,key) {
   return modules
     ? modules.map(function (m) { return m[key]; }).filter(function (_) { 
         // 既然返回参数自身，那么还要这个函数干嘛
@@ -11878,144 +11875,182 @@ var isIgnoreNewlineTag = makeMap('pre,textarea', true);
 // pre、textarea 标签，并且 html 首字符是换行符，那就忽略这个换行
 var shouldIgnoreFirstNewline = function (tag, html) { return tag && isIgnoreNewlineTag(tag) && html[0] === '\n'; };
 
-// 字符实体解码，如果 '&lt;' -> '<'
+// 字符实体解码，如 '&lt;' -> '<'
 function decodeAttr (value, shouldDecodeNewlines) {
   var re = shouldDecodeNewlines ? encodedAttrWithNewLines : encodedAttr;
   return value.replace(re, function (match) { return decodingMap[match]; })
 }
 
+// 解析 html
 function parseHTML (html, options) {
   var stack = [];
   var expectHTML = options.expectHTML;
+  // 是否是单标签，其中 no 方法在任何时候都返回 false
   var isUnaryTag$$1 = options.isUnaryTag || no;
+  // 自动闭合标签
   var canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;
   var index = 0;
   var last, lastTag;
   while (html) {
     last = html;
     // Make sure we're not in a plaintext content element like script/style
+	// 不是 script,style,textarea 等纯文本元素
     if (!lastTag || !isPlainTextElement(lastTag)) {
+	  // lastTag 是 pre、textarea 标签，并且 html 首字符是换行符
       if (shouldIgnoreFirstNewline(lastTag, html)) {
+		// 前进 1 位，也就是忽略这个换行符
         advance(1);
       }
+	  // '<' 在字符串 html 中首次出现的位置
       var textEnd = html.indexOf('<');
+	  // 第一个字符就是 '<'
       if (textEnd === 0) {
-        // Comment:
+        // 注释 comment = /^<!--/
         if (comment.test(html)) {
           var commentEnd = html.indexOf('-->');
 
           if (commentEnd >= 0) {
+			// 保留注释
             if (options.shouldKeepComment) {
+			  // 把注释节点内容取出来，后面会生成相应的 vnode
               options.comment(html.substring(4, commentEnd));
             }
+			// 前进 3 个字符（跳过 '-->'）
             advance(commentEnd + 3);
             continue
           }
         }
 
         // http://en.wikipedia.org/wiki/Conditional_comment#Downlevel-revealed_conditional_comment
+		// 条件注释 conditionalComment = /^<!\[/
         if (conditionalComment.test(html)) {
           var conditionalEnd = html.indexOf(']>');
-
+		  
+		  // 前进 2 个字符（跳过 ']>'）
           if (conditionalEnd >= 0) {
             advance(conditionalEnd + 2);
             continue
           }
         }
 
-        // Doctype:
+        // 文档类型 doctype = /^<!DOCTYPE [^>]+>/i
         var doctypeMatch = html.match(doctype);
         if (doctypeMatch) {
+		  // 跳过整个 doctype
           advance(doctypeMatch[0].length);
           continue
         }
 
-        // End tag:
+        // 结束标签
         var endTagMatch = html.match(endTag);
         if (endTagMatch) {
           var curIndex = index;
+		  // 跳过整个结束标签
           advance(endTagMatch[0].length);
+		  // 解析结束标签，其中 endTagMatch[1] 是标签名
           parseEndTag(endTagMatch[1], curIndex, index);
           continue
         }
 
-        // Start tag:
+        // 开始标签
         var startTagMatch = parseStartTag();
+		// startTagMatch 为真，说明开始标签闭合了
         if (startTagMatch) {
+		  // 处理开始标签（提取属性）
           handleStartTag(startTagMatch);
           continue
         }
       }
 
+	  // 文本，void 0 === undefined -> true
       var text = (void 0), rest = (void 0), next = (void 0);
+	  // 修正 textEnd，取出文本
       if (textEnd >= 0) {
         rest = html.slice(textEnd);
-        while (
-          !endTag.test(rest) &&
-          !startTagOpen.test(rest) &&
-          !comment.test(rest) &&
-          !conditionalComment.test(rest)
-        ) {
+        while (!endTag.test(rest) && !startTagOpen.test(rest) && !comment.test(rest) && !conditionalComment.test(rest)) {
           // < in plain text, be forgiving and treat it as text
+		  // 文本里的 < 也当做文本
           next = rest.indexOf('<', 1);
           if (next < 0) { break }
           textEnd += next;
           rest = html.slice(textEnd);
         }
+		// 文本
         text = html.substring(0, textEnd);
         advance(textEnd);
       }
 
+	  // html 中找不到 '<'，说明整个 html 都是文本
       if (textEnd < 0) {
         text = html;
         html = '';
       }
-
+	  // 文本处理
       if (options.chars && text) {
         options.chars(text);
       }
     } else {
       var endTagLength = 0;
+	  // 上一个标签名小写形式
       var stackedTag = lastTag.toLowerCase();
+	  /*
+		reCache = {}
+		以 lastTag = 'script' 为例：
+		reCache['script'] = /([\s\S]*?)(<\/script[^>]*>)/i
+		script 的结束标签
+	  */
       var reStackedTag = reCache[stackedTag] || (reCache[stackedTag] = new RegExp('([\\s\\S]*?)(</' + stackedTag + '[^>]*>)', 'i'));
-      var rest$1 = html.replace(reStackedTag, function (all, text, endTag) {
+      
+	  // 参数 all 表示 reStackedTag 匹配的所有内容，text 表示文本 ([\s\S]*?)，endTag 表示结束标签 (<\/script[^>]*>)
+	  var rest$1 = html.replace(reStackedTag, function (all, text, endTag) {
         endTagLength = endTag.length;
+		// 不是 script,style,textarea,noscript
         if (!isPlainTextElement(stackedTag) && stackedTag !== 'noscript') {
+		  // 取出注释和条件注释里的文本
           text = text
             .replace(/<!--([\s\S]*?)-->/g, '$1')
             .replace(/<!\[CDATA\[([\s\S]*?)]]>/g, '$1');
         }
+		// stackedTag 是 pre、textarea 标签，并且 text 首字符是换行符，那就忽略这个换行
         if (shouldIgnoreFirstNewline(stackedTag, text)) {
           text = text.slice(1);
         }
+		// 处理文本
         if (options.chars) {
           options.chars(text);
         }
         return ''
       });
+
       index += html.length - rest$1.length;
       html = rest$1;
+	  // 闭合 stackedTag 标签
       parseEndTag(stackedTag, index - endTagLength, index);
     }
 
+	// html 和处理之前是一样的值，也就是 html 中没有获取到任何有用的元素
     if (html === last) {
       options.chars && options.chars(html);
       if ("development" !== 'production' && !stack.length && options.warn) {
+		// 错误格式的标签
         options.warn(("Mal-formatted tag at end of template: \"" + html + "\""));
       }
       break
     }
   }
 
-  // Clean up any remaining tags
+  // Clean up any remaining tags，关闭所有标签
   parseEndTag();
 
+  // 前进 n 个字符（也就是说，有 n 个字符被忽略了）
   function advance (n) {
     index += n;
     html = html.substring(n);
   }
 
+  // 解析开始标签
   function parseStartTag () {
+	// 开始标签开头 startTagOpen = new RegExp('^<' + qnameCapture)
     var start = html.match(startTagOpen);
     if (start) {
       var match = {
@@ -12023,49 +12058,84 @@ function parseHTML (html, options) {
         attrs: [],
         start: index
       };
+	  // 跳过开始标签
       advance(start[0].length);
       var end, attr;
+	  // 开始标签结尾 startTagClose = /^\s*(\/?)>/，把开始标签里的所有属性挑出来
       while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+		// 跳过某属性
         advance(attr[0].length);
+		// 把该属性各个部分存下来
         match.attrs.push(attr);
       }
+	  // 到这里遇到了开始标签结尾，否则就返回 undefined（开始标签未闭合）
       if (end) {
+		// 单标签时 '/'，否则是空 ''
         match.unarySlash = end[1];
         advance(end[0].length);
         match.end = index;
+		/*
+		   到这里，match 结构如下：
+		   match = {
+			  tagName: start[1],
+			  attrs: [],
+			  start: index1,
+			  unarySlash: end[1],
+			  end: index2
+		   }
+		*/
         return match
       }
     }
   }
 
+  // 处理开始标签，提取属性
   function handleStartTag (match) {
+	// 标签名
     var tagName = match.tagName;
+	// 单标签时 '/'，否则是空 ''
     var unarySlash = match.unarySlash;
 
     if (expectHTML) {
+	  // h1,h2,h3,h4,h5 等标签不能在 p 标签内部
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
+		// 闭合 p 标签
         parseEndTag(lastTag);
       }
+	  // tagName 是自动闭合标签，并且和上一个标签名相同
       if (canBeLeftOpenTag$$1(tagName) && lastTag === tagName) {
+		// 闭合 tagName 标签
         parseEndTag(tagName);
       }
     }
 
+	// 单标签（img，input 等）
     var unary = isUnaryTag$$1(tagName) || !!unarySlash;
 
     var l = match.attrs.length;
     var attrs = new Array(l);
+	// 属性提取
     for (var i = 0; i < l; i++) {
       var args = match.attrs[i];
       // hackish work around FF bug https://bugzilla.mozilla.org/show_bug.cgi?id=369778
+	  /*
+		匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+		IS_REGEX_CAPTURING_BROKEN 为 true，说明正则表达式捕获损坏了，意味着空字符串 "" 也可以匹配出内容，这是不对的
+		args[3] 匹配的是 ([^"]*) 非 "
+		args[4] 匹配的是 ([^']*) 非 '
+		args[5] 匹配的是 ([^\s"'=<>`]+) 非 "'=<>`
+		所以可能匹配出空字符串 ''，这是不需要的
+	  */
       if (IS_REGEX_CAPTURING_BROKEN && args[0].indexOf('""') === -1) {
         if (args[3] === '') { delete args[3]; }
         if (args[4] === '') { delete args[4]; }
         if (args[5] === '') { delete args[5]; }
       }
+	  // args[3]、args[4]、args[5] 是或的关系，属性值只可能是其中一种
       var value = args[3] || args[4] || args[5] || '';
       attrs[i] = {
         name: args[1],
+		// 将字符实体解码，如 '&amp;' -> '&'
         value: decodeAttr(
           value,
           options.shouldDecodeNewlines
@@ -12073,7 +12143,9 @@ function parseHTML (html, options) {
       };
     }
 
+	// 不是单标签
     if (!unary) {
+	  // 将当前标签入栈
       stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
       lastTag = tagName;
     }
@@ -12083,18 +12155,23 @@ function parseHTML (html, options) {
     }
   }
 
+  // 解析结束标签
   function parseEndTag (tagName, start, end) {
     var pos, lowerCasedTagName;
+	// start/end 实参不存在时，都赋值为 index
     if (start == null) { start = index; }
     if (end == null) { end = index; }
 
+	// 取标签名的小写形式
     if (tagName) {
       lowerCasedTagName = tagName.toLowerCase();
     }
 
     // Find the closest opened tag of the same type
     if (tagName) {
+	  // 在解析开始标签时 stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
       for (pos = stack.length - 1; pos >= 0; pos--) {
+		// 因为之前用的 push 方法，所以这里从后向前匹配标签
         if (stack[pos].lowerCasedTag === lowerCasedTagName) {
           break
         }
@@ -12105,28 +12182,28 @@ function parseHTML (html, options) {
     }
 
     if (pos >= 0) {
-      // Close all the open elements, up the stack
+      // Close all the open elements, up the stack，关闭 stack 中索引 pos 之后的所有的标签
       for (var i = stack.length - 1; i >= pos; i--) {
-        if ("development" !== 'production' &&
-          (i > pos || !tagName) &&
-          options.warn
-        ) {
-          options.warn(
-            ("tag <" + (stack[i].tag) + "> has no matching end tag.")
-          );
+        if ("development" !== 'production' && (i > pos || !tagName) && options.warn) {
+          options.warn( ("tag <" + (stack[i].tag) + "> has no matching end tag.") );
         }
+		// 关闭标签
         if (options.end) {
           options.end(stack[i].tag, start, end);
         }
       }
 
       // Remove the open elements from the stack
+	  // 清理数组 stack 中已经关闭的标签
       stack.length = pos;
+	  // 重置最近未关闭标签
       lastTag = pos && stack[pos - 1].tag;
+	// br 标签
     } else if (lowerCasedTagName === 'br') {
       if (options.start) {
         options.start(tagName, [], true, start, end);
       }
+	// p 标签
     } else if (lowerCasedTagName === 'p') {
       if (options.start) {
         options.start(tagName, [], false, start, end);
@@ -12138,17 +12215,29 @@ function parseHTML (html, options) {
   }
 }
 
-/*  */
-
+// 事件绑定
 var onRE = /^@|^v-on:/;
+// 指令
 var dirRE = /^v-|^@|^:/;
+// in 或 of
 var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;
+/*
+ (( group #1 ),( group #2 ),( group #3 ))
+ 
+ group #1 : (\{[^}]*\}|[^,]*)  { 非 } 0次或多次 } 或 非 , 0次或多次
+ group #2 : ([^,]*)            非 , 0次或多次
+ group #3 : (?:,([^,]*))       , 后跟 0次或多次非 ,
+*/
 var forIteratorRE = /\((\{[^}]*\}|[^,]*),([^,]*)(?:,([^,]*))?\)/;
 
+// 匹配参数
 var argRE = /:(.*)$/;
+// 匹配 bind
 var bindRE = /^:|^v-bind:/;
+// 匹配修饰符
 var modifierRE = /\.[^.]+/g;
 
+//  decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
 var decodeHTMLCached = cached(he.decode);
 
 // configurable state
@@ -12164,23 +12253,30 @@ var platformGetTagNamespace;
 /**
  * Convert HTML string to AST.
  */
-function parse (
-  template,
-  options
-) {
+// 解析模板 template
+function parse (template,options) {
+  // 警告函数
   warn$2 = options.warn || baseWarn;
 
+  // 是否为 pre 标签
   platformIsPreTag = options.isPreTag || no;
+  // 是否必须用 prop
   platformMustUseProp = options.mustUseProp || no;
+  // 获取标签命名空间
   platformGetTagNamespace = options.getTagNamespace || no;
 
+  // 返回 options.modules 中每一个 module.transformNode 组成的数组，即 [ module1.transformNode,  module2.transformNode,  module2.transformNode, ...]
   transforms = pluckModuleFunction(options.modules, 'transformNode');
+  // [ module1.preTransformNode,  module2.preTransformNode,  module2.preTransformNode, ...]
   preTransforms = pluckModuleFunction(options.modules, 'preTransformNode');
+  // [ module1.postTransformNode,  module2.postTransformNode,  module2.postTransformNode, ...]
   postTransforms = pluckModuleFunction(options.modules, 'postTransformNode');
 
+  // 分隔符
   delimiters = options.delimiters;
 
   var stack = [];
+  // 是否保留空白
   var preserveWhitespace = options.preserveWhitespace !== false;
   var root;
   var currentParent;
@@ -12188,6 +12284,7 @@ function parse (
   var inPre = false;
   var warned = false;
 
+  // 警告一次
   function warnOnce (msg) {
     if (!warned) {
       warned = true;
@@ -12195,6 +12292,7 @@ function parse (
     }
   }
 
+  // 修正 inVPre 和 inPre
   function endPre (element) {
     // check pre state
     if (element.pre) {
@@ -12207,18 +12305,23 @@ function parse (
 
   parseHTML(template, {
     warn: warn$2,
+	// 是否为 html 模板
     expectHTML: options.expectHTML,
+	// 是否为单标签
     isUnaryTag: options.isUnaryTag,
+	// 是否为子闭合标签
     canBeLeftOpenTag: options.canBeLeftOpenTag,
+	// 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
     shouldDecodeNewlines: options.shouldDecodeNewlines,
+	// 是否保留注释
     shouldKeepComment: options.comments,
     start: function start (tag, attrs, unary) {
       // check namespace.
-      // inherit parent ns if there is one
+      // inherit parent ns if there is one，获取命名空间
       var ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag);
 
       // handle IE svg bug
-      /* istanbul ignore if */
+      // 修复 ie 下的 svg bug，即小组 attr.name 属性
       if (isIE && ns === 'svg') {
         attrs = guardIESVGBug(attrs);
       }
@@ -12226,7 +12329,27 @@ function parse (
       var element = {
         type: 1,
         tag: tag,
+		/*
+			attrsList : [
+				{
+					name : name1,
+					value : value1
+				},
+				{
+					name : name2,
+					value : value2
+				},
+				...
+			]
+		*/
         attrsList: attrs,
+		/*
+			attrsMap : {
+				name1 : value1,
+				name2 : value2,
+				...
+			}
+		*/
         attrsMap: makeAttrsMap(attrs),
         parent: currentParent,
         children: []
@@ -12235,8 +12358,10 @@ function parse (
         element.ns = ns;
       }
 
+	  // style 或 script 标签
       if (isForbiddenTag(element) && !isServerRendering()) {
         element.forbidden = true;
+		// 模板的作用仅仅是状态和 UI 之间的一个映射作用。不要在其中放置一些有副作用的标签，比如 style/script 等，它们是不会被解析的。
         "development" !== 'production' && warn$2(
           'Templates should only be responsible for mapping the state to the ' +
           'UI. Avoid placing tags with side-effects in your templates, such as ' +
@@ -12244,23 +12369,30 @@ function parse (
         );
       }
 
-      // apply pre-transforms
+      // apply pre-transforms，依次调用各个模块的 preTransformNode 函数
       for (var i = 0; i < preTransforms.length; i++) {
         preTransforms[i](element, options);
       }
 
       if (!inVPre) {
+		// 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
         processPre(element);
+		// 如果 element.pre 为 true，那就把 inVPre 标记为 true
         if (element.pre) {
           inVPre = true;
         }
       }
+
+	  // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
       if (platformIsPreTag(element.tag)) {
         inPre = true;
       }
+
+	  // pre 标签
       if (inVPre) {
         processRawAttrs(element);
       } else {
+		// 解析 v-for 属性
         processFor(element);
         processIf(element);
         processOnce(element);
@@ -12407,22 +12539,39 @@ function parse (
   return root
 }
 
+// 如果 el 元素的 v-pre 属性存在，那么将 el.pre 标记为 true
 function processPre (el) {
   if (getAndRemoveAttr(el, 'v-pre') != null) {
     el.pre = true;
   }
 }
 
+// 修改 el.attrs
 function processRawAttrs (el) {
   var l = el.attrsList.length;
   if (l) {
     var attrs = el.attrs = new Array(l);
+	/*
+		修改 el.attrs 属性
+		el.attrs : [
+			{ 
+				name : name1,
+				value : value1
+			},
+			{ 
+				name : name1,
+				value : value1
+			},
+			...
+		]
+	*/
     for (var i = 0; i < l; i++) {
       attrs[i] = {
         name: el.attrsList[i].name,
         value: JSON.stringify(el.attrsList[i].value)
       };
     }
+  // 不存在 attributes 并且不是 pre 元素
   } else if (!el.pre) {
     // non root node in pre blocks with no attributes
     el.plain = true;
@@ -12447,26 +12596,37 @@ function processRef (el) {
   }
 }
 
+// v-for 属性
 function processFor (el) {
   var exp;
+  // v-for 属性存在，eg : "item in items"
   if ((exp = getAndRemoveAttr(el, 'v-for'))) {
+	// forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/， in 或 of
     var inMatch = exp.match(forAliasRE);
+	// v-for 的属性值里必须含有 in 或 of 关键词
     if (!inMatch) {
       "development" !== 'production' && warn$2(
         ("Invalid v-for expression: " + exp)
       );
       return
     }
+	// 'in' 或 'of'
     el.for = inMatch[2].trim();
+	// 'item' 或 '(value, key)'
     var alias = inMatch[1].trim();
+	// v-for="(value, key) in object" 这种形式
     var iteratorMatch = alias.match(forIteratorRE);
+	// '(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
     if (iteratorMatch) {
+	  // "value"
       el.alias = iteratorMatch[1].trim();
+	  // "key"
       el.iterator1 = iteratorMatch[2].trim();
       if (iteratorMatch[3]) {
         el.iterator2 = iteratorMatch[3].trim();
       }
     } else {
+	  // 'item'
       el.alias = alias;
     }
   }
@@ -12683,9 +12843,12 @@ function isTextTag (el) {
   return el.tag === 'script' || el.tag === 'style'
 }
 
+// style 或 script 标签
 function isForbiddenTag (el) {
   return (
+	// <style></style>
     el.tag === 'style' ||
+	// <script src=".js"></script> 或 <script type="text/javascript" src=".js"></script>
     (el.tag === 'script' && (
       !el.attrsMap.type ||
       el.attrsMap.type === 'text/javascript'
@@ -12696,9 +12859,10 @@ function isForbiddenTag (el) {
 var ieNSBug = /^xmlns:NS\d+/;
 var ieNSPrefix = /^NS\d+:/;
 
-/* istanbul ignore next */
+// 修复 ie 下的 svg bug
 function guardIESVGBug (attrs) {
   var res = [];
+  // 遍历 attrs，修正 attr.name
   for (var i = 0; i < attrs.length; i++) {
     var attr = attrs[i];
     if (!ieNSBug.test(attr.name)) {
