@@ -340,10 +340,7 @@ function toNumber (val) {
  makeMap('aaa,bbb,ccc',true)('aaa') -> true
  makeMap('aaa,bbb,ccc',true)('AAA') -> true
  */
-function makeMap (
-  str,
-  expectsLowerCase
-) {
+function makeMap (str,expectsLowerCase) {
   var map = Object.create(null);
   var list = str.split(',');
   for (var i = 0; i < list.length; i++) {
@@ -11535,7 +11532,7 @@ var buildRegex = cached(function (delimiters) {
   return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
 });
 
-// 解析文本，json 格式的文本转为普通字符串？
+// 模板字符串转为浏览器可以解析的字符串
 function parseText (text, delimiters) {
   // 匹配文本的正则
   var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
@@ -12279,6 +12276,7 @@ function parse (template,options) {
   // 是否保留空白
   var preserveWhitespace = options.preserveWhitespace !== false;
   var root;
+  // 前一个元素就是后一个元素的父元素，这个变量就是标记当前元素的父元素
   var currentParent;
   var inVPre = false;
   var inPre = false;
@@ -12292,7 +12290,7 @@ function parse (template,options) {
     }
   }
 
-  // 修正 inVPre 和 inPre
+  // 将 inVPre 和 inPre 值置为 false
   function endPre (element) {
     // check pre state
     if (element.pre) {
@@ -12303,6 +12301,7 @@ function parse (template,options) {
     }
   }
 
+  // 解析模板 template
   parseHTML(template, {
     warn: warn$2,
 	// 是否为 html 模板
@@ -12403,7 +12402,7 @@ function parse (template,options) {
 
         // determine whether this is a plain element after
         // removing structural attributes
-        // 是否移除结构和的 attribute 和 key 后，该元素不存在属性
+        // 是否移除结构化的 attribute 和 key 后，该元素不存在属性
         element.plain = !element.key && !attrs.length;
 
         // 标记 el.ref
@@ -12421,15 +12420,18 @@ function parse (template,options) {
         processAttrs(element);
       }
 
+	  // 检查根元素约束条件
       function checkRootConstraints (el) {
         {
           if (el.tag === 'slot' || el.tag === 'template') {
+			// 不能将  slot / template 标签作为组件根元素，因为它可能包含多个节点
             warnOnce(
               "Cannot use <" + (el.tag) + "> as component root element because it may " +
               'contain multiple nodes.'
             );
           }
           if (el.attrsMap.hasOwnProperty('v-for')) {
+			// 不能在状态组件根节点上使用 v-for，因为它会渲染多元素
             warnOnce(
               'Cannot use v-for on stateful component root element because ' +
               'it renders multiple elements.'
@@ -12441,16 +12443,20 @@ function parse (template,options) {
       // tree management
       if (!root) {
         root = element;
+		// 检查根节点约束
         checkRootConstraints(root);
       } else if (!stack.length) {
         // allow root elements with v-if, v-else-if and v-else
+		// 允许根元素有 v-if、v-else-if、v-else 属性
         if (root.if && (element.elseif || element.else)) {
           checkRootConstraints(element);
+		  // root.ifConditions.push({ exp: element.elseif, block: element })
           addIfCondition(root, {
             exp: element.elseif,
             block: element
           });
         } else {
+	      // 组件模板必须包含一个根元素。如果在多元素上使用 v-if ，后面可以使用 v-else-if
           warnOnce(
             "Component template should contain exactly one root element. " +
             "If you are using v-if on multiple elements, " +
@@ -12458,25 +12464,36 @@ function parse (template,options) {
           );
         }
       }
+
+	  // element 为 style 或 script 标签时，element.forbidden = true
       if (currentParent && !element.forbidden) {
         if (element.elseif || element.else) {
+		  // 在 currentParent.children 数组中从后往前找，找到第一个 element 节点 prev，然后 prev.ifConditions.push({ exp: el.elseif,block: el })
           processIfConditions(element, currentParent);
+		// element 是 <template> 标签，并且 element 的 scope 属性存在
         } else if (element.slotScope) { // scoped slot
+		  // 如果移除结构化的 attribute 和 key 后，该元素不存在属性，那么 plain 属性为 true
           currentParent.plain = false;
-          var name = element.slotTarget || '"default"';(currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element;
+          var name = element.slotTarget || '"default"';
+		  (currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element;
+		// 绑定父子关系
         } else {
           currentParent.children.push(element);
           element.parent = currentParent;
         }
       }
+
+	  // 不是单标签
       if (!unary) {
         currentParent = element;
         stack.push(element);
       } else {
+		// 将 inVPre 和 inPre 值置为 false
         endPre(element);
       }
       // apply post-transforms
       for (var i$2 = 0; i$2 < postTransforms.length; i$2++) {
+		// 依次调用各个模块的 postTransformNode 函数
         postTransforms[i$2](element, options);
       }
     },
@@ -12484,24 +12501,32 @@ function parse (template,options) {
     end: function end () {
       // remove trailing whitespace
       var element = stack[stack.length - 1];
+	  // element 最后一个子元素
       var lastNode = element.children[element.children.length - 1];
+	  // nodeType 为 3 是 Text 类型，代表元素或属性中的文本内容。不是 pre 标签内的空白文本直接剔除
       if (lastNode && lastNode.type === 3 && lastNode.text === ' ' && !inPre) {
         element.children.pop();
       }
-      // pop stack
+      // pop stack，相当于 stack.pop()
       stack.length -= 1;
+	  // 前一个元素就是当前元素的父元素
       currentParent = stack[stack.length - 1];
+	  // 将 inVPre 和 inPre 值置为 false
       endPre(element);
     },
 
+	// 添加 Attr/Text 子节点
     chars: function chars (text) {
+	  // 如果不存在父元素，发出警告，就此返回
       if (!currentParent) {
         {
           if (text === template) {
+			// 组件模板需要有一个根元素，而不能仅仅是文本
             warnOnce(
               'Component template requires a root element, rather than just text.'
             );
           } else if ((text = text.trim())) {
+			// 跟元素之外的文本将被忽略
             warnOnce(
               ("text \"" + text + "\" outside root element will be ignored.")
             );
@@ -12509,28 +12534,35 @@ function parse (template,options) {
         }
         return
       }
-      // IE textarea placeholder bug
-      /* istanbul ignore if */
-      if (isIE &&
-        currentParent.tag === 'textarea' &&
-        currentParent.attrsMap.placeholder === text
-      ) {
+
+      // IE textarea placeholder bug，ie 下的 textarea placeholder，就此返回
+      if (isIE && currentParent.tag === 'textarea' && currentParent.attrsMap.placeholder === text) {
         return
       }
+
       var children = currentParent.children;
       text = inPre || text.trim()
+		/*
+			① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
+			② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+		*/
         ? isTextTag(currentParent) ? text : decodeHTMLCached(text)
         // only preserve whitespace if its not right after a starting tag
+		// 只有不是开始标签后（children.length > 0）的空白文本可以保留
         : preserveWhitespace && children.length ? ' ' : '';
+
       if (text) {
         var expression;
+		// 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
         if (!inVPre && text !== ' ' && (expression = parseText(text, delimiters))) {
-          children.push({
+          // nodeType 为 2 表示 Attr，代表属性
+		  children.push({
             type: 2,
             expression: expression,
             text: text
           });
         } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
+		  // nodeType 为 3 表示 Text，代表元素或属性中的文本内容
           children.push({
             type: 3,
             text: text
@@ -12538,6 +12570,7 @@ function parse (template,options) {
         }
       }
     },
+	// 添加注释节点
     comment: function comment (text) {
       currentParent.children.push({
         type: 3,
@@ -12670,14 +12703,18 @@ function processIf (el) {
   }
 }
 
+// 处理 if 条件
 function processIfConditions (el, parent) {
+  // 在 parent.children 数组中从后往前找，找到第一个 element 节点
   var prev = findPrevElement(parent.children);
   if (prev && prev.if) {
+	// prev.ifConditions.push({ exp: el.elseif,block: el })
     addIfCondition(prev, {
       exp: el.elseif,
       block: el
     });
   } else {
+	// 如果只有 v-else/v-else-if ，而没有对应的 v-if，发出警告
     warn$2(
       "v-" + (el.elseif ? ('else-if="' + el.elseif + '"') : 'else') + " " +
       "used on element <" + (el.tag) + "> without corresponding v-if."
@@ -12685,12 +12722,16 @@ function processIfConditions (el, parent) {
   }
 }
 
+// 找到之前的元素，在 children 数组里从后往前找，返回第一个找到的 type === 1 的元素
 function findPrevElement (children) {
   var i = children.length;
   while (i--) {
+	// 当前 child 是 element 元素，返回
     if (children[i].type === 1) {
       return children[i]
+	// 当前 child 不是 element 元素，跳过，重新找
     } else {
+	  // v-if 和 v-else(-if) 之间的文本会被忽略的
       if ("development" !== 'production' && children[i].text !== ' ') {
         warn$2(
           "text \"" + (children[i].text.trim()) + "\" between v-if and v-else(-if) " +
@@ -12915,6 +12956,7 @@ function makeAttrsMap (attrs) {
 }
 
 // for script (e.g. type="x/template") or style, do not decode content
+// script 和 style 标签为文本标签
 function isTextTag (el) {
   return el.tag === 'script' || el.tag === 'style'
 }
@@ -12967,11 +13009,19 @@ function checkForAliasModel (el, value) {
   }
 }
 
-/*  */
 
 var isStaticKey;
 var isPlatformReservedTag;
 
+/*
+	将 genStaticKeys$1 函数的执行结果缓存下来
+	
+	genStaticKeys$1 ('abc') -> makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs,abc')
+	genStaticKeys$1 () -> makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs')
+
+	genStaticKeys$1 ('abc')('abc') -> true
+	genStaticKeys$1 ('abc')('type') -> true
+*/
 var genStaticKeysCached = cached(genStaticKeys$1);
 
 /**
@@ -12985,6 +13035,13 @@ var genStaticKeysCached = cached(genStaticKeys$1);
  *    create fresh nodes for them on each re-render;
  * 2. Completely skip them in the patching process.
  */
+ /*
+	优化器的目标：遍历模板的 AST 树，并检测出纯静态的子树（也就是从来不需要改变的 dom 块）
+
+	一旦检测到了纯静态的子树，做如下处理：
+	1. 把它们提升到常量里。这样我们就不必为每一个 re-render 创建一批新的节点了。
+	2. 在打补丁的过程中跳过它们
+ */
 function optimize (root, options) {
   if (!root) { return }
   isStaticKey = genStaticKeysCached(options.staticKeys || '');
@@ -12995,6 +13052,14 @@ function optimize (root, options) {
   markStaticRoots(root, false);
 }
 
+/*
+	makeMap() 会返回一个函数，如：
+	makeMap('aaa,bbb,ccc',true)('aaa') -> true
+
+	genStaticKeys$1 ('abc') -> makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs,abc')
+	genStaticKeys$1 ('abc')('abc') -> true
+	genStaticKeys$1 ('abc')('type') -> true
+*/
 function genStaticKeys$1 (keys) {
   return makeMap(
     'type,tag,attrsList,attrsMap,plain,parent,children,attrs' +
