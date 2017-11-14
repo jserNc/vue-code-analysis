@@ -13067,30 +13067,39 @@ function genStaticKeys$1 (keys) {
   )
 }
 
+// 标记节点是否为静态节点
 function markStatic$1 (node) {
+  // 是否为静态节点
   node.static = isStatic(node);
+  // 1 为 Element，代表元素
   if (node.type === 1) {
+	/*
+		不要把 component 和 slot 的内容标记为静态的。这样可以避免两种情况：
+		① 组件不能突然插槽节点
+		② 静态的插槽内容在热更新时会出问题
+	*/
     // do not make component slot content static. this avoids
     // 1. components not able to mutate slot nodes
     // 2. static slot content fails for hot-reloading
-    if (
-      !isPlatformReservedTag(node.tag) &&
-      node.tag !== 'slot' &&
-      node.attrsMap['inline-template'] == null
-    ) {
+    if (!isPlatformReservedTag(node.tag) && node.tag !== 'slot' && node.attrsMap['inline-template'] == null) {
       return
     }
+	
+	// 遍历 node 的子节点，递归调用 markStatic$1()
     for (var i = 0, l = node.children.length; i < l; i++) {
       var child = node.children[i];
       markStatic$1(child);
+	  // 只要有一个子节点不是静态的，那么父节点 node 就不是静态的
       if (!child.static) {
         node.static = false;
       }
     }
     if (node.ifConditions) {
+	  // node.ifConditions[i$1] 结构为： { exp: el.elseif,block: el } 
       for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
         var block = node.ifConditions[i$1].block;
         markStatic$1(block);
+		// 只要有一个 block 不是静态的，那么 node 就不是静态的
         if (!block.static) {
           node.static = false;
         }
@@ -13099,59 +13108,88 @@ function markStatic$1 (node) {
   }
 }
 
+// 标记静态根节点
 function markStaticRoots (node, isInFor) {
+  // 1 为 Element，代表元素
   if (node.type === 1) {
     if (node.static || node.once) {
       node.staticInFor = isInFor;
     }
+	
+	/*
+		对一个静态根节点来说，它应该包含除了静态文本之外的其他子节点。
+		否则，提升的成本会超过它的效益，每次重新渲染之倒是一个更好的选择
+	*/
     // For a node to qualify as a static root, it should have children that
     // are not just static text. Otherwise the cost of hoisting out will
     // outweigh the benefits and it's better off to just always render it fresh.
-    if (node.static && node.children.length && !(
-      node.children.length === 1 &&
-      node.children[0].type === 3
-    )) {
+    
+	// 不能仅仅包含一个文本子节点，才可能判定为静态根节点
+	if (node.static && node.children.length && !(node.children.length === 1 && node.children[0].type === 3)) {
       node.staticRoot = true;
       return
     } else {
       node.staticRoot = false;
     }
+
+	// 遍历子节点，递归调用 markStaticRoots()
     if (node.children) {
       for (var i = 0, l = node.children.length; i < l; i++) {
         markStaticRoots(node.children[i], isInFor || !!node.for);
       }
     }
+
     if (node.ifConditions) {
+	   // node.ifConditions[i$1] 结构为： { exp: el.elseif,block: el } 
       for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
+		// 递归调用 markStaticRoots()
         markStaticRoots(node.ifConditions[i$1].block, isInFor);
       }
     }
   }
 }
 
+// 是否为静态节点
 function isStatic (node) {
+  // 表达式，非静态
   if (node.type === 2) { // expression
     return false
   }
+  // 文本，静态
   if (node.type === 3) { // text
     return true
   }
   return !!(node.pre || (
+	// 没有动态的 bind
     !node.hasBindings && // no dynamic bindings
+	// 没有 v-if、v-for、v-else
     !node.if && !node.for && // not v-if or v-for or v-else
+	// 不是 slot、component
     !isBuiltInTag(node.tag) && // not a built-in
+	// 不是保留标签
     isPlatformReservedTag(node.tag) && // not a component
+	// 不是模板的直接子元素
     !isDirectChildOfTemplateFor(node) &&
+	// node 对象的每一个属性都是静态的
     Object.keys(node).every(isStaticKey)
   ))
 }
 
+// 当一个元素为 template 标签（该标签的 for 属性为真）的直接子元素才返回 true
 function isDirectChildOfTemplateFor (node) {
   while (node.parent) {
     node = node.parent;
     if (node.tag !== 'template') {
       return false
     }
+	/*
+		例如：
+		<ul id="example-1">
+		  <li v-for="item in items">
+			{{ item.message }}
+		  </li>
+		</ul>
+	*/
     if (node.for) {
       return true
     }
@@ -13159,12 +13197,27 @@ function isDirectChildOfTemplateFor (node) {
   return false
 }
 
-/*  */
-
+/*
+	fnExpRE 匹配两种函数声明方式：
+	① 箭头函数
+	   (a) =>
+	   a => 
+	② 普通函数 
+	   function (
+*/
 var fnExpRE = /^\s*([\w$_]+|\([^)]*?\))\s*=>|^function\s*\(/;
+/*
+	simplePathRE 匹配以下路径：
+	① abc
+	② abc.def
+	③ abc['def']
+	④ abc["def"]
+	⑤ abc[123]
+	⑥ abc[def]
+*/
 var simplePathRE = /^\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\['.*?']|\[".*?"]|\[\d+]|\[[A-Za-z_$][\w$]*])*\s*$/;
 
-// keyCode aliases
+// keyCode aliases 键值的别名
 var keyCodes = {
   esc: 27,
   tab: 9,
@@ -13180,30 +13233,58 @@ var keyCodes = {
 // #4868: modifiers that prevent the execution of the listener
 // need to explicitly return null so that we can determine whether to remove
 // the listener for .once
+// 阻止监听器执行的修饰符需要显示地返回 null。一边有 once 修饰符是可以决定是否移除这个监听器。
 var genGuard = function (condition) { return ("if(" + condition + ")return null;"); };
 
+// 修饰符对应的执行代码
 var modifierCode = {
+  // 阻止冒泡
   stop: '$event.stopPropagation();',
+  // 阻止默认行为
   prevent: '$event.preventDefault();',
+  /*
+	event.currentTarget：返回事件当前所在的节点，会随着事件捕获和事件冒泡改变。也就是事件监听函数中的 this。
+	event.target：返回目标节点（最深层节点），固定的。正是这个属性使得事件代理成为可能。
+  */
   self: genGuard("$event.target !== $event.currentTarget"),
-  ctrl: genGuard("!$event.ctrlKey"),
+
+  // "ctrl" 键是否被按下 "if(!$event.ctrlKey)return null;"
+  ctrl: genGuard("!$event.ctrlKey"), 
+
+  // "shift" 键是否被按下 "if(!$event.shiftKey)return null;"
   shift: genGuard("!$event.shiftKey"),
+
+  // "alt" 键是否被按下 "if(!$event.altKey)return null;"
   alt: genGuard("!$event.altKey"),
+
+  // "meta" 键是否被按下 "if(!$event.metaKey)return null;"
   meta: genGuard("!$event.metaKey"),
+
+  // 鼠标左键 "if('button' in $event && $event.button !== 0)return null;"
   left: genGuard("'button' in $event && $event.button !== 0"),
+
+  // 鼠标中键 "if('button' in $event && $event.button !== 1)return null;"
   middle: genGuard("'button' in $event && $event.button !== 1"),
+
+  // 鼠标右键 "if('button' in $event && $event.button !== 2)return null;"
   right: genGuard("'button' in $event && $event.button !== 2")
 };
 
-function genHandlers (
-  events,
-  isNative,
-  warn
-) {
+/*
+	返回结果大概为：
+	'on:{
+		'name1' : "function($event){ some code}",
+		'name2' : "function($event){ some code}",
+		'name3' : "function($event){ some code}"
+		...
+	}'
+*/
+function genHandlers (events, isNative, warn) {
   var res = isNative ? 'nativeOn:{' : 'on:{';
   for (var name in events) {
     var handler = events[name];
     // #5330: warn click.right, since right clicks do not actually fire click events.
+	// click.right 这种写法发出警告。点击右键并不会触发点击事件
     if ("development" !== 'production' &&
       name === 'click' &&
       handler && handler.modifiers && handler.modifiers.right
@@ -13218,33 +13299,54 @@ function genHandlers (
   return res.slice(0, -1) + '}'
 }
 
-function genHandler (
-  name,
-  handler
-) {
+// 返回一个事件处理函数的字符串形式
+function genHandler (name, handler) {
+  // 没有指定 handler，那就返回空函数
   if (!handler) {
     return 'function(){}'
   }
 
+  // handler 是数组，递归调用 genHandler 函数
   if (Array.isArray(handler)) {
     return ("[" + (handler.map(function (handler) { return genHandler(name, handler); }).join(',')) + "]")
   }
 
+  /*
+	(1) simplePathRE 匹配以下路径：
+	① abc
+	② abc.def
+	③ abc['def']
+	④ abc["def"]
+	⑤ abc[123]
+	⑥ abc[def]
+
+	(2) fnExpRE 匹配两种函数声明方式：
+	① 箭头函数
+	   (a) =>
+	   a => 
+	② 普通函数 
+	   function (
+ */
   var isMethodPath = simplePathRE.test(handler.value);
   var isFunctionExpression = fnExpRE.test(handler.value);
 
+  // 没有修饰符
   if (!handler.modifiers) {
     return isMethodPath || isFunctionExpression
+	  // 完整的函数
       ? handler.value
+	  // 行内语句
       : ("function($event){" + (handler.value) + "}") // inline statement
   } else {
     var code = '';
     var genModifierCode = '';
     var keys = [];
+	// key 为 stop、prevent、self、ctrl...
     for (var key in handler.modifiers) {
       if (modifierCode[key]) {
+		// key 对应的执行代码
         genModifierCode += modifierCode[key];
-        // left/right
+        // left/right，键值
         if (keyCodes[key]) {
           keys.push(key);
         }
@@ -13252,80 +13354,125 @@ function genHandler (
         keys.push(key);
       }
     }
+
     if (keys.length) {
+	  /*
+		genKeyFilter(['left','right'])
+		-> "if(!('button' in $event)&&_k($event.keyCode,"left",37)&&_k($event.keyCode,"right",39))return null;"
+	  */
       code += genKeyFilter(keys);
     }
     // Make sure modifiers like prevent and stop get executed after key filtering
     if (genModifierCode) {
       code += genModifierCode;
     }
+	/*
+		① isMethodPath 为 true（handler.value 是方法路径）
+		   如 handler.value = abc['def']
+		   那么 handlerCode 为 abc['def']($event)
+		② isFunctionExpression 为 true（handler.value 是函数声明）
+		   如 handler.value = function(a){return a}
+		   那么 handlerCode 为 (function(a){return a})($event)
+		③ 以上都不是，那么 handlerCode 为 handler.value
+	*/
     var handlerCode = isMethodPath
       ? handler.value + '($event)'
       : isFunctionExpression
         ? ("(" + (handler.value) + ")($event)")
         : handler.value;
+
+	// 返回事件处理函数的字符串形式
     return ("function($event){" + code + handlerCode + "}")
   }
 }
 
+/*
+genKeyFilter(['left','right'])
+-> "if(!('button' in $event)&&_k($event.keyCode,"left",37)&&_k($event.keyCode,"right",39))return null;"
+*/
 function genKeyFilter (keys) {
   return ("if(!('button' in $event)&&" + (keys.map(genFilterCode).join('&&')) + ")return null;")
 }
 
+/*
+genFilterCode('left') -> "_k($event.keyCode,"left",37)"
+genFilterCode(37) -> "$event.keyCode!==37"
+*/
 function genFilterCode (key) {
   var keyVal = parseInt(key, 10);
+  // key 是数值
   if (keyVal) {
     return ("$event.keyCode!==" + keyVal)
   }
+  /*
+	var keyCodes = {
+	  esc: 27,
+	  tab: 9,
+	  enter: 13,
+	  space: 32,
+	  up: 38,
+	  left: 37,
+	  right: 39,
+	  down: 40,
+	  'delete': [8, 46]
+	};
+  */
   var alias = keyCodes[key];
+  // key 是键名
   return ("_k($event.keyCode," + (JSON.stringify(key)) + (alias ? ',' + JSON.stringify(alias) : '') + ")")
 }
 
-/*  */
-
+// 给 el 添加 wrapListeners 属性，_g 函数
 function on (el, dir) {
+  // v-on 使用修饰符时必须带有参数
   if ("development" !== 'production' && dir.modifiers) {
     warn("v-on without argument does not support modifiers.");
   }
   el.wrapListeners = function (code) { return ("_g(" + code + "," + (dir.value) + ")"); };
 }
 
-/*  */
-
+// 给 el 添加 wrapData 属性，_b 函数
 function bind$1 (el, dir) {
   el.wrapData = function (code) {
     return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")
   };
 }
 
-/*  */
-
+// 事件相关指令
 var baseDirectives = {
   on: on,
   bind: bind$1,
-  cloak: noop
-};
+  // function noop (a, b, c) {}
+  cloak: noop 
+}; 
 
-/*  */
-
+// 代码生成状态
 var CodegenState = function CodegenState (options) {
   this.options = options;
+  // 警告函数
   this.warn = options.warn || baseWarn;
+  // 返回一个 module['transformCode'] 组成的数组，即 [ module1.transformCode,  module2.transformCode,  module2.transformCode, ...]
   this.transforms = pluckModuleFunction(options.modules, 'transformCode');
+  // 返回一个 module['genData'] 组成的数组，即 [ module1.genData,  module2.genData,  module2.genData, ...]
   this.dataGenFns = pluckModuleFunction(options.modules, 'genData');
+  /*
+	var baseDirectives = {
+	  on: on,
+	  bind: bind$1,
+	  cloak: noop 
+	}; 
+  */
   this.directives = extend(extend({}, baseDirectives), options.directives);
   var isReservedTag = options.isReservedTag || no;
   this.maybeComponent = function (el) { return !isReservedTag(el.tag); };
   this.onceId = 0;
+  // 静态渲染函数
   this.staticRenderFns = [];
 };
 
 
 
-function generate (
-  ast,
-  options
-) {
+function generate (ast,options) {
   var state = new CodegenState(options);
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
@@ -13375,12 +13522,15 @@ function genStatic (el, state) {
 
 // v-once
 function genOnce (el, state) {
+  // 标记执行过 genOnce 函数
   el.onceProcessed = true;
+  // v-if
   if (el.if && !el.ifProcessed) {
     return genIf(el, state)
   } else if (el.staticInFor) {
     var key = '';
     var parent = el.parent;
+	// 取出祖先元素的 key 属性
     while (parent) {
       if (parent.for) {
         key = parent.key;
@@ -13388,6 +13538,7 @@ function genOnce (el, state) {
       }
       parent = parent.parent;
     }
+	// 没有 key 发出警告：v-for 内的 v-once 必须带有 key 属性
     if (!key) {
       "development" !== 'production' && state.warn(
         "v-once can only be used inside v-for that is keyed. "
@@ -13400,12 +13551,14 @@ function genOnce (el, state) {
   }
 }
 
+// v-if
 function genIf (
   el,
   state,
   altGen,
   altEmpty
 ) {
+  // 标记执行过 genIf
   el.ifProcessed = true; // avoid recursion
   return genIfConditions(el.ifConditions.slice(), state, altGen, altEmpty)
 }
