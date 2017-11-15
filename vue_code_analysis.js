@@ -13296,6 +13296,7 @@ function genHandlers (events, isNative, warn) {
     }
     res += "\"" + name + "\":" + (genHandler(name, handler)) + ",";
   }
+  // 'abc'.slice(0,-1) -> 'ab'（去除最后一个逗号，然后闭合 {}）
   return res.slice(0, -1) + '}'
 }
 
@@ -13471,7 +13472,13 @@ var CodegenState = function CodegenState (options) {
 };
 
 
-
+/*
+	返回一个 json 对象：
+	{
+		render : "some code",
+		staticRenderFns : []
+	}
+*/
 function generate (ast,options) {
   var state = new CodegenState(options);
   var code = ast ? genElement(ast, state) : '_c("div")';
@@ -13481,24 +13488,33 @@ function generate (ast,options) {
   }
 }
 
+// 生成渲染函数，返回字符串形式的执行代码
 function genElement (el, state) {
+  // 静态节点
   if (el.staticRoot && !el.staticProcessed) {
     return genStatic(el, state)
+  // v-once
   } else if (el.once && !el.onceProcessed) {
     return genOnce(el, state)
+  // v-for
   } else if (el.for && !el.forProcessed) {
     return genFor(el, state)
+  // v-if
   } else if (el.if && !el.ifProcessed) {
     return genIf(el, state)
+  // 子节点
   } else if (el.tag === 'template' && !el.slotTarget) {
     return genChildren(el, state) || 'void 0'
+  // 插槽
   } else if (el.tag === 'slot') {
     return genSlot(el, state)
   } else {
     // component or element
     var code;
+	// 组件
     if (el.component) {
       code = genComponent(el.component, el, state);
+	// 普通元素
     } else {
       var data = el.plain ? undefined : genData$2(el, state);
 
@@ -13506,6 +13522,7 @@ function genElement (el, state) {
       code = "_c('" + (el.tag) + "'" + (data ? ("," + data) : '') + (children ? ("," + children) : '') + ")";
     }
     // module transforms
+	// state.transforms 是一个 module['transformCode'] 组成的数组，即 [ module1.transformCode,  module2.transformCode,  module2.transformCode, ...]
     for (var i = 0; i < state.transforms.length; i++) {
       code = state.transforms[i](el, code);
     }
@@ -13513,7 +13530,7 @@ function genElement (el, state) {
   }
 }
 
-// hoist static sub-trees out
+// hoist static sub-trees out，静态节点？
 function genStatic (el, state) {
   el.staticProcessed = true;
   state.staticRenderFns.push(("with(this){return " + (genElement(el, state)) + "}"));
@@ -13563,16 +13580,14 @@ function genIf (
   return genIfConditions(el.ifConditions.slice(), state, altGen, altEmpty)
 }
 
-function genIfConditions (
-  conditions,
-  state,
-  altGen,
-  altEmpty
-) {
+// if 条件
+function genIfConditions (conditions, state, altGen, altEmpty) {
+  // 条件为空，返回 altEmpty
   if (!conditions.length) {
     return altEmpty || '_e()'
   }
 
+  // condition 形式为：{ exp: element.elseif, block: element }
   var condition = conditions.shift();
   if (condition.exp) {
     return ("(" + (condition.exp) + ")?" + (genTernaryExp(condition.block)) + ":" + (genIfConditions(conditions, state, altGen, altEmpty)))
@@ -13581,7 +13596,15 @@ function genIfConditions (
   }
 
   // v-if with v-once should generate code like (a)?_m(0):_m(1)
+  // 生成 3 元表达式
   function genTernaryExp (el) {
+	/*
+		① altGen 存在
+		   返回 altGen(el, state)
+		② altGen 不存在
+		   a. el.once 存在，返回 genOnce(el, state)
+		   b. el.once 不存在，返回 genElement(el, state)
+	*/
     return altGen
       ? altGen(el, state)
       : el.once
@@ -13590,12 +13613,8 @@ function genIfConditions (
   }
 }
 
-function genFor (
-  el,
-  state,
-  altGen,
-  altHelper
-) {
+// v-for
+function genFor (el, state, altGen, altHelper) {
   var exp = el.for;
   var alias = el.alias;
   var iterator1 = el.iterator1 ? ("," + (el.iterator1)) : '';
@@ -13607,6 +13626,7 @@ function genFor (
     el.tag !== 'template' &&
     !el.key
   ) {
+	// 用 v-for 生成组件列表时，必须要有显式的 key
     state.warn(
       "<" + (el.tag) + " v-for=\"" + alias + " in " + exp + "\">: component lists rendered with " +
       "v-for should have explicit keys. " +
@@ -13615,6 +13635,7 @@ function genFor (
     );
   }
 
+  // 标识执行过 genFor 函数，避免递归调用
   el.forProcessed = true; // avoid recursion
   return (altHelper || '_l') + "((" + exp + ")," +
     "function(" + alias + iterator1 + iterator2 + "){" +
@@ -13622,11 +13643,22 @@ function genFor (
     '})'
 }
 
+/*
+	返回值为这种形式：
+	data: {
+		staticClass:"view two",
+		attrs:{"name":"a"},
+		key : ...,
+		attrs : {},
+		...
+	}
+*/
 function genData$2 (el, state) {
   var data = '{';
 
   // directives first.
   // directives may mutate the el's other properties before they are generated.
+  // 指令
   var dirs = genDirectives(el, state);
   if (dirs) { data += dirs + ','; }
 
@@ -13646,14 +13678,15 @@ function genData$2 (el, state) {
     data += "pre:true,";
   }
   // record original tag name for components using "is" attribute
+  // 当组件用 is 属性时，记录原始的 tag 名
   if (el.component) {
     data += "tag:\"" + (el.tag) + "\",";
   }
-  // module data generation functions
+  // module data generation functions，模块数据
   for (var i = 0; i < state.dataGenFns.length; i++) {
     data += state.dataGenFns[i](el);
   }
-  // attributes
+  // attributes，属性
   if (el.attrs) {
     data += "attrs:{" + (genProps(el.attrs)) + "},";
   }
@@ -13661,11 +13694,27 @@ function genData$2 (el, state) {
   if (el.props) {
     data += "domProps:{" + (genProps(el.props)) + "},";
   }
-  // event handlers
+  // event handlers，事件处理函数
   if (el.events) {
+	/*
+		genHandlers(el.events, false, state.warn)
+		-> 'on:{
+			'name1' : "function($event){ some code}",
+			'name2' : "function($event){ some code}",
+			...
+		}'
+	*/
     data += (genHandlers(el.events, false, state.warn)) + ",";
   }
   if (el.nativeEvents) {
+	/*
+		genHandlers(el.nativeEvents, true, state.warn)
+		-> 'nativeOn:{
+			'name1' : "function($event){ some code}",
+			'name2' : "function($event){ some code}",
+			...
+		}'
+	*/
     data += (genHandlers(el.nativeEvents, true, state.warn)) + ",";
   }
   // slot target
@@ -13682,7 +13731,16 @@ function genData$2 (el, state) {
   }
   // inline-template
   if (el.inlineTemplate) {
-    var inlineTemplate = genInlineTemplate(el, state);
+	/*
+		"inlineTemplate:{render:function(){" + (inlineRenderFns.render) + "},staticRenderFns:[" + (inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(',')) + "]}"
+		
+		也就是:
+		inlineTemplate:{
+			render:function(){ inlineRenderFns.render},
+			staticRenderFns:[(inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(','))]
+		}
+	*/    
+	var inlineTemplate = genInlineTemplate(el, state);
     if (inlineTemplate) {
       data += inlineTemplate + ",";
     }
@@ -13690,18 +13748,30 @@ function genData$2 (el, state) {
   data = data.replace(/,$/, '') + '}';
   // v-bind data wrap
   if (el.wrapData) {
+	// el.wrapData = function (code) {return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")};
     data = el.wrapData(data);
   }
   // v-on data wrap
   if (el.wrapListeners) {
+	// el.wrapListeners = function (code) { return ("_g(" + code + "," + (dir.value) + ")"); };
     data = el.wrapListeners(data);
   }
   return data
 }
 
+/*
+    返回值：
+	"directives : [
+		{name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+		{name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+		...
+	]"
+*/
 function genDirectives (el, state) {
   var dirs = el.directives;
+  // 没有指令，直接返回
   if (!dirs) { return }
+
   var res = 'directives:[';
   var hasRuntime = false;
   var i, l, dir, needRuntime;
@@ -13720,37 +13790,61 @@ function genDirectives (el, state) {
     }
   }
   if (hasRuntime) {
+	// 'abc'.slice(0,-1) -> 'ab'（去除最后一个逗号，然后闭合 []）
     return res.slice(0, -1) + ']'
   }
 }
 
+/*
+    返回值：
+	"inlineTemplate:{
+		render:function(){" + (inlineRenderFns.render) + "},
+		staticRenderFns:[" + (inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(',')) + "]
+	}"
+*/
 function genInlineTemplate (el, state) {
   var ast = el.children[0];
-  if ("development" !== 'production' && (
-    el.children.length > 1 || ast.type !== 1
-  )) {
+
+  // 行内模板组件只能有一个子元素
+  if ("development" !== 'production' && (el.children.length > 1 || ast.type !== 1)) {
     state.warn('Inline-template components must have exactly one child element.');
   }
+
   if (ast.type === 1) {
+	/*
+		generate 函数返回一个 json 对象：
+		{
+			render : "some code",
+			staticRenderFns : []
+		}
+	*/
     var inlineRenderFns = generate(ast, state.options);
     return ("inlineTemplate:{render:function(){" + (inlineRenderFns.render) + "},staticRenderFns:[" + (inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(',')) + "]}")
   }
 }
 
-function genScopedSlots (
-  slots,
-  state
-) {
+/*
+    返回值：
+	"scopedSlots:_u([{...},{...},{...}])"
+*/
+function genScopedSlots (slots, state) {
   return ("scopedSlots:_u([" + (Object.keys(slots).map(function (key) {
       return genScopedSlot(key, slots[key], state)
     }).join(',')) + "])")
 }
 
-function genScopedSlot (
-  key,
-  el,
-  state
-) {
+/*
+	① v-for 中，返回：
+	"_l( exp ,function(){ ...})"
+
+	② 其他情况，返回：
+	"{
+		key:" + key + ",
+		fn:function(){...}
+	  }"
+
+*/
+function genScopedSlot (key, el, state) {
   if (el.for && !el.forProcessed) {
     return genForScopedSlot(key, el, state)
   }
@@ -13760,6 +13854,10 @@ function genScopedSlot (
       : genElement(el, state)) + "}}"
 }
 
+/*
+	v-for 中，返回：
+	"_l( exp ,function(){ ...})"
+*/
 function genForScopedSlot (
   key,
   el,
@@ -13769,6 +13867,7 @@ function genForScopedSlot (
   var alias = el.alias;
   var iterator1 = el.iterator1 ? ("," + (el.iterator1)) : '';
   var iterator2 = el.iterator2 ? ("," + (el.iterator2)) : '';
+  // 标志执行过该函数，避免递归调用
   el.forProcessed = true; // avoid recursion
   return "_l((" + exp + ")," +
     "function(" + alias + iterator1 + iterator2 + "){" +
@@ -13776,27 +13875,28 @@ function genForScopedSlot (
     '})'
 }
 
-function genChildren (
-  el,
-  state,
-  checkSkip,
-  altGenElement,
-  altGenNode
-) {
+// 子节点，返回值为：([,,,] ,normalizationType)
+function genChildren (el, state, checkSkip, altGenElement, altGenNode) {
   var children = el.children;
   if (children.length) {
     var el$1 = children[0];
     // optimize single v-for
-    if (children.length === 1 &&
-      el$1.for &&
-      el$1.tag !== 'template' &&
-      el$1.tag !== 'slot'
-    ) {
+	// el 只有一个子元素的，并且该子元素有 v-for 指令
+    if (children.length === 1 && el$1.for && el$1.tag !== 'template' && el$1.tag !== 'slot') {
       return (altGenElement || genElement)(el$1, state)
     }
+	/*
+		normalizationType 表示子元素数组所需的规范类型：
+		0 : 不需要规范化
+		1 : 需要简单的规范化处理
+		2 : 全面的规范化处理
+
+		getNormalizationType() 的返回值为 0 | 1 | 2
+	*/
     var normalizationType = checkSkip
       ? getNormalizationType(children, state.maybeComponent)
       : 0;
+
     var gen = altGenNode || genNode;
     return ("[" + (children.map(function (c) { return gen(c, state); }).join(',')) + "]" + (normalizationType ? ("," + normalizationType) : ''))
   }
@@ -13806,21 +13906,32 @@ function genChildren (
 // 0: no normalization needed
 // 1: simple normalization needed (possible 1-level deep nested array)
 // 2: full normalization needed
-function getNormalizationType (
-  children,
-  maybeComponent
-) {
+/*
+	确定子元素数组所需的规范类型：
+	0 : 不需要规范化
+	1 : 需要简单的规范化处理
+	2 : 全面的规范化处理
+
+	返回值：0 | 1 | 2
+*/
+function getNormalizationType (children, maybeComponent) {
   var res = 0;
   for (var i = 0; i < children.length; i++) {
     var el = children[i];
+	// 当前子元素不是 element，则跳过该元素
     if (el.type !== 1) {
       continue
     }
-    if (needsNormalization(el) ||
-        (el.ifConditions && el.ifConditions.some(function (c) { return needsNormalization(c.block); }))) {
+	
+	/*
+		① el 为 <template> 或 <slot> 或 v-for 属性存在，即需要规范化
+		② el 存在 v-if 属性，并且某些 if 条件涉及到的元素满足 ①
+	*/
+    if (needsNormalization(el) || (el.ifConditions && el.ifConditions.some(function (c) { return needsNormalization(c.block); }))) {
       res = 2;
       break
     }
+	// 组件
     if (maybeComponent(el) ||
         (el.ifConditions && el.ifConditions.some(function (c) { return maybeComponent(c.block); }))) {
       res = 1;
@@ -13829,36 +13940,49 @@ function getNormalizationType (
   return res
 }
 
+// el 为 <template> 或 <slot> 或 v-for 属性存在，即需要规范化
 function needsNormalization (el) {
   return el.for !== undefined || el.tag === 'template' || el.tag === 'slot'
 }
 
+// 生成节点
 function genNode (node, state) {
+  // element 元素
   if (node.type === 1) {
     return genElement(node, state)
+  // 注释
   } if (node.type === 3 && node.isComment) {
     return genComment(node)
+  // 文本
   } else {
     return genText(node)
   }
 }
 
+// 文本，"_v( someText )"（Vue.prototype._v = createTextVNode）
 function genText (text) {
   return ("_v(" + (text.type === 2
     ? text.expression // no need for () because already wrapped in _s()
     : transformSpecialNewlines(JSON.stringify(text.text))) + ")")
 }
 
+// 注释，"_e( someComment )"（Vue.prototype._e = createEmptyVNode）
 function genComment (comment) {
   return ("_e('" + (comment.text) + "')")
 }
 
+// 插槽，"_t(,,,)"（Vue.prototype._t = renderSlot）
 function genSlot (el, state) {
+  // 插槽名
   var slotName = el.slotName || '"default"';
+  // 子节点
   var children = genChildren(el, state);
   var res = "_t(" + slotName + (children ? ("," + children) : '');
+  // 属性
   var attrs = el.attrs && ("{" + (el.attrs.map(function (a) { return ((camelize(a.name)) + ":" + (a.value)); }).join(',')) + "}");
+  // v-bind 属性
   var bind$$1 = el.attrsMap['v-bind'];
+  
   if ((attrs || bind$$1) && !children) {
     res += ",null";
   }
@@ -13872,28 +13996,33 @@ function genSlot (el, state) {
 }
 
 // componentName is el.component, take it as argument to shun flow's pessimistic refinement
-function genComponent (
-  componentName,
-  el,
-  state
-) {
+// 组件，"_c(,,,)"（vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); }）
+function genComponent (componentName, el, state) {
   var children = el.inlineTemplate ? null : genChildren(el, state, true);
   return ("_c(" + componentName + "," + (genData$2(el, state)) + (children ? ("," + children) : '') + ")")
 }
 
+/*
+	返回值：
+	"propName1:propValue1,propName2:propValue2,propName3:propValue3..."
+*/
 function genProps (props) {
   var res = '';
   for (var i = 0; i < props.length; i++) {
     var prop = props[i];
     res += "\"" + (prop.name) + "\":" + (transformSpecialNewlines(prop.value)) + ",";
   }
+  // 剔除最后一个 ,
   return res.slice(0, -1)
 }
 
 // #3895, #4268
+// 这个编码为 2028 的字符为行分隔符，会被浏览器理解为换行，而在 Javascript 的字符串表达式中是不允许换行的，从而导致错误。
 function transformSpecialNewlines (text) {
   return text
+	// 行分隔符
     .replace(/\u2028/g, '\\u2028')
+	// 段分隔符
     .replace(/\u2029/g, '\\u2029')
 }
 
@@ -13901,6 +14030,8 @@ function transformSpecialNewlines (text) {
 
 // these keywords should not appear inside expressions, but operators like
 // typeof, instanceof and in are allowed
+// 以下关键词是不能出现在表达式当中的，不过，typeof、instanceof、in 等运算符是可以的
+// prohibitedKeywordRE = /\bdo\b|\bif\b|\bfor\b|\blet\b|\bnew\b|\btry\b|\bvar\b|\bcase\b|\belse\b|\bwith\b|\bawait\b|\bbreak\b|\bcatch\b|\bclass\b|\bconst\b|\bsuper\b|\bthrow\b|\bwhile\b|\byield\b|\bdelete\b|\bexport\b|\bimport\b|\breturn\b|\bswitch\b|\bdefault\b|\bextends\b|\bfinally\b|\bcontinue\b|\bdebugger\b|\bfunction\b|\barguments\b/
 var prohibitedKeywordRE = new RegExp('\\b' + (
   'do,if,for,let,new,try,var,case,else,with,await,break,catch,class,const,' +
   'super,throw,while,yield,delete,export,import,return,switch,default,' +
@@ -13908,22 +14039,35 @@ var prohibitedKeywordRE = new RegExp('\\b' + (
 ).split(',').join('\\b|\\b') + '\\b');
 
 // these unary operators should not be used as property/method names
+// 一下一元运算符不应该被用作属性/方法名
+// unaryOperatorsRE = /\bdelete\s*\([^\)]*\)|\btypeof\s*\([^\)]*\)|\bvoid\s*\([^\)]*\)/
 var unaryOperatorsRE = new RegExp('\\b' + (
   'delete,typeof,void'
 ).split(',').join('\\s*\\([^\\)]*\\)|\\b') + '\\s*\\([^\\)]*\\)');
 
 // check valid identifier for v-for
+// 为 v-for 检测有效的标识符，A-Za-z_$ 开头，后跟若干个 \w 或 $
 var identRE = /[A-Za-z_$][\w$]*/;
 
 // strip strings in expressions
+// 在表达式中剥去字符串
+/*
+	① 'someString'
+	② "someString"
+	③ `someString${
+	④ }someString`
+	⑤ `someString`
+*/
 var stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|\}(?:[^`\\]|\\.)*`|`(?:[^`\\]|\\.)*`/g;
 
 // detect problematic expressions in a template
+// 检测模板中有问题的表达式
 function detectErrors (ast) {
   var errors = [];
   if (ast) {
     checkNode(ast, errors);
   }
+  // 返回一个数组
   return errors
 }
 
@@ -13965,6 +14109,7 @@ function checkEvent (exp, text, errors) {
   checkExpression(exp, text, errors);
 }
 
+// 检查 v-for
 function checkFor (node, text, errors) {
   checkExpression(node.for || '', text, errors);
   checkIdentifier(node.alias, 'v-for alias', text, errors);
@@ -13972,22 +14117,33 @@ function checkFor (node, text, errors) {
   checkIdentifier(node.iterator2, 'v-for iterator', text, errors);
 }
 
+// 检查标识符
 function checkIdentifier (ident, type, text, errors) {
+  // identRE = /[A-Za-z_$][\w$]*/
   if (typeof ident === 'string' && !identRE.test(ident)) {
+	// 错误信息加到 errors 数组里
     errors.push(("invalid " + type + " \"" + ident + "\" in expression: " + (text.trim())));
   }
 }
 
+// 检查表达式
 function checkExpression (exp, text, errors) {
   try {
+	// 用 exp 表达式作为函数体，若报错，说明这个函数体有问题
     new Function(("return " + exp));
   } catch (e) {
+	/*
+		① 把 exp 中的字符串剔除
+		② 检测是否有 do if for let 等关键词
+	*/
     var keywordMatch = exp.replace(stripStringRE, '').match(prohibitedKeywordRE);
+	// 属性名中不能使用 JavaScript 关键词
     if (keywordMatch) {
       errors.push(
         "avoid using JavaScript keyword as property name: " +
         "\"" + (keywordMatch[0]) + "\" in expression " + (text.trim())
       );
+	// 表达式错误
     } else {
       errors.push(("invalid expression: " + (text.trim())));
     }
