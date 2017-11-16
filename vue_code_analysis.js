@@ -14039,7 +14039,7 @@ var prohibitedKeywordRE = new RegExp('\\b' + (
 ).split(',').join('\\b|\\b') + '\\b');
 
 // these unary operators should not be used as property/method names
-// 一下一元运算符不应该被用作属性/方法名
+// 以下一元运算符不能被用作属性/方法名
 // unaryOperatorsRE = /\bdelete\s*\([^\)]*\)|\btypeof\s*\([^\)]*\)|\bvoid\s*\([^\)]*\)/
 var unaryOperatorsRE = new RegExp('\\b' + (
   'delete,typeof,void'
@@ -14071,14 +14071,19 @@ function detectErrors (ast) {
   return errors
 }
 
+// 检查节点
 function checkNode (node, errors) {
+  // element 元素
   if (node.type === 1) {
     for (var name in node.attrsMap) {
+	  // dirRE = /^v-|^@|^:/
       if (dirRE.test(name)) {
         var value = node.attrsMap[name];
         if (value) {
+		  // v-for 列表
           if (name === 'v-for') {
             checkFor(node, ("v-for=\"" + value + "\""), errors);
+		  // onRE = /^@|^v-on:/ 事件
           } else if (onRE.test(name)) {
             checkEvent(value, (name + "=\"" + value + "\""), errors);
           } else {
@@ -14087,20 +14092,26 @@ function checkNode (node, errors) {
         }
       }
     }
+	// 对子元素，递归调用 checkNode()
     if (node.children) {
       for (var i = 0; i < node.children.length; i++) {
         checkNode(node.children[i], errors);
       }
     }
+  // 表达式
   } else if (node.type === 2) {
     checkExpression(node.expression, node.text, errors);
   }
 }
 
+// 检查事件
 function checkEvent (exp, text, errors) {
+  // 剔除 exp 中的字符串
   var stipped = exp.replace(stripStringRE, '');
+  // unaryOperatorsRE 匹配 delete,typeof,void 等一元运算符
   var keywordMatch = stipped.match(unaryOperatorsRE);
   if (keywordMatch && stipped.charAt(keywordMatch.index - 1) !== '$') {
+	// 一元运算符不能被用作属性/方法名
     errors.push(
       "avoid using JavaScript unary operator as property name: " +
       "\"" + (keywordMatch[0]) + "\" in expression " + (text.trim())
@@ -14150,8 +14161,7 @@ function checkExpression (exp, text, errors) {
   }
 }
 
-/*  */
-
+// 创建一个方法，以 code 为执行代码块，若出错，则返回一个空方法
 function createFunction (code, errors) {
   try {
     return new Function(code)
@@ -14161,23 +14171,25 @@ function createFunction (code, errors) {
   }
 }
 
+// 将 compile 转为函数
 function createCompileToFunctionFn (compile) {
   var cache = Object.create(null);
 
-  return function compileToFunctions (
-    template,
-    options,
-    vm
-  ) {
+  return function compileToFunctions (template, options, vm) {
     options = options || {};
 
-    /* istanbul ignore if */
     {
       // detect possible CSP restriction
+	  // CSP 是由单词 Content Security Policy 的首字母组成，CSP 旨在减少跨站脚本攻击
       try {
         new Function('return 1');
       } catch (e) {
         if (e.toString().match(/unsafe-eval|CSP/)) {
+		  /*
+			您正在使用独立版本的 Vue.js。当前环境的“内容安全政策”禁止不安全的 eval。
+			模板编译器在这样的环境里是不能生效的。可以考虑解除“内容安全政策”以支持不安全的 eval。
+			或者将您的目标预编译进渲染函数也是可以的。
+		  */
           warn(
             'It seems you are using the standalone build of Vue.js in an ' +
             'environment with Content Security Policy that prohibits unsafe-eval. ' +
@@ -14193,6 +14205,7 @@ function createCompileToFunctionFn (compile) {
     var key = options.delimiters
       ? String(options.delimiters) + template
       : template;
+	// 首先从缓存去取
     if (cache[key]) {
       return cache[key]
     }
@@ -14202,6 +14215,7 @@ function createCompileToFunctionFn (compile) {
 
     // check compilation errors/tips
     {
+	  // 编译出错
       if (compiled.errors && compiled.errors.length) {
         warn(
           "Error compiling template:\n\n" + template + "\n\n" +
@@ -14209,15 +14223,18 @@ function createCompileToFunctionFn (compile) {
           vm
         );
       }
+	  // 编译提示
       if (compiled.tips && compiled.tips.length) {
         compiled.tips.forEach(function (msg) { return tip(msg, vm); });
       }
     }
 
-    // turn code into functions
+    // turn code into functions，最终返回这个 res 对象
     var res = {};
     var fnGenErrors = [];
+	// 将执行文本 compiled.render 转为函数，若出错加入到数组 fnGenErrors 中
     res.render = createFunction(compiled.render, fnGenErrors);
+	// 将文本数组 compiled.staticRenderFns，转成函数数组
     res.staticRenderFns = compiled.staticRenderFns.map(function (code) {
       return createFunction(code, fnGenErrors)
     });
@@ -14228,6 +14245,7 @@ function createCompileToFunctionFn (compile) {
     /* istanbul ignore if */
     {
       if ((!compiled.errors || !compiled.errors.length) && fnGenErrors.length) {
+		// 生成渲染函数失败
         warn(
           "Failed to generate render function:\n\n" +
           fnGenErrors.map(function (ref) {
@@ -14241,48 +14259,53 @@ function createCompileToFunctionFn (compile) {
       }
     }
 
+	// 将 res 缓存下来
     return (cache[key] = res)
   }
 }
 
-/*  */
-
+// 生成编译器
 function createCompilerCreator (baseCompile) {
   return function createCompiler (baseOptions) {
-    function compile (
-      template,
-      options
-    ) {
+    function compile (template, options) {
+	  // finalOptions 继承 baseOptions 对象
       var finalOptions = Object.create(baseOptions);
       var errors = [];
       var tips = [];
+	  // 向 errors/tips 数组里添加 msg
       finalOptions.warn = function (msg, tip) {
         (tip ? tips : errors).push(msg);
       };
 
+	  // 根据 options 修正 finalOptions 对象
       if (options) {
-        // merge custom modules
+        // merge custom modules，合并自定义模块
         if (options.modules) {
-          finalOptions.modules =
-            (baseOptions.modules || []).concat(options.modules);
+          finalOptions.modules = (baseOptions.modules || []).concat(options.modules);
         }
-        // merge custom directives
+        // merge custom directives，合并自定义指令
         if (options.directives) {
-          finalOptions.directives = extend(
-            Object.create(baseOptions.directives),
-            options.directives
-          );
+          finalOptions.directives = extend(Object.create(baseOptions.directives),options.directives);
         }
-        // copy other options
+        // copy other options，合并其他 option 选项
         for (var key in options) {
           if (key !== 'modules' && key !== 'directives') {
             finalOptions[key] = options[key];
           }
         }
       }
-
+	
+	  /*
+		 compiled 结构:
+		 {
+			ast: ast,
+			render: code.render,
+			staticRenderFns: code.staticRenderFns
+		  }
+	  */
       var compiled = baseCompile(template, finalOptions);
       {
+		// detectErrors() 返回一个 error 数组
         errors.push.apply(errors, detectErrors(compiled.ast));
       }
       compiled.errors = errors;
@@ -14290,6 +14313,7 @@ function createCompilerCreator (baseCompile) {
       return compiled
     }
 
+	// 返回一个 json 对象
     return {
       compile: compile,
       compileToFunctions: createCompileToFunctionFn(compile)
@@ -14302,12 +14326,19 @@ function createCompilerCreator (baseCompile) {
 // `createCompilerCreator` allows creating compilers that use alternative
 // parser/optimizer/codegen, e.g the SSR optimizing compiler.
 // Here we just export a default compiler using the default parts.
-var createCompiler = createCompilerCreator(function baseCompile (
-  template,
-  options
-) {
+// createCompiler 是一个函数
+var createCompiler = createCompilerCreator(function baseCompile (template,options) {
+  // 将模板解析成 ast 树
   var ast = parse(template.trim(), options);
+  // 优化 ast 树
   optimize(ast, options);
+  /*
+	返回一个 json 对象：
+	{
+		render : "some code",
+		staticRenderFns : []
+	}
+ */
   var code = generate(ast, options);
   return {
     ast: ast,
@@ -14316,26 +14347,31 @@ var createCompiler = createCompilerCreator(function baseCompile (
   }
 });
 
-/*  */
-
+/* 
+	ref$1 结构为：
+	{
+      compile: compile,
+      compileToFunctions: createCompileToFunctionFn(compile)
+    }
+*/
 var ref$1 = createCompiler(baseOptions);
 var compileToFunctions = ref$1.compileToFunctions;
 
-/*  */
 
+// 根据选择器 id 获取元素，然后返回该元素的 innerHTML
 var idToTemplate = cached(function (id) {
+  // 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
   var el = query(id);
   return el && el.innerHTML
 });
 
+// 保存之前定义的 Vue$3.prototype.$mount
 var mount = Vue$3.prototype.$mount;
-Vue$3.prototype.$mount = function (
-  el,
-  hydrating
-) {
+// 重新定义 Vue$3.prototype.$mount，本质上还是调用 mount 方法，也就是之前定义的 Vue$3.prototype.$mount 方法
+Vue$3.prototype.$mount = function (el,hydrating) {
   el = el && query(el);
 
-  /* istanbul ignore if */
+  // 不能将 Vue 挂载到 <html> 或 <body>，只能挂载到普通元素上
   if (el === document.body || el === document.documentElement) {
     "development" !== 'production' && warn(
       "Do not mount Vue to <html> or <body> - mount to normal elements instead."
@@ -14345,13 +14381,17 @@ Vue$3.prototype.$mount = function (
 
   var options = this.$options;
   // resolve template/el and convert to render function
+  // 如果没有 options.render，将 template/el 转化为渲染函数
   if (!options.render) {
     var template = options.template;
+	// 有模板就用模板
     if (template) {
+	  // 字符串模板
       if (typeof template === 'string') {
         if (template.charAt(0) === '#') {
+		  // template 为 id 值获取其对应元素的 innerHTML
           template = idToTemplate(template);
-          /* istanbul ignore if */
+          // 如果没找到对应元素，发出警告
           if ("development" !== 'production' && !template) {
             warn(
               ("Template element not found or is empty: " + (options.template)),
@@ -14359,23 +14399,34 @@ Vue$3.prototype.$mount = function (
             );
           }
         }
+	  // <template> 标签，直接获取其 innerHTML 为模板
       } else if (template.nodeType) {
         template = template.innerHTML;
+	  // 其他都是无效的 template 选项
       } else {
         {
           warn('invalid template option:' + template, this);
         }
         return this
       }
+	// 没有模板就用 el 元素的 outerHTML 作为模板
     } else if (el) {
       template = getOuterHTML(el);
     }
     if (template) {
-      /* istanbul ignore if */
+      // 标记编译开始
       if ("development" !== 'production' && config.performance && mark) {
         mark('compile');
       }
-
+	
+	  /*
+		ref 为一个 json 对象，结果为：
+		{
+			render : createFunction(compiled.render, fnGenErrors),
+			staticRenderFns : compiled.staticRenderFns.map(function (code) {return createFunction(code, fnGenErrors)})
+		}
+	  */
+	  // 根据模板生成渲染函数
       var ref = compileToFunctions(template, {
         shouldDecodeNewlines: shouldDecodeNewlines,
         delimiters: options.delimiters,
@@ -14383,16 +14434,18 @@ Vue$3.prototype.$mount = function (
       }, this);
       var render = ref.render;
       var staticRenderFns = ref.staticRenderFns;
+	  // 修改 options 对象
       options.render = render;
       options.staticRenderFns = staticRenderFns;
 
-      /* istanbul ignore if */
+      // 标记编译结束
       if ("development" !== 'production' && config.performance && mark) {
         mark('compile end');
         measure(((this._name) + " compile"), 'compile', 'compile end');
       }
     }
   }
+  // 修正完 this.$options 的渲染函数，开始安装元素 el
   return mount.call(this, el, hydrating)
 };
 
@@ -14400,6 +14453,7 @@ Vue$3.prototype.$mount = function (
  * Get outerHTML of elements, taking care
  * of SVG elements in IE as well.
  */
+// 获取元素的 outerHTML，如果获取不到则获取其父元素的 innerHTML
 function getOuterHTML (el) {
   if (el.outerHTML) {
     return el.outerHTML
@@ -14410,6 +14464,7 @@ function getOuterHTML (el) {
   }
 }
 
+// 编译方法挂载到全局的 Vue 下
 Vue$3.compile = compileToFunctions;
 
 return Vue$3;
