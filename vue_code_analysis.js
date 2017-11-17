@@ -14471,4 +14471,7 @@ return Vue$3;
 
 })));
 
-// 有空的时候看看 http://www.cnblogs.com/QH-Jimmy/p/6862539.html#3770924
+// 有空的时候看看 
+// http://www.cnblogs.com/QH-Jimmy/p/6862539.html#3770924
+// https://www.brooch.me/2017/03/17/vue-source-notes-1/
+// https://www.brooch.me/tags/vue/
