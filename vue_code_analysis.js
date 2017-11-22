@@ -308,9 +308,9 @@ function isValidArrayIndex (val) {
  */
  /*
  对于 JSON.stringify(value [, replacer] [, space]) 函数：
- value 将要序列化成一个 JSON 字符串的值
- null  表示对象的所有属性都会被序列化
- space 文本在每个级别缩进指定数目的空格
+ 第 1 个参数为 value 将要序列化成一个 JSON 字符串的值
+ 第 2 个参数为 null 时表示对象的所有属性都会被序列化
+ 第 3 个参数 space 文本在每个级别缩进指定数目的空格
  */
 function toString (val) {
   return val == null
@@ -420,7 +420,7 @@ var camelize = cached(function (str) {
 /**
  * Capitalize a string.
  */
- // 首字母大写
+// 首字母大写
 var capitalize = cached(function (str) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 });
@@ -428,19 +428,24 @@ var capitalize = cached(function (str) {
 /**
  * Hyphenate a camelCase string.
  */
- // 将驼峰写法转为连字符写法，如 hyphenate('aaBbCc') -> "aa-bb-cc"
+// 将驼峰写法转为连字符写法，如 hyphenate('aaBbCc') -> "aa-bb-cc"
 var hyphenateRE = /([^-])([A-Z])/g;
 var hyphenate = cached(function (str) {
   return str
     .replace(hyphenateRE, '$1-$2')
     .replace(hyphenateRE, '$1-$2')
     .toLowerCase()
+	/*
+		为什么要调用 2 次 replace 呢？
+		①只调用 1 次 replace，hyphenate ('ABCD') -> "a-bc-d"
+		② 调用 2 次 replace，hyphenate ('ABCD') -> "a-b-c-d"
+	*/
 });
 
 /**
  * Simple bind, faster than native
  */
- // 绑定函数 fn 内部的 this 到 ctx 
+// 绑定函数 fn 内部的 this 到 ctx 
 function bind (fn, ctx) {
   function boundFn (a) {
     var l = arguments.length;
@@ -574,6 +579,7 @@ function genStaticKeys (modules) {
 function looseEqual (a, b) {
   var isObjectA = isObject(a);
   var isObjectB = isObject(b);
+  // a b 都是对象
   if (isObjectA && isObjectB) {
     try {
       return JSON.stringify(a) === JSON.stringify(b)
@@ -582,6 +588,7 @@ function looseEqual (a, b) {
 	  // 如果序列化出错，可能是循环引用，那就判断 a 和 b 是否严格相等
       return a === b
     }
+  // a b 都不是对象
   } else if (!isObjectA && !isObjectB) {
     return String(a) === String(b)
   } else {
@@ -1607,7 +1614,7 @@ function defineReactive$$1 (
  * triggers change notification if the property doesn't
  * already exist.
  */
- // 给 target 添加 key 属性。在添加新属性时，发出变化通知。
+ // 给 target 添加 key 属性（值为 val）。若该属性之前不存在，发出变化通知。
 function set (target, key, val) {
   // target 是数组，并且 key 是合法的数组索引
   if (Array.isArray(target) && isValidArrayIndex(key)) {
