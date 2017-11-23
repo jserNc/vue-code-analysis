@@ -4427,14 +4427,19 @@ var sharedPropertyDefinition = {
   set: noop
 };
 
-// 给 target 对象定义属性 key
+// 给 target 对象定义属性 key，用 target[sourceKey][key] 代理 target[key] 
 function proxy (target, sourceKey, key) {
   sharedPropertyDefinition.get = function proxyGetter () {
+	// 这里的 this 指 target，可以通过打印 console.log('this === target:',this === target) 来验证
     return this[sourceKey][key]
   };
   sharedPropertyDefinition.set = function proxySetter (val) {
     this[sourceKey][key] = val;
   };
+  /*
+	① target.key 实际执行函数 (function() { return this[sourceKey][key] }).bind(target)
+	② target.key = val 实际执行函数 (function() { this[sourceKey][key] = val }).bind(target)
+  */
   Object.defineProperty(target, key, sharedPropertyDefinition);
 }
 
@@ -4646,7 +4651,7 @@ function initComputed (vm, computed) {
   }
 }
 
-// 给 target 对象添加 key 属性
+// 以代理方式给 target 对象添加 key 属性
 function defineComputed (target, key, userDef) {
   // userDef 是 function
   if (typeof userDef === 'function') {
@@ -6039,7 +6044,7 @@ function initUse (Vue) {
 
 // 定义静态方法 Vue$3.mixin
 function initMixin$1 (Vue) {
-  // 修改 Vue.options
+  // 合并 Vue.options 和 mixin 对象
   Vue.mixin = function (mixin) {
     this.options = mergeOptions(this.options, mixin);
     return this
@@ -6082,7 +6087,7 @@ function initExtend (Vue) {
 	// 创建 Profile 实例，并挂载到一个元素上。
 	new Profile().$mount('#mount-point')
   */
-  // 返回一个新的构造函数 Sub
+  // 构造函数继承。返回一个新的构造函数 Sub
   Vue.extend = function (extendOptions) {
 	// 参数未定义则初始化为空对象
     extendOptions = extendOptions || {};
@@ -6104,7 +6109,7 @@ function initExtend (Vue) {
 		/^[a-zA-Z][\w-]*$/ 匹配字母开头后面跟若干个字母或数字或下划线或汉字或-
 	  */
       if (!/^[a-zA-Z][\w-]*$/.test(name)) {
-		// 组件名之内包含字母数字和连字符，并且要以字母开头
+		// 有效的组件名之内包含字母数字和连字符，并且要以字母开头
         warn(
           'Invalid component name: "' + name + '". Component names ' +
           'can only contain alphanumeric characters and the hyphen, ' +
@@ -6223,6 +6228,7 @@ function initAssetRegisters (Vue) {
 	];
   */
   ASSET_TYPES.forEach(function (type) {
+	// 对 definition 进行修正，最后返回 definition
     Vue[type] = function (id, definition) {
 	  // 只有一个实参就是获取注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
       if (!definition) {
@@ -6238,13 +6244,14 @@ function initAssetRegisters (Vue) {
             );
           }
         }
+		// Vue['component'](id, definition) 其中 definition 为普通对象，修正 definition
         if (type === 'component' && isPlainObject(definition)) {
 		  // 如果没有 name 属性就取第一个参数 id
           definition.name = definition.name || id;
 		  // Vue.options._base = Vue，所以 definition = Vue.extend(definition);
           definition = this.options._base.extend(definition);
         }
-		// definition 如果是函数，那就重置为 json 对象
+		// Vue['directive'](id, definition) 其中 definition 为函数，修正 definition 为对象
         if (type === 'directive' && typeof definition === 'function') {
           definition = { bind: definition, update: definition };
         }
