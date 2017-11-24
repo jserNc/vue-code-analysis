@@ -3917,6 +3917,7 @@ function deactivateChildComponent (vm, direct) {
   }
 }
 
+// 调用钩子函数
 function callHook (vm, hook) {
   // 钩子处理函数
   var handlers = vm.$options[hook];
@@ -5959,7 +5960,12 @@ function resolveModifiedOptions (Ctor) {
   return modified
 }
 
-// 过滤数组 latest，选出属于 extended 并且不属于 sealed 的元素
+/*
+  ① latest 是数组，过滤数组 latest，选出属于 extended 或不属于 sealed 的元素
+  ② 否则，直接返回 latest
+
+  dedupe 的意思就是删除重复数据
+*/
 function dedupe (latest, extended, sealed) {
   // compare latest and sealed to ensure lifecycle hooks won't be duplicated
   // between merges
