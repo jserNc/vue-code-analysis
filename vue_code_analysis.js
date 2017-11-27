@@ -3564,9 +3564,13 @@ function lifecycleMixin (Vue) {
     if (vm._isMounted) {
       callHook(vm, 'beforeUpdate');
     }
+
+	// 保存更新之前的节点信息
     var prevEl = vm.$el;
     var prevVnode = vm._vnode;
     var prevActiveInstance = activeInstance;
+
+
 	// 当前被激活的 Vue 实例
     activeInstance = vm;
     vm._vnode = vnode;
@@ -3618,6 +3622,8 @@ function lifecycleMixin (Vue) {
 	  // 比较新旧虚拟 DOM，并更新。数据更新就是由这一句关键代码完成！
       vm.$el = vm.__patch__(prevVnode, vnode);
     }
+
+	// 更新完毕，把活动节点标记还原
     activeInstance = prevActiveInstance;
 
 
