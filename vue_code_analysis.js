@@ -1290,7 +1290,7 @@ var uid = 0;
  * A dep is an observable that can have multiple
  * directives subscribing to it.
  */
-// 主题对象构造函数，Dep 是 dependency 的简写
+// 依赖构造函数，Dep 是 dependency 的简写
 var Dep = function Dep () {
   this.id = uid++;
   this.subs = [];
@@ -1307,6 +1307,7 @@ Dep.prototype.removeSub = function removeSub (sub) {
   remove(this.subs, sub);
 };
 
+// 添加依赖
 Dep.prototype.depend = function depend () {
   if (Dep.target) {
     Dep.target.addDep(this);
@@ -1424,28 +1425,34 @@ var Observer = function Observer (value) {
   this.value = value;
   this.dep = new Dep();
   this.vmCount = 0;
-  /*
-  回顾一下 def 方法的定义：
-  function def (obj, key, val, enumerable) {...}
 
-  这里的 this 是一个 Observer 实例，有：
-  this.value = value;
-  value.__ob__ = this;
-   */
+  // 通过Object.defineProperty定义__ob__属性 this指向Observer实例
   def(value, '__ob__', this);
+
+
   if (Array.isArray(value)) {
-    // hasProto = '__proto__' in {};
+    /*
+      ① hasProto = '__proto__' in {};
+      ② protoAugment (target, src, keys) 作用是给 target 指定原型 target.__proto__ = src;
+      ③ copyAugment (target, src, keys) 作用是遍历 keys，依次将 src[key] 赋值给 target[key]
+     */
     var augment = hasProto
       ? protoAugment
       : copyAugment;
 
     /*
-    ① 如果支持 __proto__ 写法
+    ① arrayMethods = Object.create(Array.prototype);
+       arrayKeys = Object.getOwnPropertyNames(arrayMethods)
+       即 arrayKeys = ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
+    ② 如果支持 __proto__ 写法
        那么 value.__proto__ = arrayMethods;
-    ② 如果不支持 __proto__ 写法
+    ③ 如果不支持 __proto__ 写法
        那么依次将 arrayMethods[key] 赋给 value[key]，其中 key 为 "push", "pop", "shift", "unshift", "splice", "sort", "reverse" 等 7 个方法名之一
+     
+     所以，以下这句的作用就是将数组 value 的原型对象设置为数组的原型对象 arrayMethods
      */
     augment(value, arrayMethods, arrayKeys);
+
     this.observeArray(value);
   } else {
     this.walk(value);
@@ -1457,8 +1464,9 @@ var Observer = function Observer (value) {
  * getter/setters. This method should only be called when
  * value type is Object.
  */
+// 作用为遍历对象 value 的属性，将每一个属性都转化为 getter/setters。参数 value 必须为对象。 
 Observer.prototype.walk = function walk (obj) {
-  // Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys方法只返回可枚举的属性。
+  // Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys 方法只返回可枚举的属性。
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
     defineReactive$$1(obj, keys[i], obj[keys[i]]);
@@ -1468,6 +1476,7 @@ Observer.prototype.walk = function walk (obj) {
 /**
  * Observe a list of Array items.
  */
+// 依次观察数组 items 的每一项
 Observer.prototype.observeArray = function observeArray (items) {
   for (var i = 0, l = items.length; i < l; i++) {
     // 依次观察每一个 item 对象
@@ -1519,12 +1528,12 @@ function observe (value, asRootData) {
   // 如果没有对应的观察者对象，就新创建一个
   } else if (
     /*
-    需同时满足以下条件：
-    ① observerState.shouldConvert 为 true
-    ② 非服务器环境
-    ③ value 是数组或者对象
-    ④ value 对象可扩展
-    ⑤ value 没有 _isVue 属性
+      需同时满足以下条件：
+      ① observerState.shouldConvert 为 true
+      ② 非服务器环境
+      ③ value 是数组或者对象
+      ④ value 对象可扩展
+      ⑤ value 不是 Vue 实例
      */
     observerState.shouldConvert &&
     !isServerRendering() &&
