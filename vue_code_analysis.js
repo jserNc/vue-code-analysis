@@ -1705,6 +1705,26 @@ function dependArray (value) {
 /*
   可以为该对象添加方法属性，自定义合并策略的选项
   optionMergeStrategies: Object.create(null)
+
+  后面会给 strats 添加若干属性，每一个属性 key 有对应的方法 f(parentVal, childVal)。这些方法的作用都是定义如果合并 key 属性的。
+  如果没有属性 key 指定对应的方法，那就取默认的合并策略方法 defaultStrat(parentVal, childVal)，只要 childVal 不是 undefined，那就返回 childVal，childVal 全等于 undefined，才返回 parentVal。
+ 
+  例如：
+  strats.el = strats.propsData = function (parent, child, vm, key) {
+    ...
+    // 只要 child 不是 undefined，就返回 child，否则返回 parent
+    return defaultStrat(parent, child)
+  };
+
+  strats.data = function (parentVal,childVal,vm) {...}
+
+  LIFECYCLE_HOOKS.forEach(function (hook) {
+	  strats[hook] = mergeHook;
+  });
+
+  function mergeHook (parentVal,childVal) {...}
+
+  可以看到，这些都是逐步给 strats 添加合并方法的（不同的属性，对应的合并策略不太一样），这些方法的形式都很统一：f(parentVal, childVal, vm ,key) ，最多四个参数，一般两个参数就行。
  */
 var strats = config.optionMergeStrategies;
 
@@ -1727,9 +1747,13 @@ var strats = config.optionMergeStrategies;
 /**
  * Helper that recursively merges two data objects together.
  */
+// 递归地合并两个 data 对象，把 from 的属性（to 中不存在）合并到 to 中，所以这个函数只会添加新的属性给 to，而不会覆盖属性
 function mergeData (to, from) {
+  // 没有指定 from，直接返回 to
   if (!from) { return to }
+
   var key, toVal, fromVal;
+
   var keys = Object.keys(from);
   for (var i = 0; i < keys.length; i++) {
     key = keys[i];
@@ -1750,6 +1774,7 @@ function mergeData (to, from) {
 /**
  * Data
  */
+ // 合并 data 或 function
 function mergeDataOrFn (
   parentVal,
   childVal,
@@ -1770,6 +1795,7 @@ function mergeDataOrFn (
     // it has to be a function to pass previous merges.
     // 合并函数数据
     return function mergedDataFn () {
+	  // mergeData (to, from) 递归地合并两个 data 对象，把 from 的属性（to 中不存在）合并到 to 中，所以这个函数只会添加新的属性给 to，而不会覆盖属性
       return mergeData(
         typeof childVal === 'function' ? childVal.call(this) : childVal,
         // 这里虽然没有检查 parentVal 是否是函数，但是它必须是函数
@@ -1779,15 +1805,14 @@ function mergeDataOrFn (
   } else if (parentVal || childVal) {
     // 合并实例函数数据
     return function mergedInstanceDataFn () {
+
       // instance merge
-      var instanceData = typeof childVal === 'function'
-        ? childVal.call(vm)
-        : childVal;
-      var defaultData = typeof parentVal === 'function'
-        ? parentVal.call(vm)
-        : undefined;
+      var instanceData = typeof childVal === 'function' ? childVal.call(vm) : childVal;
+      var defaultData = typeof parentVal === 'function' ? parentVal.call(vm) : undefined;
+
       // 存在实例数据，才执行合并操作，否则直接返回默认数据
       if (instanceData) {
+		// mergeData (to, from) 递归地合并两个 data 对象，把 from 的属性（to 中不存在）合并到 to 中，所以这个函数只会添加新的属性给 to，而不会覆盖属性
         return mergeData(instanceData, defaultData)
       } else {
         return defaultData
@@ -2047,11 +2072,7 @@ function normalizeDirectives (options) {
  * Core utility used in both instantiation and inheritance.
  */
 // 合并两个 options 对象
-function mergeOptions (
-  parent,
-  child,
-  vm
-) {
+function mergeOptions (parent, child, vm) {
   { 
 	// 打印出 child.components 中不符合要求的组件名
     checkComponents(child);
@@ -2080,11 +2101,12 @@ function mergeOptions (
   }
   var options = {};
   var key;
-  // 首先合并 parent 中所有的可枚举属性
+
+  // 遍历 parent 的所有属性
   for (key in parent) {
     mergeField(key);
   }
-  // 然后合并 child 中并且不属于 parent 中的所有属性
+  // 遍历 child 中所有属性（排除 parent 中已有属性）
   for (key in child) {
     if (!hasOwn(parent, key)) {
       mergeField(key);
@@ -2095,12 +2117,14 @@ function mergeOptions (
 	/*
 	① strats = config.optionMergeStrategies 是一个对象，可以为该对象添加方法属性，自定义合并策略的选项
 	   strats[key] 是一个 function，不同的 key 对应不同的 function，也就是不同的合并策略
-	② defaultStrat 是一个函数，defaultStrat(parentVal, childVal)，只要 childVal 不是 undefined，那就返回 childVal
+	② defaultStrat 是一个函数，defaultStrat(parentVal, childVal)，只要 childVal 不是 undefined，那就返回 childVal，childVal 全等于 undefined，才返回 parentVal
+
+	也就是说，如果没有对某个 key 属性指定合并策略，就用默认的策略 defaultStrat
 	*/
     var strat = strats[key] || defaultStrat;
     options[key] = strat(parent[key], child[key], vm, key);
   }
-  // 返回合并后的对象
+  // 返回合并后的选项对象
   return options
 }
 
@@ -5847,19 +5871,17 @@ function initMixin (Vue) {
 	// 标志当前对象是 Vue 实例，有了这个标志就不会被 observe 了
     vm._isVue = true;
 
-    // merge options
+    // merge options，给 vm.$options 赋值
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
       // internal component options needs special treatment.
-	  /*
-		优化内部组件实例化。
-		由于动态选项合并相当慢，并且没有一个内部组件的选项需要特殊处理
-	  */
+	  // 直接给 vm.$options 添加属性。优化内部组件实例化。由于动态选项合并相当慢，并且没有一个内部组件的选项需要特殊处理
       initInternalComponent(vm, options);
     } else {
+	  // 合并构造函数的 options 和参数 options
       vm.$options = mergeOptions(
-		// 处理构造函数选项
+		// 合并父构造函数和当前构造函数 vm.constructor 的 options
         resolveConstructorOptions(vm.constructor),
         options || {},
         vm
@@ -5871,8 +5893,10 @@ function initMixin (Vue) {
     {
       initProxy(vm);
     }
-    // expose real self
+    // expose real self，保留对自身的引用
     vm._self = vm;
+
+	// 各项初始化
     initLifecycle(vm);
     initEvents(vm);
     initRender(vm);
@@ -5893,7 +5917,7 @@ function initMixin (Vue) {
       measure(((vm._name) + " init"), startTag, endTag);
     }
 
-	// 插入文档
+	// 如果有 el 属性，vm 和真实 dom 进行挂载
     if (vm.$options.el) {
       vm.$mount(vm.$options.el);
     }
@@ -14499,5 +14523,6 @@ return Vue$3;
 
 // 有空的时候看看 
 // http://www.cnblogs.com/QH-Jimmy/p/6862539.html#3770924
+// http://www.cnblogs.com/QH-Jimmy/archive/2017/05.html
 // https://www.brooch.me/2017/03/17/vue-source-notes-1/
 // https://www.brooch.me/tags/vue/
