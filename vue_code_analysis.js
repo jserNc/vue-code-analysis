@@ -1387,6 +1387,7 @@ var arrayMethods = Object.create(arrayProto);
         inserted = args.slice(2);
         break
     }
+	// 依次观察新增元素组 inserted 的每一项
     if (inserted) { ob.observeArray(inserted); }
     // notify change
     ob.dep.notify();
@@ -1429,7 +1430,7 @@ var Observer = function Observer (value) {
   // 通过Object.defineProperty定义__ob__属性 this指向Observer实例
   def(value, '__ob__', this);
 
-
+  // 监听数组变化
   if (Array.isArray(value)) {
     /*
       ① hasProto = '__proto__' in {};
@@ -1450,10 +1451,13 @@ var Observer = function Observer (value) {
        那么依次将 arrayMethods[key] 赋给 value[key]，其中 key 为 "push", "pop", "shift", "unshift", "splice", "sort", "reverse" 等 7 个方法名之一
      
      所以，以下这句的作用就是将数组 value 的原型对象设置为数组的原型对象 arrayMethods
+
+	 根本作用是，对数组 value 的 push/unshift/splice/... 方法进行代理，调用这些方法时，会触发 dom 更新
      */
     augment(value, arrayMethods, arrayKeys);
 
     this.observeArray(value);
+  // 监听对象变化
   } else {
     this.walk(value);
   }
@@ -1464,11 +1468,12 @@ var Observer = function Observer (value) {
  * getter/setters. This method should only be called when
  * value type is Object.
  */
-// 作用为遍历对象 value 的属性，将每一个属性都转化为 getter/setters。参数 value 必须为对象。 
+// 作用为遍历对象 value 的属性，将每一个属性都转化为 getter/setters。监听对象变化。 
 Observer.prototype.walk = function walk (obj) {
   // Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys 方法只返回可枚举的属性。
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
+	// 在 obj 对象上拦截 keys[i] 属性的 get/set 操作
     defineReactive$$1(obj, keys[i], obj[keys[i]]);
   }
 };
@@ -1476,7 +1481,7 @@ Observer.prototype.walk = function walk (obj) {
 /**
  * Observe a list of Array items.
  */
-// 依次观察数组 items 的每一项
+// 依次观察数组 items 的每一项。监听数组变化。
 Observer.prototype.observeArray = function observeArray (items) {
   for (var i = 0, l = items.length; i < l; i++) {
     // 依次观察每一个 item 对象
@@ -1554,26 +1559,33 @@ function observe (value, asRootData) {
  * Define a reactive property on an Object.
  */
 // 在 obj 对象上拦截 key 属性的 get/set 操作
-function defineReactive$$1 (
-  obj,
-  key,
-  val,
-  customSetter,
-  shallow
-) {
-  var dep = new Dep();
+function defineReactive$$1 (obj, key, val, customSetter, shallow) {
 
+  // 新建一个依赖管理器
+  var dep = new Dep();
+  
+  /*
+  获取 key 属性的属性描述对象，例如：
+
+  var o = {a:1}
+  var props = Object.getOwnPropertyDescriptor(o,'a')
+  -> {value: 1, writable: true, enumerable: true, configurable: true}
+  */
   var property = Object.getOwnPropertyDescriptor(obj, key);
+
   // 如果 obj 的 key 属性不可配置，直接返回
   if (property && property.configurable === false) {
     return
   }
 
-  // cater for pre-defined getter/setters
+  // cater for pre-defined getter/setters，之前定义的 getter/setters
   var getter = property && property.get;
   var setter = property && property.set;
 
+  // observe(val) 为 val 创建一个 Observer 实例，并返回该实例
   var childOb = !shallow && observe(val);
+
+
   Object.defineProperty(obj, key, {
     // 可枚举
     enumerable: true,
@@ -1583,11 +1595,14 @@ function defineReactive$$1 (
     get: function reactiveGetter () {
       var value = getter ? getter.call(obj) : val;
       if (Dep.target) {
+		//相当于 Dep.target.addDep(dep)
         dep.depend();
         if (childOb) {
+		  //相当于 Dep.target.addDep(childOb.dep)
           childOb.dep.depend();
         }
         if (Array.isArray(value)) {
+		  // 对数组 value 的每一项 e 调用 Dep.target.addDep(e.__ob__.dep)
           dependArray(value);
         }
       }
@@ -1595,7 +1610,10 @@ function defineReactive$$1 (
     },
     // 设置 obj 的 key 属性时触发该函数
     set: function reactiveSetter (newVal) {
+
+	  // 获取旧值
       var value = getter ? getter.call(obj) : val;
+
       /* eslint-disable no-self-compare */
       // 如果旧值和新值相等或者旧值和新值都是 NaN，则不进行设置操作。（NaN 应该是唯一不等于自身的值）
       if (newVal === value || (newVal !== newVal && value !== value)) {
@@ -1606,12 +1624,18 @@ function defineReactive$$1 (
       if ("development" !== 'production' && customSetter) {
         customSetter();
       }
+	
+	  // 设置新值
       if (setter) {
         setter.call(obj, newVal);
       } else {
+		// set 函数在这里是一个闭包，所以能保留 val 的值？
         val = newVal;
       }
+	  
+	  // observe(newVal) 为 newVal 创建一个 Observer 实例，并返回该实例
       childOb = !shallow && observe(newVal);
+
       // 发出通知，执行订阅者
       dep.notify();
     }
@@ -1695,7 +1719,7 @@ function del (target, key) {
 function dependArray (value) {
   for (var e = (void 0), i = 0, l = value.length; i < l; i++) {
     e = value[i];
-    // 依次调用 depend 方法
+    // 依次调用 depend 方法，相当于：Dep.target.addDep(e.__ob__.dep)
     e && e.__ob__ && e.__ob__.dep.depend();
     // 递归调用
     if (Array.isArray(e)) {
@@ -6819,6 +6843,7 @@ function isUnknownElement (tag) {
 function query (el) {
   // el 为字符串选择器
   if (typeof el === 'string') {
+	// 注意这里使用的是 querySelector，也就是返回查询到的第一个元素。一般情况下，我们应该传入一个 id 或确定的 dom 节点。
     var selected = document.querySelector(el);
     if (!selected) {
       "development" !== 'production' && warn(
@@ -11486,11 +11511,8 @@ extend(Vue$3.options.components, platformComponents);
 // 把 pacth 方法挂载在 Vue 原型上，这样 Vue 的实例可以调用 patch 方法了
 Vue$3.prototype.__patch__ = inBrowser ? patch : noop;
 
-// public mount method
-Vue$3.prototype.$mount = function (
-  el,
-  hydrating
-) {
+// public mount method，公开的 mount 方法
+Vue$3.prototype.$mount = function (el,hydrating) {
   // query(el) 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
   el = el && inBrowser ? query(el) : undefined;
   // 安装组件
@@ -14232,8 +14254,10 @@ function createFunction (code, errors) {
 
 // 将 compile 转为函数
 function createCompileToFunctionFn (compile) {
+  // 缓存 template 对应的 json 结果
   var cache = Object.create(null);
 
+  // 该方法会根据模板 template 返回一个 json { render:fn , staticRenderFns: [...]}
   return function compileToFunctions (template, options, vm) {
     options = options || {};
 
@@ -14264,12 +14288,13 @@ function createCompileToFunctionFn (compile) {
     var key = options.delimiters
       ? String(options.delimiters) + template
       : template;
-	// 首先从缓存去取
+
+	// 首先从缓存去取，取到了就返回
     if (cache[key]) {
       return cache[key]
     }
 
-    // compile
+    // 第 1 步：编译
     var compiled = compile(template, options);
 
     // check compilation errors/tips
@@ -14291,9 +14316,12 @@ function createCompileToFunctionFn (compile) {
     // turn code into functions，最终返回这个 res 对象
     var res = {};
     var fnGenErrors = [];
-	// 将执行文本 compiled.render 转为函数，若出错加入到数组 fnGenErrors 中
+
+	// 第 2 步，将代码文本转为真正的函数
+	// 文本（compiled.render） -> 函数（res.render），发生的错误加入到数组 fnGenErrors 中
     res.render = createFunction(compiled.render, fnGenErrors);
-	// 将文本数组 compiled.staticRenderFns，转成函数数组
+
+	// 文本数组（compiled.staticRenderFns） -> 函数数组（res.staticRenderFns），发生的错误加入到数组 fnGenErrors 中
     res.staticRenderFns = compiled.staticRenderFns.map(function (code) {
       return createFunction(code, fnGenErrors)
     });
@@ -14302,6 +14330,7 @@ function createCompileToFunctionFn (compile) {
     // this should only happen if there is a bug in the compiler itself.
     // mostly for codegen development use
     /* istanbul ignore if */
+	// 转化为渲染函数过程中出现的错误
     {
       if ((!compiled.errors || !compiled.errors.length) && fnGenErrors.length) {
 		// 生成渲染函数失败
@@ -14448,7 +14477,7 @@ Vue$3.prototype.$mount = function (el,hydrating) {
 	  // 字符串模板
       if (typeof template === 'string') {
         if (template.charAt(0) === '#') {
-		  // template 为 id 值获取其对应元素的 innerHTML
+		  // idToTemplate(id) 根据选择器 id 获取元素，然后返回该元素的 innerHTML
           template = idToTemplate(template);
           // 如果没找到对应元素，发出警告
           if ("development" !== 'production' && !template) {
@@ -14472,6 +14501,8 @@ Vue$3.prototype.$mount = function (el,hydrating) {
     } else if (el) {
       template = getOuterHTML(el);
     }
+
+	// 根据模板 template 生成渲染函数
     if (template) {
       // 标记编译开始
       if ("development" !== 'production' && config.performance && mark) {
@@ -14485,12 +14516,13 @@ Vue$3.prototype.$mount = function (el,hydrating) {
 			staticRenderFns : compiled.staticRenderFns.map(function (code) {return createFunction(code, fnGenErrors)})
 		}
 	  */
-	  // 根据模板生成渲染函数
+	  // 根据模板生成渲染函数 compileToFunctions (template, options, vm)
       var ref = compileToFunctions(template, {
         shouldDecodeNewlines: shouldDecodeNewlines,
         delimiters: options.delimiters,
         comments: options.comments
       }, this);
+
       var render = ref.render;
       var staticRenderFns = ref.staticRenderFns;
 	  // 修改 options 对象
@@ -14516,6 +14548,7 @@ Vue$3.prototype.$mount = function (el,hydrating) {
 function getOuterHTML (el) {
   if (el.outerHTML) {
     return el.outerHTML
+  // 兼容 ie 中的 svg
   } else {
     var container = document.createElement('div');
     container.appendChild(el.cloneNode(true));
