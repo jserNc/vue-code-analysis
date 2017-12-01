@@ -11963,26 +11963,40 @@ function decodeAttr (value, shouldDecodeNewlines) {
 function parseHTML (html, options) {
   var stack = [];
   var expectHTML = options.expectHTML;
-  // 是否是单标签，其中 no 方法在任何时候都返回 false
+  // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
   var isUnaryTag$$1 = options.isUnaryTag || no;
-  // 自动闭合标签
+  // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
   var canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;
   var index = 0;
   var last, lastTag;
+
+  // 在解析过程中，html 长度会逐渐变短
   while (html) {
     last = html;
+
     // Make sure we're not in a plaintext content element like script/style
-	// 不是 script,style,textarea 等纯文本元素
+	// lastTag 不存在或 lastTag 不是 script,style,textarea 等纯文本元素
     if (!lastTag || !isPlainTextElement(lastTag)) {
+
 	  // lastTag 是 pre、textarea 标签，并且 html 首字符是换行符
       if (shouldIgnoreFirstNewline(lastTag, html)) {
 		// 前进 1 位，也就是忽略这个换行符
         advance(1);
       }
-	  // '<' 在字符串 html 中首次出现的位置
+
+	  /*
+		'<' 在字符串 html 中首次出现的位置
+
+		textEnd 表示文本的结束位置。举个例子：
+		'<p>efg>' 文本为 ''，文本结束位置 textEnd 等于 0
+		'abc<p>efg</p>' 文本为 'abc '，文本结束位置 textEnd 等于 3
+	  */
       var textEnd = html.indexOf('<');
+
+	  // ① 解析标签
 	  // 第一个字符就是 '<'
       if (textEnd === 0) {
+
         // 注释 comment = /^<!--/
         if (comment.test(html)) {
           var commentEnd = html.indexOf('-->');
@@ -11990,10 +12004,14 @@ function parseHTML (html, options) {
           if (commentEnd >= 0) {
 			// 保留注释
             if (options.shouldKeepComment) {
-			  // 把注释节点内容取出来，后面会生成相应的 vnode
+			  /*
+				// 把注释节点内容取出来，后面会生成相应的 vnode。如：
+				'<!--this id comment-->'.substring(4, '<!--this id comment-->'.indexOf('-->'))
+				-> 'this id comment'
+			  */
               options.comment(html.substring(4, commentEnd));
             }
-			// 前进 3 个字符（跳过 '-->'）
+			// 跳过注释（3 对应 '-->'）
             advance(commentEnd + 3);
             continue
           }
@@ -12004,7 +12022,7 @@ function parseHTML (html, options) {
         if (conditionalComment.test(html)) {
           var conditionalEnd = html.indexOf(']>');
 		  
-		  // 前进 2 个字符（跳过 ']>'）
+		  // 跳过条件注释（2 对应 ']>'）
           if (conditionalEnd >= 0) {
             advance(conditionalEnd + 2);
             continue
@@ -12019,20 +12037,20 @@ function parseHTML (html, options) {
           continue
         }
 
-        // 结束标签
+        // 结束标签 endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
         var endTagMatch = html.match(endTag);
         if (endTagMatch) {
           var curIndex = index;
 		  // 跳过整个结束标签
           advance(endTagMatch[0].length);
-		  // 解析结束标签，其中 endTagMatch[1] 是标签名
+		  // 解析结束标签 parseEndTag (tagName, start, end)，其中 endTagMatch[1] 是标签名
           parseEndTag(endTagMatch[1], curIndex, index);
           continue
         }
 
         // 开始标签
         var startTagMatch = parseStartTag();
-		// startTagMatch 为真，说明开始标签闭合了
+		// parseStartTag() 很多情况下返回 undefined，若 startTagMatch 为真，说明开始标签解析成功了
         if (startTagMatch) {
 		  // 处理开始标签（提取属性）
           handleStartTag(startTagMatch);
@@ -12040,39 +12058,63 @@ function parseHTML (html, options) {
         }
       }
 
+	  // ② 解析文本
 	  // 文本，void 0 === undefined -> true
       var text = (void 0), rest = (void 0), next = (void 0);
 	  // 修正 textEnd，取出文本
       if (textEnd >= 0) {
+		
         rest = html.slice(textEnd);
+		/*
+			例：'abc<p>efg>' 文本为 'abc '，文本结束位置 textEnd 等于 3
+			rest = 'abc<p>efg</p>'.slice(3) -> "<p>efg>"
+
+			虽然 < 在 rest 中，但是同时满足以下条件，会将 rest 中两个 < 之间的部分当做文本，while 循环逐渐“侵蚀” rest（也就是逐渐扩大文本长度）：
+			① rest 中没有结束标签，其中 endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
+			② rest 中也没有合法的开始标签，其中 startTagOpen = new RegExp('^<' + qnameCapture)
+			③ rest 中也没有注释
+			④ rest 中也没有条件注释
+
+			例如：'abc<hhhhh<p>efg</p>'
+			最开始，rest 为 '<hhhhh<p>efg</p>'
+			然后，rets 为 '<p>efg</p>'
+		*/
         while (!endTag.test(rest) && !startTagOpen.test(rest) && !comment.test(rest) && !conditionalComment.test(rest)) {
           // < in plain text, be forgiving and treat it as text
-		  // 文本里的 < 也当做文本
+		  // str.indexOf(searchvalue,fromindex) 从位置 fromindex 开始，返回指定的字符串 searchvalue 在字符串 str 中首次出现的位置。
           next = rest.indexOf('<', 1);
+		  // 没找到下一个 '<'，就停止“侵蚀” rest
           if (next < 0) { break }
+		  // 文本结束位置后移，也就是扩大文本范围
           textEnd += next;
+		  // rest 缩短，被 “侵蚀” 了
           rest = html.slice(textEnd);
         }
 		// 文本
         text = html.substring(0, textEnd);
+		// 前进，跳过文本
         advance(textEnd);
       }
 
-	  // html 中找不到 '<'，说明整个 html 都是文本
+	  // html 中找不到 '<'，那就把整个 html 都当做文本
       if (textEnd < 0) {
         text = html;
         html = '';
       }
+
 	  // 文本处理
       if (options.chars && text) {
         options.chars(text);
       }
+
+	// lastTag && isPlainTextElement(lastTag) 同时满足会走下面的 else 代码块，即 lastTag 是 script,style,textarea 三者之一
     } else {
       var endTagLength = 0;
 	  // 上一个标签名小写形式
       var stackedTag = lastTag.toLowerCase();
 	  /*
-		reCache = {}
+		reCache = {} 这个对象缓存正则表达式
+
 		以 lastTag = 'script' 为例：
 		reCache['script'] = /([\s\S]*?)(<\/script[^>]*>)/i
 		script 的结束标签
@@ -12081,6 +12123,7 @@ function parseHTML (html, options) {
       
 	  // 参数 all 表示 reStackedTag 匹配的所有内容，text 表示文本 ([\s\S]*?)，endTag 表示结束标签 (<\/script[^>]*>)
 	  var rest$1 = html.replace(reStackedTag, function (all, text, endTag) {
+		// 结束标签的长度，如 '</script>'.length -> 9
         endTagLength = endTag.length;
 		// 不是 script,style,textarea,noscript
         if (!isPlainTextElement(stackedTag) && stackedTag !== 'noscript') {
@@ -12102,11 +12145,11 @@ function parseHTML (html, options) {
 
       index += html.length - rest$1.length;
       html = rest$1;
-	  // 闭合 stackedTag 标签
+	  // 解析结束标签 parseEndTag (tagName, start, end)，其中 endTagMatch[1] 是标签名
       parseEndTag(stackedTag, index - endTagLength, index);
     }
 
-	// html 和处理之前是一样的值，也就是 html 中没有获取到任何有用的元素
+	// html 和处理之前是一样的值，一个字符都没减少,也就是说 html 中没有获取到任何有用的元素
     if (html === last) {
       options.chars && options.chars(html);
       if ("development" !== 'production' && !stack.length && options.warn) {
@@ -12123,17 +12166,24 @@ function parseHTML (html, options) {
   // 前进 n 个字符（也就是说，有 n 个字符被忽略了）
   function advance (n) {
     index += n;
+	/*
+		substring(start,stop) 提取字符串中介于两个指定下标之间的字符，如果省略 stop 参数，那么返回的子串会一直到字符串的结尾。
+		'abcdefgh'.substring(2) -> "cdefgh"
+	*/
     html = html.substring(n);
   }
 
   // 解析开始标签
   function parseStartTag () {
-	// 开始标签开头 startTagOpen = new RegExp('^<' + qnameCapture)
+	// 匹配开始标签 startTagOpen = new RegExp('^<' + qnameCapture)
     var start = html.match(startTagOpen);
     if (start) {
       var match = {
+		// 标签名
         tagName: start[1],
+		// 属性
         attrs: [],
+		// 开始索引
         start: index
       };
 	  // 跳过开始标签
@@ -12141,7 +12191,7 @@ function parseHTML (html, options) {
       var end, attr;
 	  // 开始标签结尾 startTagClose = /^\s*(\/?)>/，把开始标签里的所有属性挑出来
       while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
-		// 跳过某属性
+		// attr[0] 是整个属性表达式，attr[1] 是属性名，attr[2] 是 = ，attr[3] 是属性值
         advance(attr[0].length);
 		// 把该属性各个部分存下来
         match.attrs.push(attr);
@@ -12387,9 +12437,9 @@ function parse (template,options) {
     warn: warn$2,
 	// 是否为 html 模板
     expectHTML: options.expectHTML,
-	// 是否为单标签
+	// 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
     isUnaryTag: options.isUnaryTag,
-	// 是否为子闭合标签
+	// 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
     canBeLeftOpenTag: options.canBeLeftOpenTag,
 	// 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
     shouldDecodeNewlines: options.shouldDecodeNewlines,
@@ -12606,8 +12656,9 @@ function parse (template,options) {
             warnOnce(
               'Component template requires a root element, rather than just text.'
             );
+		  // text 去掉左右空格后还有内容，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
           } else if ((text = text.trim())) {
-			// 跟元素之外的文本将被忽略
+			// 根元素之外的文本将被忽略
             warnOnce(
               ("text \"" + text + "\" outside root element will be ignored.")
             );
@@ -12622,6 +12673,8 @@ function parse (template,options) {
       }
 
       var children = currentParent.children;
+
+	  // 对 text 进行修正
       text = inPre || text.trim()
 		/*
 			① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
@@ -14354,12 +14407,28 @@ function createCompileToFunctionFn (compile) {
 
 // 生成编译器
 function createCompilerCreator (baseCompile) {
+  /*
+	var baseOptions = {
+	  expectHTML: true,
+	  modules: modules$1,					// class、style 模块
+	  directives: directives$1,				// model、text、html 指令
+	  isPreTag: isPreTag,					// 是否为 pre 标签
+	  isUnaryTag: isUnaryTag,				// 是否为自闭合标签
+	  mustUseProp: mustUseProp,
+	  canBeLeftOpenTag: canBeLeftOpenTag,   // 可以省略闭合标签
+	  isReservedTag: isReservedTag,
+	  getTagNamespace: getTagNamespace,
+	  staticKeys: genStaticKeys(modules$1)
+	};
+  */
   return function createCompiler (baseOptions) {
     function compile (template, options) {
 	  // finalOptions 继承 baseOptions 对象
       var finalOptions = Object.create(baseOptions);
+
       var errors = [];
       var tips = [];
+
 	  // 向 errors/tips 数组里添加 msg
       finalOptions.warn = function (msg, tip) {
         (tip ? tips : errors).push(msg);
@@ -14382,14 +14451,14 @@ function createCompilerCreator (baseCompile) {
           }
         }
       }
-	
+	  
 	  /*
-		 compiled 结构:
-		 {
+		baseCompile (template,options) 返回：
+		{
 			ast: ast,
 			render: code.render,
 			staticRenderFns: code.staticRenderFns
-		  }
+		 }
 	  */
       var compiled = baseCompile(template, finalOptions);
       {
@@ -14398,6 +14467,16 @@ function createCompilerCreator (baseCompile) {
       }
       compiled.errors = errors;
       compiled.tips = tips;
+	  /*
+		 compiled 结构:
+		 {
+			ast: ast,
+			render: code.render,
+			staticRenderFns: code.staticRenderFns
+			errors: errors,
+			tips: tips
+		  }
+	  */
       return compiled
     }
 
