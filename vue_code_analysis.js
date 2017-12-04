@@ -11613,7 +11613,7 @@ var buildRegex = cached(function (delimiters) {
   return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
 });
 
-// 模板字符串转为浏览器可以解析的字符串
+// 模板字符串转为浏览器可以解析的字符串。text 可分为 3 个部分，{{ 之前的，{{}} 中间包裹的，}} 之后的，函数分别将三者抽离出来，push 进 tokens，最后用 + 连接并返回一个字符串
 function parseText (text, delimiters) {
   // 匹配文本的正则
   var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
@@ -11647,7 +11647,7 @@ function parseText (text, delimiters) {
   while ((match = tagRE.exec(text))) {
     index = match.index;
     // push text token
-    // text 中未被 tagRE 匹配的部分？
+    // text 中未被 tagRE 匹配的部分，例如 '{{ message1 }}abc{{ message2 }}efg' 中的 'abc'
     if (index > lastIndex) {
       tokens.push(JSON.stringify(text.slice(lastIndex, index)));
     }
@@ -11659,12 +11659,14 @@ function parseText (text, delimiters) {
      */
     var exp = parseFilters(match[1].trim());
     tokens.push(("_s(" + exp + ")"));
+    // 移动游标
     lastIndex = index + match[0].length;
   }
-  // text 中剩余部分
+  // text 中剩余部分，例如 '{{ message1 }}abc{{ message2 }}efg' 中的 'efg'
   if (lastIndex < text.length) {
     tokens.push(JSON.stringify(text.slice(lastIndex)));
   }
+  // 最终用 '+' 连接数组元素，其实就是连接成一个字符串，例如 'abc' + '_s(message2)' + 'efg'
   return tokens.join('+')
 }
 
@@ -12304,20 +12306,21 @@ function parseHTML (html, options) {
   // 解析结束标签
   function parseEndTag (tagName, start, end) {
     var pos, lowerCasedTagName;
-	// start/end 实参不存在时，都赋值为 index
+
+	   // start/end 实参不存在时，都赋值为 index
     if (start == null) { start = index; }
     if (end == null) { end = index; }
 
-	// 取标签名的小写形式
+	   // 取标签名的小写形式
     if (tagName) {
       lowerCasedTagName = tagName.toLowerCase();
     }
 
     // Find the closest opened tag of the same type
     if (tagName) {
-	  // 在解析开始标签时 stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
+	     // 在解析开始标签时 stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
       for (pos = stack.length - 1; pos >= 0; pos--) {
-		// 因为之前用的 push 方法，所以这里从后向前匹配标签
+		    // 因为之前用的 push 方法，所以这里从后向前匹配标签。前面的标签是祖先标签，后面的是后代标签，先闭合后代标签。
         if (stack[pos].lowerCasedTag === lowerCasedTagName) {
           break
         }
@@ -12328,28 +12331,28 @@ function parseHTML (html, options) {
     }
 
     if (pos >= 0) {
-      // Close all the open elements, up the stack，关闭 stack 中索引 pos 之后的所有的标签
+      // Close all the open elements, up the stack
       for (var i = stack.length - 1; i >= pos; i--) {
         if ("development" !== 'production' && (i > pos || !tagName) && options.warn) {
           options.warn( ("tag <" + (stack[i].tag) + "> has no matching end tag.") );
         }
-		// 关闭标签
+		    // 关闭当前标签的所有子标签
         if (options.end) {
           options.end(stack[i].tag, start, end);
         }
       }
 
       // Remove the open elements from the stack
-	  // 清理数组 stack 中已经关闭的标签
+	     // 清理数组 stack 中已经关闭的标签
       stack.length = pos;
-	  // 重置最近未关闭标签
+	     // 重置最近未关闭标签名
       lastTag = pos && stack[pos - 1].tag;
-	// br 标签
+	   // br 标签
     } else if (lowerCasedTagName === 'br') {
       if (options.start) {
         options.start(tagName, [], true, start, end);
       }
-	// p 标签
+	   // p 标签
     } else if (lowerCasedTagName === 'p') {
       if (options.start) {
         options.start(tagName, [], false, start, end);
@@ -12453,17 +12456,17 @@ function parse (template,options) {
   // 解析模板 template
   parseHTML(template, {
     warn: warn$2,
-	// 是否为 html 模板
+	   // 是否为 html 模板
     expectHTML: options.expectHTML,
-	// 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+	   // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
     isUnaryTag: options.isUnaryTag,
-	// 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
+	   // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
     canBeLeftOpenTag: options.canBeLeftOpenTag,
-	// 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
+	   // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
     shouldDecodeNewlines: options.shouldDecodeNewlines,
-	// 是否保留注释
+	   // 是否保留注释
     shouldKeepComment: options.comments,
-	// 解析开始标签时调用的钩子函数
+	   // 解析开始标签时调用的钩子函数
     start: function start (tag, attrs, unary) {
       // check namespace.
       // inherit parent ns if there is one，获取命名空间
@@ -12651,36 +12654,37 @@ function parse (template,options) {
       }
     },
 
+    // stack 出栈
     end: function end () {
       // remove trailing whitespace
       var element = stack[stack.length - 1];
-	  // element 最后一个子元素
+	     // element 最后一个子元素
       var lastNode = element.children[element.children.length - 1];
-	  // nodeType 为 3 是 Text 类型，代表元素或属性中的文本内容。不是 pre 标签内的空白文本直接剔除
+	     // 移除最末尾的空白？
       if (lastNode && lastNode.type === 3 && lastNode.text === ' ' && !inPre) {
         element.children.pop();
       }
       // pop stack，相当于 stack.pop()
       stack.length -= 1;
-	  // 前一个元素就是当前元素的父元素
+	     // 前一个元素就是当前元素的父元素
       currentParent = stack[stack.length - 1];
-	  // 将 inVPre 和 inPre 值置为 false
+	     // 将 inVPre 和 inPre 值置为 false
       endPre(element);
     },
 
-	// 添加 Attr/Text 子节点
+	   // 添加 Attr/Text 子节点
     chars: function chars (text) {
-	  // 如果不存在父元素，发出警告，就此返回
+	     // 如果不存在父元素，发出警告，就此返回
       if (!currentParent) {
         {
           if (text === template) {
-			// 组件模板需要有一个根元素，而不能仅仅是文本
+			       // 组件模板需要有一个根元素，而不能仅仅是文本
             warnOnce(
               'Component template requires a root element, rather than just text.'
             );
-		  // text 去掉左右空格后还有内容，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
+		      // text 去掉左右空格后还有内容，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
           } else if ((text = text.trim())) {
-			// 根元素之外的文本将被忽略
+			       // 根元素之外的文本将被忽略
             warnOnce(
               ("text \"" + text + "\" outside root element will be ignored.")
             );
@@ -12696,29 +12700,29 @@ function parse (template,options) {
 
       var children = currentParent.children;
 
-	  // 对 text 进行修正
+	     // 对 text 进行修正
       text = inPre || text.trim()
-		/*
-			① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
-			② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
-		*/
+    		/*
+    			① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
+    			② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+    		*/
         ? isTextTag(currentParent) ? text : decodeHTMLCached(text)
         // only preserve whitespace if its not right after a starting tag
-		// 只有不是开始标签后（children.length > 0）的空白文本可以保留
+		    // 只有不是开始标签后（children.length > 0）的空白文本可以保留
         : preserveWhitespace && children.length ? ' ' : '';
 
       if (text) {
         var expression;
-		// 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
+		    // 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
         if (!inVPre && text !== ' ' && (expression = parseText(text, delimiters))) {
           // nodeType 为 2 表示 Attr，代表属性
-		  children.push({
+		      children.push({
             type: 2,
             expression: expression,
             text: text
           });
         } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
-		  // nodeType 为 3 表示 Text，代表元素或属性中的文本内容
+		      // nodeType 为 3 表示 Text，代表元素或属性中的文本内容
           children.push({
             type: 3,
             text: text
