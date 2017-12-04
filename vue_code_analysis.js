@@ -11815,7 +11815,7 @@ var canBeLeftOpenTag = makeMap(
 
 // HTML5 tags https://html.spec.whatwg.org/multipage/indices.html#elements-3
 // Phrasing Content https://html.spec.whatwg.org/multipage/dom.html#phrasing-content
-// 非段落元素
+// 段落元素
 var isNonPhrasingTag = makeMap(
   'address,article,aside,base,blockquote,body,caption,col,colgroup,dd,' +
   'details,dialog,div,dl,dt,fieldset,figcaption,figure,footer,form,' +
@@ -12048,11 +12048,11 @@ function parseHTML (html, options) {
           continue
         }
 
-        // 开始标签
+        // 开始标签，startTagMatch 为一个 json 对象
         var startTagMatch = parseStartTag();
 		// parseStartTag() 很多情况下返回 undefined，若 startTagMatch 为真，说明开始标签解析成功了
         if (startTagMatch) {
-		  // 处理开始标签（提取属性）
+		  // 处理开始标签（提取属性），处理 startTagMatch 这个 json 对象
           handleStartTag(startTagMatch);
           continue
         }
@@ -12173,7 +12173,7 @@ function parseHTML (html, options) {
     html = html.substring(n);
   }
 
-  // 解析开始标签
+  // 解析开始标签，返回一个 json 对象 match
   function parseStartTag () {
 	// 匹配开始标签 startTagOpen = new RegExp('^<' + qnameCapture)
     var start = html.match(startTagOpen);
@@ -12186,8 +12186,10 @@ function parseHTML (html, options) {
 		// 开始索引
         start: index
       };
+
 	  // 跳过开始标签
       advance(start[0].length);
+
       var end, attr;
 	  // 开始标签结尾 startTagClose = /^\s*(\/?)>/，把开始标签里的所有属性挑出来
       while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
@@ -12198,7 +12200,7 @@ function parseHTML (html, options) {
       }
 	  // 到这里遇到了开始标签结尾，否则就返回 undefined（开始标签未闭合）
       if (end) {
-		// 单标签时 '/'，否则是空 ''
+		// <input /> 等自闭合标签 end[1] 为 '/'，<div> 等标签 end[1] 空 ''
         match.unarySlash = end[1];
         advance(end[0].length);
         match.end = index;
@@ -12217,27 +12219,27 @@ function parseHTML (html, options) {
     }
   }
 
-  // 处理开始标签，提取属性
+  // 处理开始标签，提取属性。处理 json 对象 match
   function handleStartTag (match) {
 	// 标签名
     var tagName = match.tagName;
-	// 单标签时 '/'，否则是空 ''
+	// <input /> 等自闭合标签 end[1] 为 '/'，<div> 等标签 end[1] 空 ''
     var unarySlash = match.unarySlash;
 
     if (expectHTML) {
-	  // h1,h2,h3,h4,h5 等标签不能在 p 标签内部
+	  // p 标签里的 h1、div、li 等标签段落元素
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
 		// 闭合 p 标签
         parseEndTag(lastTag);
       }
-	  // tagName 是自动闭合标签，并且和上一个标签名相同
+	  // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'。lastTag 为最近一个未闭合标签
       if (canBeLeftOpenTag$$1(tagName) && lastTag === tagName) {
 		// 闭合 tagName 标签
         parseEndTag(tagName);
       }
     }
 
-	// 单标签（img，input 等）
+	// 自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
     var unary = isUnaryTag$$1(tagName) || !!unarySlash;
 
     var l = match.attrs.length;
@@ -12254,6 +12256,7 @@ function parseHTML (html, options) {
 		args[5] 匹配的是 ([^\s"'=<>`]+) 非 "'=<>`
 		所以可能匹配出空字符串 ''，这是不需要的
 	  */
+	  // 修正 args
       if (IS_REGEX_CAPTURING_BROKEN && args[0].indexOf('""') === -1) {
         if (args[3] === '') { delete args[3]; }
         if (args[4] === '') { delete args[4]; }
@@ -12264,21 +12267,36 @@ function parseHTML (html, options) {
       attrs[i] = {
         name: args[1],
 		// 将字符实体解码，如 '&amp;' -> '&'
-        value: decodeAttr(
-          value,
-          options.shouldDecodeNewlines
-        )
+        value: decodeAttr(value,options.shouldDecodeNewlines)
       };
     }
+
+	/*
+		于是，attrs 是这样一个数组：
+		[
+			{
+				name : name1,
+				value : value1
+			},
+			{
+				name : name2,
+				value : value2
+			},
+			...
+		]
+	*/
 
 	// 不是单标签
     if (!unary) {
 	  // 将当前标签入栈
       stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
+	  // lastTag 为最近一个未闭合标签
       lastTag = tagName;
     }
 
+	// 调用钩子函数
     if (options.start) {
+	  // 钩子函数 start(tag, attrs, unary) 
       options.start(tagName, attrs, unary, match.start, match.end);
     }
   }
@@ -12445,13 +12463,14 @@ function parse (template,options) {
     shouldDecodeNewlines: options.shouldDecodeNewlines,
 	// 是否保留注释
     shouldKeepComment: options.comments,
+	// 解析开始标签时调用的钩子函数
     start: function start (tag, attrs, unary) {
       // check namespace.
       // inherit parent ns if there is one，获取命名空间
       var ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag);
 
       // handle IE svg bug
-      // 修复 ie 下的 svg bug，即小组 attr.name 属性
+      // 修复 ie 下的 svg bug，即修正 attr.name 属性
       if (isIE && ns === 'svg') {
         attrs = guardIESVGBug(attrs);
       }
@@ -12484,6 +12503,9 @@ function parse (template,options) {
         parent: currentParent,
         children: []
       };
+
+	  // 以下都是修正 element 对象，继续给其添加属性
+
       if (ns) {
         element.ns = ns;
       }
@@ -12505,30 +12527,30 @@ function parse (template,options) {
       }
 
       if (!inVPre) {
-		    // 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
+		// 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
         processPre(element);
-		    // 如果 element.pre 为 true，那就把 inVPre 标记为 true
+		// 如果 element.pre 为 true，那就把 inVPre 标记为 true
         if (element.pre) {
           inVPre = true;
         }
       }
 
-	     // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
+	  // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
       if (platformIsPreTag(element.tag)) {
         inPre = true;
       }
 
-	    // pre 标签
+	  // pre 标签
       if (inVPre) {
         processRawAttrs(element);
       } else {
-		    // 解析 v-for 属性
+		// 解析 v-for 属性
         processFor(element);
         // 解析 v-if 属性
         processIf(element);
-        // 标记 el.once
+        // 标记 element.once
         processOnce(element);
-        // 标记 el.key
+        // 标记 element.key
         processKey(element);
 
         // determine whether this is a plain element after
@@ -12536,11 +12558,11 @@ function parse (template,options) {
         // 是否移除结构化的 attribute 和 key 后，该元素不存在属性
         element.plain = !element.key && !attrs.length;
 
-        // 标记 el.ref
+        // 标记 element.ref
         processRef(element);
         // slot 相关属性
         processSlot(element);
-        // 标记 el.component、el.inlineTemplate 
+        // 标记 element.component、element.inlineTemplate 
         processComponent(element);
 
         // 依次调用各个模块的 transformNode 函数
@@ -12956,8 +12978,10 @@ function processAttrs (el) {
 
     // 匹配指令 dirRE = /^v-|^@|^:/;
     if (dirRE.test(name)) {
-      // mark element as dynamic
+
+      // mark element as dynamic，标记当前元素拥有动态属性
       el.hasBindings = true;
+
       // modifiers，解析修饰符，返回一个 json，键名是各修饰符，键值是 true
       modifiers = parseModifiers(name);
 
@@ -12965,25 +12989,28 @@ function processAttrs (el) {
         // 匹配修饰符 modifierRE = /\.[^.]+/g，去掉修饰符
         name = name.replace(modifierRE, '');
       }
-      // 匹配 bind bindRE = /^:|^v-bind:/，去掉 v-bind
-      if (bindRE.test(name)) { // v-bind
+      // 匹配 bind bindRE = /^:|^v-bind:/
+      if (bindRE.test(name)) { 
+		// 去掉 v-bind
         name = name.replace(bindRE, '');
         // 解析过滤器，返回一个字符串
         value = parseFilters(value);
         isProp = false;
+		// 属性修饰符
         if (modifiers) {
-          // prop
+
+          // ① prop 修饰符
           if (modifiers.prop) {
             isProp = true;
             name = camelize(name);
             // 修正 'innerHtml' -> 'innerHTML'
             if (name === 'innerHtml') { name = 'innerHTML'; }
           }
-          // 驼峰化
+          // ② camel 修饰符，驼峰化
           if (modifiers.camel) {
             name = camelize(name);
           }
-          // 事件绑定
+          // ③ sync 修饰符
           if (modifiers.sync) {
             /*
               addHandler 函数的大致作用为：
@@ -13012,9 +13039,10 @@ function processAttrs (el) {
         // parse arg
         // 匹配参数 argRE = /:(.*)$/，如 <div v-bind:class="[activeClass, errorClass]"></div>
         var argMatch = name.match(argRE);
+		// 如 'v-bind:class' 中的 'class'
         var arg = argMatch && argMatch[1];
         if (arg) {
-          // 如 'v-bind:class' 中的 'class'
+          // 如 'v-bind:class' 中的 'v-bind'
           name = name.slice(0, -(arg.length + 1));
         }
         // 添加指令
