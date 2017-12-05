@@ -11699,7 +11699,7 @@ function transformNode (el, options) {
   }
 }
 
-// 返回一个字符串
+// 返回一个字符串。这里的 el 指 ast
 function genData (el) {
   var data = '';
   // 静态 class
@@ -13210,11 +13210,44 @@ var genStaticKeysCached = cached(genStaticKeys$1);
  */
 function optimize (root, options) {
   if (!root) { return }
+  /*
+	function genStaticKeys$1 (keys) {
+	  return makeMap(
+		'type,tag,attrsList,attrsMap,plain,parent,children,attrs' +
+		(keys ? ',' + keys : '')
+	  )
+	}
+	genStaticKeysCached = cached(genStaticKeys$1)
+
+	所以，isStaticKey 相当于：
+	isStaticKey = function(){
+		return makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs' + options.staticKeys)
+	}
+
+	其中，options.staticKeys(即 baseOptions.staticKeys) 为：genStaticKeys(modules$1)
+	genStaticKeys 方法的作用是将一组对象的 staticKeys 数组合并成一个字符串，举个例子：
+	modules = [
+		{ staticKeys : ['mod11','mod12'] },
+		{ staticKeys : ['mod21','mod22'] },
+		{ staticKeys : ['mod31','mod32'] }
+	];
+	genStaticKeys(modules)
+	-> "mod11,mod12,mod21,mod22,mod31,mod32"
+
+	所以，isStaticKey 相当于：
+	isStaticKey = function(){
+		// 这些属性都是静态属性
+		return makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs' + "mod11,mod12,mod21,mod22,mod31,mod32")
+	}
+  */
+  // 判断静态属性
   isStaticKey = genStaticKeysCached(options.staticKeys || '');
   isPlatformReservedTag = options.isReservedTag || no;
   // first pass: mark all non-static nodes.
+  // 给 root 添加属性 root.static，属性值为 true 则为静态节点，为 false 则为非静态节点
   markStatic$1(root);
   // second pass: mark static roots.
+  // 标记静态根节点，添加 root.staticInFor、root.staticRoot 等属性，属性值为 true | false
   markStaticRoots(root, false);
 }
 
@@ -13274,7 +13307,7 @@ function markStatic$1 (node) {
   }
 }
 
-// 标记静态根节点
+// 标记静态根节点，添加 node.staticInFor、node.staticRoot 等属性，属性值为 true | false
 function markStaticRoots (node, isInFor) {
   // 1 为 Element，代表元素
   if (node.type === 1) {
@@ -13290,7 +13323,7 @@ function markStaticRoots (node, isInFor) {
     // are not just static text. Otherwise the cost of hoisting out will
     // outweigh the benefits and it's better off to just always render it fresh.
     
-	// 不能仅仅包含一个文本子节点，才可能判定为静态根节点
+	// 作为静态节点，必须保证有子节点并且不为纯文本。如果只是纯文本，那么重新渲染的成本更小。
 	if (node.static && node.children.length && !(node.children.length === 1 && node.children[0].type === 3)) {
       node.staticRoot = true;
       return
@@ -13304,7 +13337,8 @@ function markStaticRoots (node, isInFor) {
         markStaticRoots(node.children[i], isInFor || !!node.for);
       }
     }
-
+	
+	// 如果 v-if 条件成立，那么其内容就改当做子节点来看待
     if (node.ifConditions) {
 	   // node.ifConditions[i$1] 结构为： { exp: el.elseif,block: el } 
       for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
@@ -13315,7 +13349,7 @@ function markStaticRoots (node, isInFor) {
   }
 }
 
-// 是否为静态节点
+// 判断一个节点是否为静态节点
 function isStatic (node) {
   // 表达式，非静态
   if (node.type === 2) { // expression
@@ -13338,6 +13372,13 @@ function isStatic (node) {
     !isDirectChildOfTemplateFor(node) &&
 	// node 对象的每一个属性都是静态的
     Object.keys(node).every(isStaticKey)
+	/*
+		isStaticKey = function(){
+			// 这些属性都是静态属性
+			return makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs' + "mod11,mod12,mod21,mod22,mod31,mod32")
+		}
+		作用是判断属性是否为以下静态属性
+	*/
   ))
 }
 
@@ -13647,6 +13688,7 @@ var CodegenState = function CodegenState (options) {
 */
 function generate (ast,options) {
   var state = new CodegenState(options);
+  // 将 ast 对象转为浏览器可以执行的字符串
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
     render: ("with(this){return " + code + "}"),
@@ -13654,7 +13696,7 @@ function generate (ast,options) {
   }
 }
 
-// 生成渲染函数，返回字符串形式的执行代码
+// 生成渲染函数，返回字符串形式的执行代码。这里的 el 指 ast
 function genElement (el, state) {
   // 静态节点
   if (el.staticRoot && !el.staticProcessed) {
@@ -13683,8 +13725,26 @@ function genElement (el, state) {
 	// 普通元素
     } else {
       var data = el.plain ? undefined : genData$2(el, state);
-
+	  /*
+		genData$2(el, state) 返回值为这种形式：
+		data: {
+			staticClass:"view two",
+			attrs:{"name":"a"},
+			key : ...,
+			attrs : {},
+			...
+		}
+	 */
       var children = el.inlineTemplate ? null : genChildren(el, state, true);
+	  /*
+		code = "_c('" + (el.tag) + "'" +  ("," + data)  + ("," + children) + ")"
+		其中，_c 就是 createElement。
+		createElement( tag, data, children) 生成模板
+		其中：
+		tag :  一个 HTML 标签字符串，组件选项对象，或者一个返回值类型为 String/Object 的函数，必要参数
+		data : 一个包含模板相关属性的数据对象。这样，您可以在 template 中使用这些属性。可选参数。
+		children : 子节点。可选参数
+	  */
       code = "_c('" + (el.tag) + "'" + (data ? ("," + data) : '') + (children ? ("," + children) : '') + ")";
     }
     // module transforms
@@ -13811,52 +13871,106 @@ function genFor (el, state, altGen, altHelper) {
 
 /*
 	返回值为这种形式：
-	data: {
-		staticClass:"view two",
-		attrs:{"name":"a"},
-		key : ...,
-		attrs : {},
+	data: { 
+	  directives : someDir,
+	  key : someKey,
+	  ref :someRef,
+	  refInFor : true,
+	  pre : true,
+	  tag : el.tag,
+	  staticClass : someStaticClass,
+	  class : someClass,
+	  attrs : { name1 : val1, name2 : val2 ...},
+	  domProps : { name1 : val1, name2 : val2 ...},
+	  on:{
+		'name1' : "function($event){ some code}",
+		'name2' : "function($event){ some code}",
 		...
+	  },
+	  nativeOn:{
+		'name1' : "function($event){ some code}",
+		'name2' : "function($event){ some code}",
+		...
+	  },
+	  slot : el.slotTarget,
+	  scopedSlots:_u([...]),
+	  model:{ value : el.model.value, callback : el.model.callback, expression : el.model.expression},
+	  inlineTemplate:{
+			render:function(){ inlineRenderFns.render},
+			staticRenderFns:[(inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(','))]
+	  }
 	}
 */
+// 这里的 el 指 ast
 function genData$2 (el, state) {
   var data = '{';
 
   // directives first.
   // directives may mutate the el's other properties before they are generated.
-  // 指令
+  /*
+	// 指令 
+	  directives : [
+		{name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+		{name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+		...
+	  ],
+  */
   var dirs = genDirectives(el, state);
   if (dirs) { data += dirs + ','; }
 
-  // key
+  /*
+	  key : someKey,
+  */
   if (el.key) {
     data += "key:" + (el.key) + ",";
   }
-  // ref
+  /*
+	  ref : someRef,
+  */
   if (el.ref) {
     data += "ref:" + (el.ref) + ",";
   }
+  /*
+	  refInFor : true,
+  */
   if (el.refInFor) {
     data += "refInFor:true,";
   }
-  // pre
+  /*
+	  pre : true,
+  */
   if (el.pre) {
     data += "pre:true,";
   }
   // record original tag name for components using "is" attribute
   // 当组件用 is 属性时，记录原始的 tag 名
+  /*
+	  tag : el.tag,
+  */
   if (el.component) {
     data += "tag:\"" + (el.tag) + "\",";
   }
   // module data generation functions，模块数据
+  /*
+	state.dataGenFns[i] 其实是 genData 方法。genData (el) 返回 "staticClass: someStaticClass, class: someClass" 这个字符串
+
+	staticClass: someStaticClass, 
+	class: someClass,
+  */
   for (var i = 0; i < state.dataGenFns.length; i++) {
     data += state.dataGenFns[i](el);
   }
   // attributes，属性
+  /*
+	  attrs : { name1 : val1, name2 : val2 ...},
+  */
   if (el.attrs) {
     data += "attrs:{" + (genProps(el.attrs)) + "},";
   }
   // DOM props
+  /*
+	  domProps : { name1 : val1, name2 : val2 ...},
+  */
   if (el.props) {
     data += "domProps:{" + (genProps(el.props)) + "},";
   }
@@ -13883,45 +13997,86 @@ function genData$2 (el, state) {
 	*/
     data += (genHandlers(el.nativeEvents, true, state.warn)) + ",";
   }
-  // slot target
+  /*
+	  slot : el.slotTarget,
+  */
   if (el.slotTarget) {
     data += "slot:" + (el.slotTarget) + ",";
   }
-  // scoped slots
+  /*
+	  scopedSlots:_u([...]),
+  */
   if (el.scopedSlots) {
     data += (genScopedSlots(el.scopedSlots, state)) + ",";
   }
   // component v-model
+  /*
+	  model:{ value : el.model.value, callback : el.model.callback, expression : el.model.expression},
+  */
   if (el.model) {
     data += "model:{value:" + (el.model.value) + ",callback:" + (el.model.callback) + ",expression:" + (el.model.expression) + "},";
   }
   // inline-template
   if (el.inlineTemplate) {
 	/*
-		"inlineTemplate:{render:function(){" + (inlineRenderFns.render) + "},staticRenderFns:[" + (inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(',')) + "]}"
-		
-		也就是:
 		inlineTemplate:{
 			render:function(){ inlineRenderFns.render},
 			staticRenderFns:[(inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(','))]
-		}
+		},
 	*/    
 	var inlineTemplate = genInlineTemplate(el, state);
     if (inlineTemplate) {
       data += inlineTemplate + ",";
     }
   }
+  // 去掉最后一个逗号
   data = data.replace(/,$/, '') + '}';
+  /*
+	此时的 data 结构如下：
+	{ 
+	  directives : someDir,
+	  key : someKey,
+	  ref :someRef,
+	  refInFor : true,
+	  pre : true,
+	  tag : el.tag,
+	  staticClass : someStaticClass,
+	  class : someClass,
+	  attrs : { name1 : val1, name2 : val2 ...},
+	  domProps : { name1 : val1, name2 : val2 ...},
+	  on:{
+		'name1' : "function($event){ some code}",
+		'name2' : "function($event){ some code}",
+		...
+	  },
+	  nativeOn:{
+		'name1' : "function($event){ some code}",
+		'name2' : "function($event){ some code}",
+		...
+	  },
+	  slot : el.slotTarget,
+	  scopedSlots:_u([...]),
+	  model:{ value : el.model.value, callback : el.model.callback, expression : el.model.expression},
+	  inlineTemplate:{
+			render:function(){ inlineRenderFns.render},
+			staticRenderFns:[(inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(','))]
+	  }
+	}
+*/
+
   // v-bind data wrap
   if (el.wrapData) {
-	// el.wrapData = function (code) {return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")};
-    data = el.wrapData(data);
+	  // el.wrapData = function (code) {return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")};
+	  // 所以 data =  "_b(data, el.tag, dir.value, true|false, true|'')" 这里的 dir 应该是每一条指令
+	  data = el.wrapData(data);
   }
   // v-on data wrap
   if (el.wrapListeners) {
 	// el.wrapListeners = function (code) { return ("_g(" + code + "," + (dir.value) + ")"); };
+	// 所以，data = "_g(_b(data, el.tag, dir.value, true|false, true|''), dir.value)"
     data = el.wrapListeners(data);
   }
+  
   return data
 }
 
@@ -13991,7 +14146,7 @@ function genInlineTemplate (el, state) {
 
 /*
     返回值：
-	"scopedSlots:_u([{...},{...},{...}])"
+	"scopedSlots:_u([...])"
 */
 function genScopedSlots (slots, state) {
   return ("scopedSlots:_u([" + (Object.keys(slots).map(function (key) {
@@ -14041,7 +14196,7 @@ function genForScopedSlot (
     '})'
 }
 
-// 子节点，返回值为：([,,,] ,normalizationType)
+// 子节点，返回值为："[,,,] , 0|1|2"
 function genChildren (el, state, checkSkip, altGenElement, altGenNode) {
   var children = el.children;
   if (children.length) {
@@ -14125,7 +14280,7 @@ function genNode (node, state) {
   }
 }
 
-// 文本，"_v( someText )"（Vue.prototype._v = createTextVNode）
+// 文本，"_v( someText )" 其中 _v 为（Vue.prototype._v = createTextVNode）
 function genText (text) {
   return ("_v(" + (text.type === 2
     ? text.expression // no need for () because already wrapped in _s()
@@ -14178,7 +14333,7 @@ function genProps (props) {
     var prop = props[i];
     res += "\"" + (prop.name) + "\":" + (transformSpecialNewlines(prop.value)) + ",";
   }
-  // 剔除最后一个 ,
+  // 剔除最后一个逗号
   return res.slice(0, -1)
 }
 
@@ -14381,6 +14536,16 @@ function createCompileToFunctionFn (compile) {
 
     // 第 1 步：编译
     var compiled = compile(template, options);
+	/*
+		 compiled 结构:
+		 {
+			ast: ast,
+			render: code.render,
+			staticRenderFns: code.staticRenderFns
+			errors: [...],
+			tips: [...]
+		  }
+	 */
 
     // check compilation errors/tips
     {
@@ -14528,8 +14693,31 @@ function createCompilerCreator (baseCompile) {
 // createCompiler 是一个函数
 var createCompiler = createCompilerCreator(function baseCompile (template,options) {
   // 将模板解析成 ast 树
+  /*
+	ast(即 root) 为根节点，在 start 钩子函数中有对其赋值：
+	if (!root) {
+        root = element;
+        checkRootConstraints(root);
+    }
+
+	其中，element 结构大致如下：
+	{
+        type: 1,
+        tag: tag,
+        attrsList: 数组形式的属性列表,
+        attrsMap: json 对象形式的属性列表,
+        parent: currentParent,
+        children: [],
+		ns : 命名空间
+		forbidden : 禁用
+		pre : 是否有 v-pre 属性
+		plain : 是否移除结构化的 attribute 和 key 后，该元素不存在属性
+     }
+
+	 也就是说 ast 拥有这些属性
+  */
   var ast = parse(template.trim(), options);
-  // 优化 ast 树
+  // 优化 ast 树，其实就是给 ast 添加 ast.static、ast.staticInFor、ast.staticRoot 等属性，属性值为 true | false
   optimize(ast, options);
   /*
 	返回一个 json 对象：
