@@ -2803,14 +2803,9 @@ function createFnInvoker (fns) {
 }
 
 // 更新监听
-function updateListeners (
-  on,
-  oldOn,
-  add,
-  remove$$1,
-  vm
-) {
+function updateListeners (on, oldOn, add, remove$$1, vm) {
   var name, cur, old, event;
+
   for (name in on) {
     cur = on[name];
     old = oldOn[name];
@@ -2831,15 +2826,16 @@ function updateListeners (
         "Invalid handler for event \"" + (event.name) + "\": got " + String(cur),
         vm
       );
-    // cur 合法，但 old 为 undefined 或 null，那么就需要用 add 新建事件绑定了
+    // cur 合法，但 old 为 undefined 或 null，那么就需要用 add 新建事件绑定了，并且初始化调用器。
     } else if (isUndef(old)) {
       // 如果 cur.fns 为 undefined 或 null，那么，cur 重置为 cur 函数调用器
       if (isUndef(cur.fns)) {
+		// 初始化。on[name] 保存的是调用器，由调用器触发函数 cur。
         cur = on[name] = createFnInvoker(cur);
       }
       // 事件绑定
       add(event.name, cur, event.once, event.capture, event.passive);
-    // cur 和 old 都合法，但不相等，那么可以继续用 old，只是更新 old 的监听函数即可
+    // cur 和 old 都合法，但不相等，那么可以继续用 old 这个调用器（免得还要调用 createFnInvoker 方法重新生成调用器），把调用器触发的方法更新为新的 cur 就行了
     } else if (cur !== old) {
       old.fns = cur;
       // 更新 on[name]
@@ -7549,7 +7545,7 @@ function createPatchFunction (backend) {
       if (isDef(ch)) {
         // 有标签，普通节点
         if (isDef(ch.tag)) {
-          // 删除和销毁
+          // 删除模板和触发钩子函数
           removeAndInvokeRemoveHook(ch);
           invokeDestroyHook(ch);
         // 没有标签，文本节点
@@ -7578,7 +7574,7 @@ function createPatchFunction (backend) {
       } else {
         // directly removing
         /*
-            rm 为一个函数，并且 rm.listeners = listeners，每次调用 rm 函数，rm.listeners--
+            rm 为一个函数，并且 rm.listeners = listeners（数值），每次调用 rm 函数，rm.listeners--
             当 rm.listeners 为 0 时，移除 vnode.elm
         */
         rm = createRmCb(vnode.elm, listeners);
@@ -8045,7 +8041,6 @@ function createPatchFunction (backend) {
           oldVnode = emptyNodeAt(oldVnode);
         }
 
-
         // replacing existing element
         var oldElm = oldVnode.elm;
         var parentElm$1 = nodeOps.parentNode(oldElm);
@@ -8090,7 +8085,22 @@ function createPatchFunction (backend) {
         
         // 父元素存在
         if (isDef(parentElm$1)) {
-          // 删除 oldVnode 这一个元素
+		  /*
+			至此，dom 结构为：
+			<body>
+				<div id="app">
+					{{message}}
+				</div>
+				<div id="app">
+					Hello Vue!
+				</div>
+			</body>
+			所以，我们需要移除模板：
+			<div id="app">
+				{{message}}
+			</div>
+		  */
+          // 移除模板。
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
         // 父元素不存在，那就调用销毁钩子
         } else if (isDef(oldVnode.tag)) {
@@ -8123,7 +8133,7 @@ function updateDirectives (oldVnode, vnode) {
   }
 }
 
-// 更新
+// 更新指令
 function _update (oldVnode, vnode) {
   // oldVnode 是 emptyNode，说明是 create 操作
   var isCreate = oldVnode === emptyNode;
@@ -8384,6 +8394,7 @@ var attrs = {
 
 // 更新 class
 function updateClass (oldVnode, vnode) {
+  // 真实 dom 节点
   var el = vnode.elm;
   var data = vnode.data;
   var oldData = oldVnode.data;
@@ -9339,7 +9350,7 @@ function updateDOMProps (oldVnode, vnode) {
     if (key === 'value') {
       // store value as _value as well since
       // non-string values will be stringified
-      // 保留原始值，因为后面会将不是字符串的值会强制改为字符串
+      // 保留原始值，后面会将不是字符串的值会强制改为字符串
       elm._value = cur;
       // avoid resetting cursor position when value is the same
       // 将值强制改为字符串
