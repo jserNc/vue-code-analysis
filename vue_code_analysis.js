@@ -411,7 +411,7 @@ function cached (fn) {
 /**
  * Camelize a hyphen-delimited string.
  */
-// 将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
+// 将连字符分隔的字符串驼峰化，例如：camelize('a-b-c') -> aBC
 var camelizeRE = /-(\w)/g;
 var camelize = cached(function (str) {
   return str.replace(camelizeRE, function (_, c) { return c ? c.toUpperCase() : ''; })
@@ -1524,7 +1524,7 @@ function copyAugment (target, src, keys) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
-// 为 value 创建一个观察者实例
+// 为 value 创建一个观察者实例。asRootData 为 true 表示当前 value 为根数据。
 function observe (value, asRootData) {
   // 如果 vulue 不是对象就不处理了
   if (!isObject(value)) {
@@ -4598,9 +4598,13 @@ function initData (vm) {
 
   /*
    ① 如果 data 是函数，那就取这个函数的执行结果；
-   ② 否则就取 data
+   ② 否则就取 data（若 data 不存在，取空对象 {}）
+
+   这里给 vm._data 赋值，后面代理了 vm[key] 属性的获取和设置
+   也就是 vm["_data"][key] 代理 vm[key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
   */
   data = vm._data = typeof data === 'function'
+	// getData(data, vm) -> data.call(vm)
     ? getData(data, vm)
     : data || {};
 
@@ -4638,12 +4642,12 @@ function initData (vm) {
         vm
       );
     } else if (!isReserved(key)) {
-      // 给 vm 对象定义属性 key
+      // vm["_data"][key] 代理 vm[key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
       proxy(vm, "_data", key);
     }
   }
   // observe data
-  // 为 value 创建一个 Observer 实例
+  // 为 value 创建一个 Observer 实例。asRootData 为 true 表示当前 data 为根数据。
   observe(data, true /* asRootData */);
 }
 
@@ -5330,15 +5334,8 @@ var ALWAYS_NORMALIZE = 2;
 // wrapper function for providing a more flexible interface
 // without getting yelled at by flow
 // 创建元素，修正参数，实际调用 _createElement(context, tag, data, children, normalizationType)，返回一个 vnode
-function createElement (
-  context,
-  tag,
-  data,
-  children,
-  normalizationType,
-  alwaysNormalize
-) {
-  // data 为数组、字符串或数值
+function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
+  // data 为数组、字符串或数值，则参数的含义重新分配（相当于为定义 data，其他参数取前 1 位）
   if (Array.isArray(data) || isPrimitive(data)) {
     // normalizationType 修正为第 4 个实参
     normalizationType = children;
@@ -5348,19 +5345,17 @@ function createElement (
   }
   // alwaysNormalize === true，再次修正 normalizationType 为 2
   if (isTrue(alwaysNormalize)) {
+	/*
+		SIMPLE_NORMALIZE = 1;	简单标准化
+		ALWAYS_NORMALIZE = 2;	正常标准化
+	*/
     normalizationType = ALWAYS_NORMALIZE;
   }
   return _createElement(context, tag, data, children, normalizationType)
 }
 
-// 返回一个 vnode
-function _createElement (
-  context,
-  tag,
-  data,
-  children,
-  normalizationType
-) {
+// 返回一个 vnode。如 _createElement(vm, 'a', {attr:{'href':'#'}}, [vnode...], 2)
+function _createElement (context, tag, data, children, normalizationType) {
   // 避免使用被观察的 data 对象作为虚拟节点的 data
   if (isDef(data) && isDef((data).__ob__)) {
     "development" !== 'production' && warn(
@@ -5382,26 +5377,26 @@ function _createElement (
     return createEmptyVNode()
   }
   // warn against non-primitive key
-  if ("development" !== 'production' &&
-    isDef(data) && isDef(data.key) && !isPrimitive(data.key)
-  ) {
-    // 可以必须为字符串或数值类型
+  if ("development" !== 'production' && isDef(data) && isDef(data.key) && !isPrimitive(data.key)) {
+    // key 值必须为字符串或数值等基本数据类型
     warn(
       'Avoid using non-primitive value as key, ' +
       'use string/number value instead.',
       context
     );
   }
+
+
   // support single function children as default scoped slot
   // children 为数组，并且该数组的第一个元素是函数
-  if (Array.isArray(children) &&
-    typeof children[0] === 'function'
-  ) {
+  if (Array.isArray(children) && typeof children[0] === 'function') {
     data = data || {};
     data.scopedSlots = { default: children[0] };
     // 将 children 数组清空
     children.length = 0;
   }
+
+
   // ALWAYS_NORMALIZE 为 2
   if (normalizationType === ALWAYS_NORMALIZE) {
     // 标准化处理，返回一个数组
@@ -5411,6 +5406,7 @@ function _createElement (
     // 简单的标准化处理：将 children 数组扁平化，变成一维数组
     children = simpleNormalizeChildren(children);
   }
+
   var vnode, ns;
   if (typeof tag === 'string') {
     var Ctor;
@@ -5419,10 +5415,7 @@ function _createElement (
     // 若 tag 为 div、span 等保留标签，直接用这个标签名创建虚拟节点就好了
     if (config.isReservedTag(tag)) {
       // platform built-in elements
-      vnode = new VNode(
-        config.parsePlatformTagName(tag), data, children,
-        undefined, undefined, context
-      );
+      vnode = new VNode(config.parsePlatformTagName(tag), data, children, undefined, undefined, context);
     } else if (isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
       // component
       vnode = createComponent(Ctor, data, context, children, tag);
@@ -5430,15 +5423,13 @@ function _createElement (
       // unknown or unlisted namespaced elements
       // check at runtime because it may get assigned a namespace when its
       // parent normalizes children
-      vnode = new VNode(
-        tag, data, children,
-        undefined, undefined, context
-      );
+      vnode = new VNode(tag, data, children, undefined, undefined, context);
     }
   } else {
     // direct component options / constructor
     vnode = createComponent(tag, data, context, children);
   }
+
   if (isDef(vnode)) {
     // vnode.ns = ns
     if (ns) { applyNS(vnode, ns); }
@@ -5470,22 +5461,20 @@ function applyNS (vnode, ns) {
 /**
  * Runtime helper for rendering v-for lists.
  */
-// 渲染 v-for 列表，返回数组 ret，该数组元素是 render 函数执行结果
-function renderList (
-  val,
-  render
-) {
+// Vue.prototype._l = renderList 渲染 v-for 列表，返回数组 ret，该数组元素是 render 函数执行结果
+function renderList (val,render) {
   var ret, i, l, keys, key;
-  // val 是数组或 val 是字符串
+  // val 是数组或 val 是字符串，例如 v-for="(value, key) in items"
   if (Array.isArray(val) || typeof val === 'string') {
     ret = new Array(val.length);
     for (i = 0, l = val.length; i < l; i++) {
       ret[i] = render(val[i], i);
     }
-  // val 是数组
+  // val 是数值，例如 v-for="item in 5"
   } else if (typeof val === 'number') {
     ret = new Array(val);
     for (i = 0; i < val; i++) {
+	  // i + 1 为 1 2 3 4 5
       ret[i] = render(i + 1, i);
     }
   // val 是对象
@@ -5750,13 +5739,14 @@ function initRender (vm) {
     参数顺序：tag, data, children, normalizationType, alwaysNormalize
 
     内部版本是被模板编译而成的渲染函数用的
+	createElement 最后参数为 false 表示是否进行正常标准化处理由参数 d 决定
   */
   vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); };
 
 
   // normalization is always applied for the public version, used in
   // user-written render functions.
-  // normalization 主要在公共版本中应用，也就是用户自己编写的渲染函数中
+  // normalization 主要在公共版本中应用，也就是用户自己编写的渲染函数中。createElement 最后参数为 true 表示总是进行 ALWAYS_NORMALIZE = 2 的正常标准化处理
   vm.$createElement = function (a, b, c, d) { return createElement(vm, a, b, c, d, true); };
 
   // $attrs & $listeners are exposed for easier HOC creation.
@@ -12392,8 +12382,8 @@ var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;
 /*
  (( group #1 ),( group #2 ),( group #3 ))
  
- group #1 : (\{[^}]*\}|[^,]*)  { 非 } 0次或多次 } 或 非 , 0次或多次
- group #2 : ([^,]*)            非 , 0次或多次
+ group #1 : (\{[^}]*\}|[^,]*)  { 非} 0次或多次 } 或 非, 0次或多次
+ group #2 : ([^,]*)            非, 0次或多次
  group #3 : (?:,([^,]*))       , 后跟 0次或多次非 ,
 */
 var forIteratorRE = /\((\{[^}]*\}|[^,]*),([^,]*)(?:,([^,]*))?\)/;
@@ -12822,10 +12812,10 @@ function processRef (el) {
   }
 }
 
-// v-for 属性
+// v-for 属性。添加 el.for（数据源）、el.alias（数据项）、el.iterator1（数据子项）、el.iterator2（数据子项） 等属性
 function processFor (el) {
   var exp;
-  // v-for 属性存在，eg : "item in items"
+  // v-for 属性存在，eg : "item in items" 或 "(value, key) in items"
   if ((exp = getAndRemoveAttr(el, 'v-for'))) {
     // forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/， in 或 of
     var inMatch = exp.match(forAliasRE);
@@ -12836,17 +12826,19 @@ function processFor (el) {
       );
       return
     }
-      // 'in' 或 'of'
+    // 数据源 'items'
     el.for = inMatch[2].trim();
-      // 'item' 或 '(value, key)'
+    // 数据项 'item' 或 '(value, key)'
     var alias = inMatch[1].trim();
-      // v-for="(value, key) in object" 这种形式
+	/*
+		对于 v-for="(value, key) in object" 这种形式，alias = '(value, key)'
+		于是：'(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
+	*/
     var iteratorMatch = alias.match(forIteratorRE);
-      // '(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
     if (iteratorMatch) {
-        // "value"
+      // 数据值 "value"
       el.alias = iteratorMatch[1].trim();
-        // "key"
+      // 数据键 "key"
       el.iterator1 = iteratorMatch[2].trim();
       if (iteratorMatch[3]) {
         el.iterator2 = iteratorMatch[3].trim();
@@ -13226,6 +13218,8 @@ var genStaticKeysCached = cached(genStaticKeys$1);
     一旦检测到了纯静态的子树，做如下处理：
     1. 把它们提升到常量里。这样我们就不必为每一个 re-render 创建一批新的节点了。
     2. 在打补丁的过程中跳过它们
+
+	其实就是给 root 添加 root.static、root.staticInFor、root.staticRoot 等属性，属性值为 true | false
  */
 function optimize (root, options) {
   if (!root) { return }
@@ -13710,6 +13704,29 @@ function generate (ast,options) {
   // 将 ast 对象转为浏览器可以执行的字符串
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
+	/*
+		以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
+		with 语句的 this 是 vm，所以 _c 实际是 vm._c。
+		
+		看看 with 的基本用法（严格模式下不能使用with语句）：
+		var qs = location.search.substring(1);
+		var hostName = location.hostname;
+		var url = location.href;
+		这几行代码都是访问 location 对象中的属性，如果使用 with 关键字的话，可以简化代码如下：
+		with (location){
+		  var qs = search.substring(1);
+		  var hostName = hostname;
+		  var url = href;
+		}
+		在这段代码中，使用了 with 语句关联了 location 对象，这就以为着在 with 代码块内部，每个变量首先被认为是一个局部变量，如果局部变量与 location 对象的某个属性同名，则这个局部变量会指向 location 对象属性。
+	
+		在 Vue.prototype._render 中：
+		vnode = render.call(vm._renderProxy, vm.$createElement);
+		而 vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）
+		所以:
+		"_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
+		其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
+	*/
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
   }
@@ -13860,6 +13877,13 @@ function genIfConditions (conditions, state, altGen, altEmpty) {
 
 // v-for
 function genFor (el, state, altGen, altHelper) {
+  /*
+	v-for = "(value, key) in items"
+	数据源 el.for = 'items'
+	数据项 el.alias = 'value'
+	数据子项 el.iterator1 = "value"
+	数据子项 el.iterator2 = ""
+  */
   var exp = el.for;
   var alias = el.alias;
   var iterator1 = el.iterator1 ? ("," + (el.iterator1)) : '';
@@ -13882,6 +13906,16 @@ function genFor (el, state, altGen, altHelper) {
 
   // 标识执行过 genFor 函数，避免递归调用
   el.forProcessed = true; // avoid recursion
+  /*
+	例如：
+	<div id="app">
+		<a href="#" v-for="(value, key) in items">{{val}}</a>
+	</div>
+	这里递归调用 genElement 得到：
+	"_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])})"
+	最终返回："_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
+	最外层的 div 包 a 标签，a 标签又包含文本
+  */
   return (altHelper || '_l') + "((" + exp + ")," +
     "function(" + alias + iterator1 + iterator2 + "){" +
       "return " + ((altGen || genElement)(el, state)) +
