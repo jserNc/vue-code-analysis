@@ -3666,11 +3666,11 @@ function lifecycleMixin (Vue) {
     */
     // 初始化渲染
     if (!prevVnode) {
-      // initial render。其中 vm.$el 是原生 dom 节点，vnode 是虚拟 dom
+      // initial render。其中 vm.$el 是真实 dom 节点，vnode 是虚拟 dom 节点
       vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false /* removeOnly */, vm.$options._parentElm, vm.$options._refElm);
       // no need for the ref nodes after initial patch
       // this prevents keeping a detached DOM tree in memory (#5851)
-      // 初始化后，就不需要这俩引用了。释放引用，以防止独立的 dom 树保存在内存中。
+      // 初始化后，就不需要这俩引用了。释放之，以防止独立的 dom 树保存在内存中。
       vm.$options._parentElm = vm.$options._refElm = null;
     // 更新
     } else {
@@ -3827,8 +3827,11 @@ function mountComponent (vm, el, hydrating) {
     其实，跟上面的 if 块一样，注意执行这两句：
     var vnode = vm._render();
     vm._update(vnode, hydrating);
+
+	其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
     updateComponent = function () {
+	  // 根据新的 vnode 对 dom 进行更新
       vm._update(vm._render(), hydrating);
     };
   }
@@ -5133,13 +5136,7 @@ var hooksToMerge = Object.keys(componentVNodeHooks);
 // -> ["init", "prepatch", "insert", "destroy"]
 
 // 创建组件
-function createComponent (
-  Ctor,
-  data,
-  context,
-  children,
-  tag
-) {
+function createComponent (Ctor, data, context, children, tag) {
   // 如果没构造函数，返回
   if (isUndef(Ctor)) {
     return
@@ -5773,7 +5770,7 @@ function renderMixin (Vue) {
     return nextTick(fn, this)
   };
 
-  // 返回 vnode
+  // 生成 vnode 并返回
   Vue.prototype._render = function () {
     var vm = this;
     var ref = vm.$options;
@@ -7135,7 +7132,7 @@ function createPatchFunction (backend) {
   var i, j;
   var cbs = {};
  
-  // modules 为数组，数组元素为对象，每个对象包括 create、update 等方法
+  // modules 为数组 [attrs,klass,events,domProps,style,transition,ref,directives]，数组每个项包括 create、update 等方法
   var modules = backend.modules;
   // nodeOps 为对象，对象包括 createElement、insertBefore 等 dom 操作方法
   var nodeOps = backend.nodeOps;
@@ -7229,7 +7226,6 @@ function createPatchFunction (backend) {
     var tag = vnode.tag;
     // ① 元素
     if (isDef(tag)) {
-
       {
         if (data && data.pre) {
           inPre++;
@@ -11517,7 +11513,8 @@ extend(Vue$3.options.directives, platformDirectives);
 extend(Vue$3.options.components, platformComponents);
 
 // install platform patch function
-// 把 pacth 方法挂载在 Vue 原型上，这样 Vue 的实例可以调用 patch 方法了
+// 把 pacth 方法挂载在 Vue 原型上，这样 Vue 的实例可以调用 patch 方法了。
+// patch = createPatchFunction({ nodeOps: nodeOps, modules: modules })
 Vue$3.prototype.__patch__ = inBrowser ? patch : noop;
 
 // public mount method，公开的 mount 方法
@@ -12558,7 +12555,7 @@ function parse (template,options) {
       } else {
         // 解析 v-for 属性
         processFor(element);
-        // 解析 v-if 属性
+        // 解析 v-if 属性，标记 element.if、element.else、element.elseif、element.ifConditions 等
         processIf(element);
         // 标记 element.once
         processOnce(element);
@@ -12850,19 +12847,22 @@ function processFor (el) {
   }
 }
 
+
 // v-if 属性
 function processIf (el) {
   var exp = getAndRemoveAttr(el, 'v-if');
-  // v-if
+  // v-if 分支，el.if 为真
   if (exp) {
+	// 以 <div v-if="isShow" v-bind:style="styleObject"> 为例，exp = "isShow"
     el.if = exp;
     // el.ifConditions.push(condition)
     addIfCondition(el, {
       exp: exp,
       block: el
     });
+  // v-else 分支，v.else 必定为真，v.elseif 得重新判断
   } else {
-    // v-else
+    // v-else 
     if (getAndRemoveAttr(el, 'v-else') != null) {
       el.else = true;
     }
