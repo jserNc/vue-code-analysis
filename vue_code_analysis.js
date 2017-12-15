@@ -8424,8 +8424,9 @@ var klass = {
 // 匹配 ).+-_$] word 之一
 var validDivisionCharRE = /[\w).+\-_$\]]/;
 
-// 解析过滤器
+
 /*
+解析过滤器，例如：
 parseFilters("message | filterA('arg1', arg2)")
 -> "_f("filterA")(message,'arg1', arg2)"
 
@@ -8447,6 +8448,7 @@ function parseFilters (exp) {
   var c, prev, i, expression, filters;
 
   for (i = 0; i < exp.length; i++) {
+    // 上一个字符
     prev = c;
     /*
     charCodeAt() 方法可返回指定位置的字符的 Unicode 编码。这个返回值是 0 - 65535 之间的整数。
@@ -8479,10 +8481,10 @@ function parseFilters (exp) {
       !curly && !square && !paren
     ) {
       /*
-          第一个管道符 | 之前的是 expression，以后的才是 filter
+          第一个管道符 | 之前的是"待处理的参数"，之后的才是 filter
 
           以 parseFilters("message | filterA | filterB") 为例：
-          即，message 是 expression，filterA 和 filterB 才是 filter
+          即，message 是"待处理的参数"，filterA 和 filterB 才是 filter
        */
       if (expression === undefined) {
         // first filter, end of expression
@@ -8702,12 +8704,8 @@ function addHandler (
   }
 }
 
-// 首先获取动态值，获取失败再获取静态值
-function getBindingAttr (
-  el,
-  name,
-  getStatic
-) {
+// 首先获取动态值，获取失败再获取静态值（第三个参数设为 false 表示取不到动态属性就也不取静态的（默认情况下会取静态的））
+function getBindingAttr (el, name, getStatic) {
   /*
     ① 获取 el 元素的 :name 属性，并删除该属性
     ② 若 ① 中获取的属性为假，就获取 v-bind:name 属性，然后删除该属性
@@ -8715,10 +8713,7 @@ function getBindingAttr (
   var dynamicValue = getAndRemoveAttr(el, ':' + name) || getAndRemoveAttr(el, 'v-bind:' + name);
 
   if (dynamicValue != null) {
-    /*
-    例如：
-    parseFilters("message | filterA | filterB") -> "_f("filterB")(_f("filterA")(message))"
-    */
+    // 例如：parseFilters("message | filterA | filterB") -> "_f("filterB")(_f("filterA")(message))"
     return parseFilters(dynamicValue)
   // 动态值获取失败，再获取静态值
   } else if (getStatic !== false) {
@@ -8753,7 +8748,6 @@ function getAndRemoveAttr (el, name) {
         }
         ...
     ]
-
   */
   if ((val = el.attrsMap[name]) != null) {
     var list = el.attrsList;
@@ -11698,7 +11692,7 @@ function transformNode (el, options) {
   if (staticClass) {
     el.staticClass = JSON.stringify(staticClass);
   }
-  // 动态 class，:class 或 v-bind:class 的值
+  // 动态 class，:class 或 v-bind:class 的值。getBindingAttr 的第三个参数设为 false 表示取不到动态属性就也不取静态的（默认情况下会取静态的）
   var classBinding = getBindingAttr(el, 'class', false /* getStatic */);
   if (classBinding) {
     el.classBinding = classBinding;
@@ -11726,7 +11720,7 @@ var klass$1 = {
   genData: genData
 };
 
-// 转变节点，修正 el.staticStyle 和 el.styleBinding 属性
+// 转变节点，添加 el.staticStyle 和 el.styleBinding 属性
 function transformNode$1 (el, options) {
   // 警告方法
   var warn = options.warn || baseWarn;
@@ -12487,31 +12481,34 @@ function parse (template,options) {
       var element = {
         type: 1,
         tag: tag,
-        /*
-            attrsList : [
-                {
-                    name : name1,
-                    value : value1
-                },
-                {
-                    name : name2,
-                    value : value2
-                },
-                ...
-            ]
-        */
         attrsList: attrs,
-        /*
-            attrsMap : {
-                name1 : value1,
-                name2 : value2,
-                ...
-            }
-        */
         attrsMap: makeAttrsMap(attrs),
         parent: currentParent,
         children: []
       };
+      /*
+       格式如下：
+       ① element.attrsList 是一个数组，结构大概是：
+        [
+            {
+                name : name1,
+                value : value1
+            },
+            {
+                name : name2,
+                value : value2
+            }
+            ...
+        ]
+
+        ② element.attrsMap 是一个 json 对象，结构大概是：
+        {
+            name1 : value1,
+            name2 : value2,
+            name3 : value3,
+            ...
+        }
+       */
 
       // 以下都是修正 element 对象，继续给其添加属性
 
@@ -12519,10 +12516,11 @@ function parse (template,options) {
         element.ns = ns;
       }
 
+
       // style 或 script 标签
       if (isForbiddenTag(element) && !isServerRendering()) {
         element.forbidden = true;
-        // 模板的作用仅仅是状态和 UI 之间的一个映射作用。不要在其中放置一些有副作用的标签，比如 style/script 等，它们是不会被解析的。
+        // 模板的作用仅仅是状态和 UI 之间的一个映射作用。不要在其中放置一些有副作用的标签，比如 style/script 等，因为它们是不会被解析的。
         "development" !== 'production' && warn$2(
           'Templates should only be responsible for mapping the state to the ' +
           'UI. Avoid placing tags with side-effects in your templates, such as ' +
@@ -12860,7 +12858,7 @@ function processIf (el) {
       exp: exp,
       block: el
     });
-  // v-else 分支，v.else 必定为真，v.elseif 得重新判断
+  // v-else 分支，v.else 必定为真，v.elseif 得根据条件判断
   } else {
     // v-else 
     if (getAndRemoveAttr(el, 'v-else') != null) {
@@ -13048,18 +13046,25 @@ function processAttrs (el) {
       } else if (onRE.test(name)) { // v-on
         name = name.replace(onRE, '');
         addHandler(el, name, value, modifiers, false, warn$2);
-      // 匹配指令 dirRE = /^v-|^@|^:/;
+      // v-show 等普通 vue 指令
       } else { // normal directives
+        // 如 name = "show"
         name = name.replace(dirRE, '');
         // parse arg
-        // 匹配参数 argRE = /:(.*)$/，如 <div v-bind:class="[activeClass, errorClass]"></div>
+        // 匹配参数 argRE = /:(.*)$/
         var argMatch = name.match(argRE);
-        // 如 'v-bind:class' 中的 'class'
         var arg = argMatch && argMatch[1];
         if (arg) {
-          // 如 'v-bind:class' 中的 'v-bind'
           name = name.slice(0, -(arg.length + 1));
         }
+
+        /*
+          以 v-show:arg1="isShow" 为例：
+          name = "show"
+          argMatch = null
+          arg = 'arg1'
+         */
+
         // 添加指令
         addDirective(el, name, rawName, value, arg, modifiers);
         if ("development" !== 'production' && name === 'model') {
