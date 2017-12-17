@@ -8613,33 +8613,41 @@ function addAttr (el, name, value) {
   (el.attrs || (el.attrs = [])).push({ name: name, value: value });
 }
 
-// 添加 directive
-function addDirective (
-  el,
-  name,
-  rawName,
-  value,
-  arg,
-  modifiers
-) {
-  (el.directives || (el.directives = [])).push({ name: name, rawName: rawName, value: value, arg: arg, modifiers: modifiers });
+// 添加指令
+/*
+    例如：<input type="text" v-show="isShow" value="" v-model="someText"/>
+    el.directives : [
+         {
+             name: "show",
+             rawName: "v-show",
+             value: "isShow",
+             arg: null,
+             modifiers: undefined
+         },
+         {
+             name: "model",
+             rawName: "v-model",
+             value: "someText",
+             arg: null,
+             modifiers: undefined
+         }
+    ]
+ */
+function addDirective (el, name, rawName, value, arg, modifiers) {
+  (el.directives || (el.directives = [])).push({ 
+    name: name, 
+    rawName: rawName, 
+    value: value, 
+    arg: arg, 
+    modifiers: modifiers 
+  });
 }
 
 // 其实就是 el.events[name] = el.events[name].push({ value: value, modifiers: modifiers })
-function addHandler (
-  el,
-  name,
-  value,
-  modifiers,
-  important,
-  warn
-) {
+function addHandler (el, name, value, modifiers, important, warn) {
   // warn prevent and passive modifier
   /* istanbul ignore if */
-  if (
-    "development" !== 'production' && warn &&
-    modifiers && modifiers.prevent && modifiers.passive
-  ) {
+  if ("development" !== 'production' && warn && modifiers && modifiers.prevent && modifiers.passive) {
     // passive 和 prevent 不能一起用。passive 处理函数不能阻止默认事件。
     warn(
       'passive and prevent can\'t be used together. ' +
@@ -8651,7 +8659,7 @@ function addHandler (
     dom 新的规范规定，addEventListener() 的第三个参数可以是个对象值了，该对象可用的属性有三个：
     addEventListener(type, listener, {
         capture: false,   // 等价于以前的 useCapture 参数
-        passive: false,      // true 表明该监听器是一次性的
+        passive: false,   // true 表明该监听器是一次性的
         once: false       // true 表明不会调用 preventDefault 函数来阻止默认滑动行为
     })
 
@@ -9132,7 +9140,7 @@ function genSelect (el,value,modifiers) {
 function genDefaultModel (el,value,modifiers) {
   var type = el.attrsMap.type;
   var ref = modifiers || {};
-  // 在默认情况下，v-model 在 input 事件中同步输入框的值与数据，有了修饰符 lazy ，从而转变为在 change 事件中同步
+  // 在默认情况下，v-model 在 input 事件中同步输入框的值与数据，有了修饰符 lazy，从而转变为在 change 事件中同步
   var lazy = ref.lazy;
   // 如果想自动将用户的输入值转为 Number 类型 (如果原值的转换结果为 NaN 则返回原值)，可以添加一个修饰符 number 给 v-model 来处理输入值
   var number = ref.number;
@@ -9161,7 +9169,7 @@ function genDefaultModel (el,value,modifiers) {
   if (number) {
     valueExpression = "_n(" + valueExpression + ")";
   }
-  // 赋值语句，给 value 赋值为 valueExpression 的结果
+  // 赋值语句，code = "value = valueExpression"
   var code = genAssignmentCode(value, valueExpression);
 
   // 如果 !lazy && type !== 'range'，多加个判断条件
@@ -9348,11 +9356,7 @@ function updateDOMProps (oldVnode, vnode) {
 // check platforms/web/util/attrs.js acceptValue
 
 // 是否应该更新 value
-function shouldUpdateValue (
-  elm,
-  vnode,
-  checkVal
-) {
+function shouldUpdateValue (elm, vnode, checkVal) {
   return (!elm.composing && (
     vnode.tag === 'option' ||
     isDirty(elm, checkVal) ||
@@ -10748,7 +10752,7 @@ function onCompositionStart (e) {
   e.target.composing = true;
 }
 
-// 标记 e.target.composing 为 false，并触发 input 事件。所以，我们看到，反思调用 onCompositionEnd 函数都会触发 input 事件
+// 标记 e.target.composing 为 false，并触发 input 事件。所以，我们看到，凡是调用 onCompositionEnd 函数都会触发 input 事件
 function onCompositionEnd (e) {
   // prevent triggering an input event for no reason
   if (!e.target.composing) { return }
@@ -11670,7 +11674,7 @@ function parseText (text, delimiters) {
   return tokens.join('+')
 }
 
-// 转变节点，修正 el.staticClass 和 el.classBinding 属性
+// 转变节点，添加 el.staticClass 和 el.classBinding 属性
 function transformNode (el, options) {
   // 警告函数
   var warn = options.warn || baseWarn;
@@ -13286,13 +13290,13 @@ function genStaticKeys$1 (keys) {
 
 // 标记节点是否为静态节点
 function markStatic$1 (node) {
-  // 是否为静态节点
+  // 是否为静态节点。当一个节点被标记为静态节点，之后的虚拟 DOM 在通过 diff 算法比较差异时会跳过该节点以提升效率，这就是 AST 的优化。
   node.static = isStatic(node);
   // 1 为 Element，代表元素
   if (node.type === 1) {
     /*
-        不要把 component 和 slot 的内容标记为静态的。这样可以避免两种情况：
-        ① 组件不能突然插槽节点
+        不要把 slot 组件的内容标记为静态的。这样可以避免两种情况：
+        ① 组件不能突变插槽节点
         ② 静态的插槽内容在热更新时会出问题
     */
     // do not make component slot content static. this avoids
@@ -13305,6 +13309,7 @@ function markStatic$1 (node) {
     // 遍历 node 的子节点，递归调用 markStatic$1()
     for (var i = 0, l = node.children.length; i < l; i++) {
       var child = node.children[i];
+      // 递归标记所有子节点
       markStatic$1(child);
       // 只要有一个子节点不是静态的，那么父节点 node 就不是静态的
       if (!child.static) {
@@ -13335,7 +13340,7 @@ function markStaticRoots (node, isInFor) {
     
     /*
         对一个静态根节点来说，它应该包含除了静态文本之外的其他子节点。
-        否则，提升的成本会超过它的效益，每次重新渲染之倒是一个更好的选择
+        否则，提升的成本会超过它的效益，所以每次重新渲染之倒是一个更好的选择
     */
     // For a node to qualify as a static root, it should have children that
     // are not just static text. Otherwise the cost of hoisting out will
@@ -13349,14 +13354,14 @@ function markStaticRoots (node, isInFor) {
       node.staticRoot = false;
     }
 
-    // 遍历子节点，递归调用 markStaticRoots()
+    // 递归标记子节点
     if (node.children) {
       for (var i = 0, l = node.children.length; i < l; i++) {
         markStaticRoots(node.children[i], isInFor || !!node.for);
       }
     }
     
-    // 如果 v-if 条件成立，那么其内容就改当做子节点来看待
+    // 递归标记 if 块 dom
     if (node.ifConditions) {
        // node.ifConditions[i$1] 结构为： { exp: el.elseif,block: el } 
       for (var i$1 = 1, l$1 = node.ifConditions.length; i$1 < l$1; i$1++) {
@@ -13369,7 +13374,7 @@ function markStaticRoots (node, isInFor) {
 
 // 判断一个节点是否为静态节点
 function isStatic (node) {
-  // 表达式，非静态
+  // 表达式 {{...}}，非静态
   if (node.type === 2) { // expression
     return false
   }
@@ -13706,14 +13711,14 @@ var CodegenState = function CodegenState (options) {
 */
 function generate (ast,options) {
   var state = new CodegenState(options);
-  // 将 ast 对象转为浏览器可以执行的字符串
+  // 将 ast 对象转为浏览器可以解析的字符串
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
 	/*
 		以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
-		with 语句的 this 是 vm，所以 _c 实际是 vm._c。
+		with 语句的 this 是 vm，所以 _c 实际是 vm._c
 		
-		看看 with 的基本用法（严格模式下不能使用with语句）：
+		看看 with 的基本用法（严格模式下不能使用 with 语句）：
 		var qs = location.search.substring(1);
 		var hostName = location.hostname;
 		var url = location.href;
@@ -13731,13 +13736,15 @@ function generate (ast,options) {
 		所以:
 		"_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
 		其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
+
+	    注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
 	*/
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
   }
 }
 
-// 生成渲染函数，返回字符串形式的执行代码。这里的 el 指 ast
+// 生成渲染函数，返回字符串形式的浏览器可执行代码。这里的 el 指 ast
 function genElement (el, state) {
   // 静态节点
   if (el.staticRoot && !el.staticProcessed) {
@@ -13751,7 +13758,7 @@ function genElement (el, state) {
   // v-if
   } else if (el.if && !el.ifProcessed) {
     return genIf(el, state)
-  // 子节点
+  // 模板
   } else if (el.tag === 'template' && !el.slotTarget) {
     return genChildren(el, state) || 'void 0'
   // 插槽
@@ -13835,14 +13842,9 @@ function genOnce (el, state) {
   }
 }
 
-// v-if
-function genIf (
-  el,
-  state,
-  altGen,
-  altEmpty
-) {
-  // 标记执行过 genIf
+// v-if，实际调用的时候好像没只用到 el 和 state 等两个参数
+function genIf (el, state, altGen, altEmpty) {
+  // 标记执行过 genIf，避免递归
   el.ifProcessed = true; // avoid recursion
   return genIfConditions(el.ifConditions.slice(), state, altGen, altEmpty)
 }
@@ -13854,8 +13856,22 @@ function genIfConditions (conditions, state, altGen, altEmpty) {
     return altEmpty || '_e()'
   }
 
-  // condition 形式为：{ exp: element.elseif, block: element }
+  /*
+    el.ifConditions 结构为：
+    [
+      {
+        exp: exp1,
+        block: dom1
+      },
+      {
+        exp: exp2,
+        block: dom2
+      }
+      ...
+    ]
+   */
   var condition = conditions.shift();
+  // if 条件成立
   if (condition.exp) {
     return ("(" + (condition.exp) + ")?" + (genTernaryExp(condition.block)) + ":" + (genIfConditions(conditions, state, altGen, altEmpty)))
   } else {
@@ -14381,10 +14397,7 @@ function genComponent (componentName, el, state) {
   return ("_c(" + componentName + "," + (genData$2(el, state)) + (children ? ("," + children) : '') + ")")
 }
 
-/*
-    返回值：
-    "propName1:propValue1,propName2:propValue2,propName3:propValue3..."
-*/
+// 返回值："propName1:propValue1,propName2:propValue2,propName3:propValue3..."
 function genProps (props) {
   var res = '';
   for (var i = 0; i < props.length; i++) {
