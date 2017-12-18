@@ -1953,6 +1953,19 @@ function mergeAssets (parentVal, childVal) {
     : res
 }
 
+/*
+     // 配置类型
+     var ASSET_TYPES = [
+     'component',
+     'directive',
+     'filter'
+     ];
+
+     于是：
+     strats.components =
+     strats.directives =
+     strats.filters = mergeAssets
+*/
 ASSET_TYPES.forEach(function (type) {
   strats[type + 's'] = mergeAssets;
 });
@@ -1988,12 +2001,14 @@ strats.watch = function (parentVal, childVal) {
 /**
  * Other object hashes.
  */
+// props、methods、inject、computed 等合并策略
 strats.props =
 strats.methods =
 strats.inject =
 strats.computed = function (parentVal, childVal) {
   if (!childVal) { return Object.create(parentVal || null) }
   if (!parentVal) { return childVal }
+  // 同名覆盖，所以 childVal 中的属性优先级更高
   var ret = Object.create(null);
   extend(ret, parentVal);
   extend(ret, childVal);
@@ -2036,7 +2051,15 @@ function checkComponents (options) {
  * Ensure all props option syntax are normalized into the
  * Object-based format.
  */
-// 将 options.props 都统一成对象格式
+// 将 options.props 的每一项都统一成对象格式
+/*
+    将 options.props 转为以下形式：
+    {
+        name1 : { type : null },
+        name2 : { type : val2 },
+        ...
+    }
+*/
 function normalizeProps (options) {
   var props = options.props;
   if (!props) { return }
@@ -2074,7 +2097,7 @@ function normalizeProps (options) {
 /**
  * Normalize all injections into Object-based format
  */
-// 将 options.inject 都统一成对象格式
+// 将数组 options.inject 转化为对象格式
 function normalizeInject (options) {
   var inject = options.inject;
   // options.inject 是数组
@@ -2090,7 +2113,20 @@ function normalizeInject (options) {
 /**
  * Normalize raw function directives into object format.
  */
-// 将 funtion 类型的 directives 转成对象格式
+/*
+    例如：
+    options.directives : {
+        dir1 : fun1,
+        dir2 : fun2,
+        ...
+    }
+    -> options.directives : {
+         dir1 : { bind: fun1, update: fun1 },
+         dir2 : { bind: fun2, update: fun2 },
+         ...
+     }
+ */
+// 将 child.directives 的每一项都统一成对象格式
 function normalizeDirectives (options) {
   var dirs = options.directives;
   if (dirs) {
@@ -2120,22 +2156,27 @@ function mergeOptions (parent, child, vm) {
     child = child.options;
   }
 
-  // 将 child.props 都统一成对象格式
+  // 将 child.props 的每一项都统一成对象格式
   normalizeProps(child);
-  // 将 child.inject 都统一成对象格式
+  // 将数组 options.inject 转化为对象格式
   normalizeInject(child);
-  // 将 funtion 类型的 child.directives 转成对象格式
+  // 将 child.directives 的每一项都统一成对象格式
   normalizeDirectives(child);
+
+  // 用 child.extends 修正 parent
   var extendsFrom = child.extends;
   if (extendsFrom) {
-    // 递归
     parent = mergeOptions(parent, extendsFrom, vm);
   }
+
+  // 用 child.mixins 修正 parent
   if (child.mixins) {
     for (var i = 0, l = child.mixins.length; i < l; i++) {
       parent = mergeOptions(parent, child.mixins[i], vm);
     }
   }
+
+
   var options = {};
   var key;
 
@@ -2149,7 +2190,7 @@ function mergeOptions (parent, child, vm) {
       mergeField(key);
     }
   }
-  // 针对特定属性 key，进行合并
+  // 合并 key 属性
   function mergeField (key) {
     /*
     ① strats = config.optionMergeStrategies 是一个对象，可以为该对象添加方法属性，自定义合并策略的选项
@@ -2751,7 +2792,7 @@ function cloneVNodes (vnodes) {
   return res
 }
 
-// 格式化事件
+// 格式化事件名（解析其中的 & ~ !）
 var normalizeEvent = cached(function (name) {
   // 如果 name 的第一个字符是 &，那么 passive 为 true
   var passive = name.charAt(0) === '&';
@@ -2818,6 +2859,7 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
         passive: passive
     }
     */
+    // 格式化事件名（解析其中的 & ~ !）
     event = normalizeEvent(name);
     // cur 为 undefined 或 null，这是不允许的
     if (isUndef(cur)) {
@@ -2847,7 +2889,7 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
   for (name in oldOn) {
     // on[name] 为 undefined 或 null，则移除掉对应的事件绑定
     if (isUndef(on[name])) {
-      // 格式化 event
+      // 格式化事件名（解析其中的 & ~ !）
       event = normalizeEvent(name);
       remove$$1(event.name, oldOn[name], event.capture);
     }
@@ -4516,6 +4558,7 @@ function initState (vm) {
 
   // 初始化 computed
   if (opts.computed) { initComputed(vm, opts.computed); }
+
   /*
   火狐浏览器有原生的 watch 方法
   var nativeWatch = ({}).watch;
@@ -4527,7 +4570,7 @@ function initState (vm) {
   }
 }
 
-// 检查类型
+// 检查类型，若 vm.$options[name] 不是对象，则发出警告
 function checkOptionType (vm, name) {
   var option = vm.$options[name];
   // option 为普通对象（不包括 null）
@@ -4541,11 +4584,19 @@ function checkOptionType (vm, name) {
 
 // 初始化属性
 function initProps (vm, propsOptions) {
+  /*
+    var vm = new Comp({
+      propsData: {
+        msg: 'hello'
+      }
+    })
+    创建实例时传递 props。主要作用是方便测试
+   */
   var propsData = vm.$options.propsData || {};
   var props = vm._props = {};
   // cache prop keys so that future props updates can iterate using Array
   // instead of dynamic object key enumeration.
-  // 缓存属性 key 值，方便以后属性更新的时候可以用数组来迭代，而不是动态的枚举对象 key 值
+  // 缓存属性 key 值，方便以后属性更新的时候可以用数组来迭代，而不是动态的枚举对象的 key 值
   var keys = vm.$options._propKeys = [];
   // 没有父实例，就认为是根实例
   var isRoot = !vm.$parent;
@@ -4585,8 +4636,9 @@ function initProps (vm, propsOptions) {
     // static props are already proxied on the component's prototype
     // during Vue.extend(). We only need to proxy props defined at
     // instantiation here.
+    // 静态 props 在 Vue.extend() 中已经代理掉了，这里只需要代理实例上定义的 props 就好了
     if (!(key in vm)) {
-      // 给 vm 对象定义属性 key
+      // 用 vm["_props"][key] 代理 vm[key]
       proxy(vm, "_props", key);
     }
   };
@@ -5629,26 +5681,23 @@ function bindObjectProps (
  * Runtime helper for rendering static trees.
  */
 // 渲染静态树
-function renderStatic (
-  index,
-  isInFor
-) {
+function renderStatic (index, isInFor) {
   var tree = this._staticTrees[index];
+
   // if has already-rendered static tree and not inside v-for,
   // we can reuse the same tree by doing a shallow clone.
 
-  // 如果已经渲染了静态树并且不是在 v-for 内部。我们可以通过浅拷贝来重利用相同的树，在此返回。
+  // 如果已经渲染了静态树并且不是在 v-for 内部。我们可以通过浅拷贝来复用这颗树，就此返回。
   if (tree && !isInFor) {
-    return Array.isArray(tree)
-      ? cloneVNodes(tree)
-      : cloneVNode(tree)
+    return Array.isArray(tree) ? cloneVNodes(tree) : cloneVNode(tree)
   }
   // otherwise, render a fresh tree.
   // 否则，重新渲染静态树
   tree = this._staticTrees[index] =
+    // vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）。也可以简单地把 this._renderProxy 看作 this(vm)
     this.$options.staticRenderFns[index].call(this._renderProxy);
 
-  // 遍历 tree，依次给每个节点加上标记
+  // 标记静态节点 tree.isStatic = true; tree.key = "__static__" + index; tree.isOnce = false;
   markStatic(tree, ("__static__" + index), false);
   return tree
 }
@@ -5658,21 +5707,13 @@ function renderStatic (
  * Effectively it means marking the node as static with a unique key.
  */
 // 标记一次
-function markOnce (
-  tree,
-  index,
-  key
-) {
+function markOnce (tree, index, key) {
   markStatic(tree, ("__once__" + index + (key ? ("_" + key) : "")), true);
   return tree
 }
 
 // 标记静态树
-function markStatic (
-  tree,
-  key,
-  isOnce
-) {
+function markStatic (tree, key, isOnce) {
   // 遍历 tree，依次对每一个 node 进行标记
   if (Array.isArray(tree)) {
     for (var i = 0; i < tree.length; i++) {
@@ -9232,6 +9273,7 @@ function add$1 (event,handler,once$$1,capture,passive) {
   if (once$$1) {
     var oldHandler = handler;
     var _target = target$1; // save current target element in closure
+    // 修正 handler
     handler = function (ev) {
       var res = arguments.length === 1
         ? oldHandler(ev)
@@ -9281,7 +9323,7 @@ function updateDOMListeners (oldVnode, vnode) {
     return
   }
 
-  // 只要 oldOn 和 on 有一个不是 undefined 就会走到这，初始化 on/oldOn 为 {} 
+  // 只要 oldOn 和 on 有一个不是 undefined 就会走到这，初始化 on 和 oldOn 为 {}
   on = on || {};
   oldOn = oldOn || {};
 
@@ -11799,7 +11841,7 @@ function html (el, dir) {
   }
 }
 
-// 指令
+// 指令，对应 v-model,v-text,v-html
 var directives$1 = {
   model: model,
   text: text,
@@ -13577,7 +13619,7 @@ function genHandler (name, handler) {
       if (modifierCode[key]) {
         // key 对应的执行代码
         genModifierCode += modifierCode[key];
-        // left/right，键值
+        // keyCodes 为一个 json 对象，即键名和键值的映射表
         if (keyCodes[key]) {
           keys.push(key);
         }
@@ -13772,6 +13814,7 @@ function genElement (el, state) {
       code = genComponent(el.component, el, state);
     // 普通元素
     } else {
+      // 若 el.plain 为 false，那就是没属性，没必要去解析 data 了
       var data = el.plain ? undefined : genData$2(el, state);
       /*
         genData$2(el, state) 返回值为这种形式：
@@ -13804,10 +13847,12 @@ function genElement (el, state) {
   }
 }
 
-// hoist static sub-trees out，静态节点？
+// hoist static sub-trees out，静态节点
 function genStatic (el, state) {
   el.staticProcessed = true;
+  // 该节点为静态 dom
   state.staticRenderFns.push(("with(this){return " + (genElement(el, state)) + "}"));
+  // Vue.prototype._m = renderStatic 其中 renderStatic(index, isInFor) 第一个参数 index 为数值形式的索引
   return ("_m(" + (state.staticRenderFns.length - 1) + (el.staticInFor ? ',true' : '') + ")")
 }
 
@@ -13815,7 +13860,7 @@ function genStatic (el, state) {
 function genOnce (el, state) {
   // 标记执行过 genOnce 函数
   el.onceProcessed = true;
-  // v-if
+  // 优先处理 v-if
   if (el.if && !el.ifProcessed) {
     return genIf(el, state)
   } else if (el.staticInFor) {
