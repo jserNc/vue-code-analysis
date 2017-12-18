@@ -2211,13 +2211,8 @@ function mergeOptions (parent, child, vm) {
  * This function is used because child instances need access
  * to assets defined in its ancestor chain.
  */
-// 返回 options[type][id | camelizedId | PascalCaseId]
-function resolveAsset (
-  options,
-  type,
-  id,
-  warnMissing
-) {
+// 根据 id 返回某个指定的资源
+function resolveAsset (options, type, id, warnMissing) {
   /* istanbul ignore if */
   // id 必须为字符串，否则不处理
   if (typeof id !== 'string') {
@@ -2226,24 +2221,27 @@ function resolveAsset (
   var assets = options[type];
 
   // check local registration variations first
-  // 首先检查本地注册变量 id
+  // ① 首先检查 id
   if (hasOwn(assets, id)) { return assets[id] }
+
   // 将连字符分隔的 id 驼峰化，例如：a-b-c -> aBC
   var camelizedId = camelize(id);
-  // 再次检查本地注册变量
+  // ② 检查驼峰化的 id
   if (hasOwn(assets, camelizedId)) { return assets[camelizedId] }
+
   // 首字母大写，例如：aBC -> ABC
   var PascalCaseId = capitalize(camelizedId);
-  // 再次检查本地注册变量
+  // ③ 检查首字母大写的 id
   if (hasOwn(assets, PascalCaseId)) { return assets[PascalCaseId] }
 
 
   // fallback to prototype chain
   // 既然走到这，说明 assets 本身不含 id/camelizedId/PascalCaseId 属性，那就去 assets 的原型链去找
   var res = assets[id] || assets[camelizedId] || assets[PascalCaseId];
-  // 开发环境，并且 warnMissing 为真，并且在原型链中都找不到，才会发出警告
+
+  // 原型链中都找不到，开发环境下发出警告
   if ("development" !== 'production' && warnMissing && !res) {
-    // 'abcdef'.slice(0, -1) -> "abcde"
+    // 如 resolveAsset(this.$options, 'filters', id, true) ，其中 'filters'.slice(0, -1) -> 'filter'
     warn(
       'Failed to resolve ' + type.slice(0, -1) + ': ' + id,
       options
@@ -4741,7 +4739,7 @@ function initComputed (vm, computed) {
       }
     }
     // create internal watcher for the computed property.
-    // 每一个 watchers[key] 都是 Watcher 实例
+    // 为每一个计算属性创建一个 watcher 实例
     watchers[key] = new Watcher(vm, getter, noop, computedWatcherOptions);
 
     // component-defined computed properties are already defined on the
@@ -4754,7 +4752,7 @@ function initComputed (vm, computed) {
       // 计算属性和 data 属性不能同名
       if (key in vm.$data) {
         warn(("The computed property \"" + key + "\" is already defined in data."), vm);
-      // 计算属性和 prop 属性也不能同名
+      // 计算属性和 props 属性也不能同名
       } else if (vm.$options.props && key in vm.$options.props) {
         warn(("The computed property \"" + key + "\" is already defined as a prop."), vm);
       }
@@ -4803,8 +4801,9 @@ function createComputedGetter (key) {
   return function computedGetter () {
     var watcher = this._computedWatchers && this._computedWatchers[key];
     if (watcher) {
+      // 脏检查，必须计算属性的值改变了才会重新计算
       if (watcher.dirty) {
-        // watcher.value 值置为 watcher.get()，并且 watcher.dirty 置为 false
+        // 也就是 watcher.value = watcher.get(); watcher.dirty = false;
         watcher.evaluate();
       }
       if (Dep.target) {
@@ -5584,8 +5583,9 @@ function renderSlot (
 /**
  * Runtime helper for resolving filters
  */
- // 处理过滤器
+ // 处理过滤器 Vue.prototype._f = resolveFilter;
 function resolveFilter (id) {
+  // 根据 id 返回某个指定的过滤器
   return resolveAsset(this.$options, 'filters', id, true) || identity
 }
 
@@ -5594,12 +5594,10 @@ function resolveFilter (id) {
 /**
  * Runtime helper for checking keyCodes from config.
  */
-// 检查键值，eventKeyCode 和配置的键值不相同返回 true
-function checkKeyCodes (
-  eventKeyCode,
-  key,
-  builtInAlias  // 内置别名
-) {
+// Vue.prototype._k = checkKeyCodes;
+// 检查键值，eventKeyCode 和配置的键值不相同返回 true，例如 _k($event.keyCode,"right",39) 不是点击鼠标右键返回 true
+function checkKeyCodes (eventKeyCode, key, builtInAlias) {
+  // builtInAlias 为内置别名
   var keyCodes = config.keyCodes[key] || builtInAlias;
   if (Array.isArray(keyCodes)) {
     return keyCodes.indexOf(eventKeyCode) === -1
@@ -7053,7 +7051,11 @@ var hooks = ['create', 'activate', 'update', 'remove', 'destroy'];
 // 判断是否为相同节点
 function sameVnode (a, b) {
   return (
-    // key 相等
+    /*
+        运算符的优先级： === 高于 && 高于 ||
+        这里：a.key === b.key && (condition1) || (condition2)
+        相当于：(a.key === b.key && (condition1)) || (condition2)
+     */
     a.key === b.key && (
       (
         // tag、isComment、data、inputType 等一样
@@ -7079,7 +7081,7 @@ function sameInputType (a, b) {
   var i;
   var typeA = isDef(i = a.data) && isDef(i = i.attrs) && i.type;
   var typeB = isDef(i = b.data) && isDef(i = i.attrs) && i.type;
-  // type 相同则返回 true
+  // input 标签的 type 相同则返回 true
   return typeA === typeB
 }
 
@@ -7637,12 +7639,14 @@ function createPatchFunction (backend) {
     var oldStartIdx = 0;
     var newStartIdx = 0;
 
+    // 旧的结束索引
     var oldEndIdx = oldCh.length - 1;
     // 旧的开始节点
     var oldStartVnode = oldCh[0];
     // 旧的结束节点
     var oldEndVnode = oldCh[oldEndIdx];
 
+    // 新的结束索引
     var newEndIdx = newCh.length - 1;
     // 新的开始节点
     var newStartVnode = newCh[0];
@@ -7664,24 +7668,29 @@ function createPatchFunction (backend) {
 
     // 新旧节点索引都小于其数组长度
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+
       // ①【旧的开始节点】不存在，那么取下一个节点作为开始节点
       if (isUndef(oldStartVnode)) {
         oldStartVnode = oldCh[++oldStartIdx]; // Vnode has been moved left
+
       // ②【旧的结束节点】不存在，那么取前一个节点作为结束节点
       } else if (isUndef(oldEndVnode)) {
         oldEndVnode = oldCh[--oldEndIdx];
+
       // ③【旧的开始节点】和【新的开始节点】是同一个节点
       } else if (sameVnode(oldStartVnode, newStartVnode)) {
         patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue);
         // 更新新旧开始节点，并更新新旧开始索引
         oldStartVnode = oldCh[++oldStartIdx];
         newStartVnode = newCh[++newStartIdx];
+
       // ④【旧的结束节点】和【新的结束节点】是同一个节点
       } else if (sameVnode(oldEndVnode, newEndVnode)) {
         patchVnode(oldEndVnode, newEndVnode, insertedVnodeQueue);
         // 更新新旧结束节点，并更新新旧结束索引
         oldEndVnode = oldCh[--oldEndIdx];
         newEndVnode = newCh[--newEndIdx];
+
       // ⑤【旧的开始节点】和【新的结束节点】是同一个节点
       } else if (sameVnode(oldStartVnode, newEndVnode)) { // Vnode moved right
         patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue);
@@ -7694,6 +7703,7 @@ function createPatchFunction (backend) {
         canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm));
         oldStartVnode = oldCh[++oldStartIdx];
         newEndVnode = newCh[--newEndIdx];
+
       // ⑥【旧的结束节点】和【新的开始节点】是同一个节点
       } else if (sameVnode(oldEndVnode, newStartVnode)) { // Vnode moved left
         patchVnode(oldEndVnode, newStartVnode, insertedVnodeQueue);
@@ -7701,6 +7711,8 @@ function createPatchFunction (backend) {
         canMove && nodeOps.insertBefore(parentElm, oldEndVnode.elm, oldStartVnode.elm);
         oldEndVnode = oldCh[--oldEndIdx];
         newStartVnode = newCh[++newStartIdx];
+
+      // ⑦ 其他
       } else {
         /*
             oldKeyToIdx 结构大致为：
@@ -8616,12 +8628,14 @@ function wrapFilter (exp, filter) {
   if (i < 0) {
     // _f: resolveFilter
     return ("_f(\"" + filter + "\")(" + exp + ")")
-  // 带括号，也就是带参数，如 wrapFilter('message',"filterA('arg1', arg2)") -> "_f("filterA")(message,'arg1', arg2)"
+  // 带括号，也就是带参数
   } else {
     /*
       例如： filter 为 "filterA('arg1', arg2)"
             name 为 "filterA"，
             args 为 "'arg1', arg2)"
+
+     于是，wrapFilter('message',"filterA('arg1', arg2)") -> "_f("filterA")(message,'arg1', arg2)"
      */
     var name = filter.slice(0, i);
     var args = filter.slice(i + 1);
@@ -13048,7 +13062,7 @@ function processAttrs (el) {
         // 匹配修饰符 modifierRE = /\.[^.]+/g，去掉修饰符
         name = name.replace(modifierRE, '');
       }
-      // 匹配 bind bindRE = /^:|^v-bind:/
+      // ① 匹配 bind 指令 bindRE = /^:|^v-bind:/
       if (bindRE.test(name)) { 
         // 去掉 v-bind
         name = name.replace(bindRE, '');
@@ -13088,11 +13102,11 @@ function processAttrs (el) {
           // el.attrs.push({ name: name, value: value })
           addAttr(el, name, value);
         }
-      // 事件绑定 onRE = /^@|^v-on:/
+      // ② 匹配事件绑定 onRE = /^@|^v-on:/
       } else if (onRE.test(name)) { // v-on
         name = name.replace(onRE, '');
         addHandler(el, name, value, modifiers, false, warn$2);
-      // v-show 等普通 vue 指令
+      // ③ 匹配 v-show 等普通 vue 指令
       } else { // normal directives
         // 如 name = "show"
         name = name.replace(dirRE, '');
@@ -13505,7 +13519,7 @@ var keyCodes = {
 // #4868: modifiers that prevent the execution of the listener
 // need to explicitly return null so that we can determine whether to remove
 // the listener for .once
-// 阻止监听器执行的修饰符需要显示地返回 null。一边有 once 修饰符是可以决定是否移除这个监听器。
+// 修饰符如要阻止监听器执行，则需要显示地返回 null。以便有 .once 修饰符时可以决定是否移除这个监听器。
 var genGuard = function (condition) { return ("if(" + condition + ")return null;"); };
 
 // 修饰符对应的执行代码
@@ -13600,16 +13614,19 @@ function genHandler (name, handler) {
     ② 普通函数 
        function (
  */
+  // handler.value 是函数名，例如 abc['def'] 就是指某个函数
   var isMethodPath = simplePathRE.test(handler.value);
+  // handler.value 是函数声明，例如 'function(arg){someCode}'
   var isFunctionExpression = fnExpRE.test(handler.value);
 
-  // 没有修饰符
+  // ① 没有修饰符
   if (!handler.modifiers) {
     return isMethodPath || isFunctionExpression
-      // 完整的函数
+      // handler.value 是完整的函数
       ? handler.value
       // 行内语句
       : ("function($event){" + (handler.value) + "}") // inline statement
+  // ② 有修饰符 modifiers
   } else {
     var code = '';
     var genModifierCode = '';
@@ -13617,7 +13634,20 @@ function genHandler (name, handler) {
     // key 为 stop、prevent、self、ctrl...
     for (var key in handler.modifiers) {
       if (modifierCode[key]) {
-        // key 对应的执行代码
+        /*
+            例如：
+         var modifierCode = {
+             stop: '$event.stopPropagation();',
+             prevent: '$event.preventDefault();',
+             self: genGuard("$event.target !== $event.currentTarget"),
+             ...
+         };
+
+         其中：
+         ① stop 阻止冒泡，prevent 阻止默认行为
+         ② event.currentTarget：返回事件当前所在的节点，会随着事件捕获和事件冒泡改变。也就是事件监听函数中的 this。
+            event.target：返回目标节点（最深层节点），固定的。正是这个属性使得事件代理成为可能。
+        */
         genModifierCode += modifierCode[key];
         // keyCodes 为一个 json 对象，即键名和键值的映射表
         if (keyCodes[key]) {
@@ -13632,6 +13662,8 @@ function genHandler (name, handler) {
       /*
         genKeyFilter(['left','right'])
         -> "if(!('button' in $event)&&_k($event.keyCode,"left",37)&&_k($event.keyCode,"right",39))return null;"
+
+        如果事件源不是指定的按键（keys），就返回 null（什么也不做）
       */
       code += genKeyFilter(keys);
     }
@@ -13640,12 +13672,10 @@ function genHandler (name, handler) {
       code += genModifierCode;
     }
     /*
-        ① isMethodPath 为 true（handler.value 是方法路径）
-           如 handler.value = abc['def']
-           那么 handlerCode 为 abc['def']($event)
+        ① isMethodPath 为 true（handler.value 是函数名）
+           如 handler.value = abc['def']（函数名），那么 handlerCode 为 abc['def']($event)
         ② isFunctionExpression 为 true（handler.value 是函数声明）
-           如 handler.value = function(a){return a}
-           那么 handlerCode 为 (function(a){return a})($event)
+           如 handler.value = function(a){return a}，那么 handlerCode 为 (function(a){return a})($event)
         ③ 以上都不是，那么 handlerCode 为 handler.value
     */
     var handlerCode = isMethodPath
@@ -13655,6 +13685,16 @@ function genHandler (name, handler) {
         : handler.value;
 
     // 返回事件处理函数的字符串形式
+    /*
+      例如，对于 <div @click.self.ctrl='clickFunc'> 则 click 事件返回值为：
+      "function($event){if(!('button' in $event)&&_k($event.keyCode,"ctrl"))return null;if($event.target !== $event.currentTarget)return null;clickFunc($event)}"
+      格式化后：
+      "function($event) {
+        if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
+        if ($event.target !== $event.currentTarget) return null;
+        clickFunc($event)
+      }"
+     */
     return ("function($event){" + code + handlerCode + "}")
   }
 }
@@ -13779,7 +13819,31 @@ function generate (ast,options) {
 		"_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
 		其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
 
-	    注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
+	  注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
+
+    对于模板：
+    div id='app'>
+        <div @click.self.ctrl='click'>
+            {{computedValue | filter}}
+        </div>
+    </div>
+
+    得到的 render 为:
+    with(this) {
+        return _c('div', {
+            attrs: {
+                "id": "app"
+            }
+        }, [_c('div', {
+            on: {
+                "click": function($event) {
+                    if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
+                    if ($event.target !== $event.currentTarget) return null;
+                    click($event)
+                }
+            }
+        }, [_v("\n" + _s(_f("filter")(computedValue)) + "\n")])])
+    }
 	*/
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
