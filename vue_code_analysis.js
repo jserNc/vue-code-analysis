@@ -1180,7 +1180,7 @@ var nextTick = (function () {
 
   Mutation Observer（变动观察器）是监视 DOM 变动的接口。当 DOM 对象树发生任何变动时，Mutation Observer 会得到通知。
 
-  要概念上，它很接近事件。可以理解为，当 DOM 发生变动会触发 Mutation Observer 事件。但是，它与事件有一个本质不同：
+  在概念上，它很接近事件。可以理解为，当 DOM 发生变动会触发 Mutation Observer 事件。但是，它与事件有一个本质不同：
   a) 事件是同步触发，也就是说 DOM 发生变动立刻会触发相应的事件；
   b) Mutation Observer 则是异步触发，DOM 发生变动以后，并不会马上触发，而是要等到当前所有 DOM 操作都结束后才触发。
 
@@ -1219,6 +1219,15 @@ var nextTick = (function () {
     };
   }
 
+  /*
+    var nextTick = function queueNextTick (cb, ctx) {...}
+    ① 若 cb 参数不存在或当前环境不支持 Promise，则没有指定返回值，也就是 undefined
+    ② 否则，返回一个 promise 实例
+
+    简单点说就是：
+    ① nextTick 方法有实参时，将实参加入回调函数队列 callbacks，然后在本轮“事件循环”结束后，依次执行回调队列 callbacks 中的函数；
+    ② nextTick 方法没有实参时，返回一个 Promise 实例，可以为该实例添加 then 回调，待队列 callbacks 中函数执行 _resolve(ctx) 时触发 then 的回调方法
+   */
   return function queueNextTick (cb, ctx) {
     var _resolve;
     // 将 cb 分别用一个新的匿名函数包装，并 push 进 callbacks 数组
@@ -1238,11 +1247,38 @@ var nextTick = (function () {
       pending = true;
       timerFunc();
     }
+
     if (!cb && typeof Promise !== 'undefined') {
       return new Promise(function (resolve, reject) {
         _resolve = resolve;
       })
     }
+    /*
+      var _resolve;
+      var p = new Promise(function (resolve, reject) {
+        _resolve = resolve;
+      })
+      p.then(function(data){
+        console.log(data);
+      })
+
+      _resolve('这是数据')
+      // 控制台打印'这是数据'
+
+      resolve 函数的作用是，将 Promise 对象的状态从“未完成”变为“成功”（即从 pending 变为 resolved）
+      而 then 方法可以接受两个回调函数作为参数。第一个回调函数是 Promise 对象的状态变为 resolved 时调用
+
+      所以，执行 _resolve 函数后，就会执行 then 方法指定的第一个回调，并且 _resolve 的实参会传给 then 的第一个回调函数
+    
+      那么，若条件 !cb && typeof Promise !== 'undefined' 满足（即不指定实参并且支持 Promise）：
+      var p = nextTick();
+      p.then(function(data){
+        console.log(data);
+      })
+
+      则本轮“事件循环”结束后会执行 nextTickHandler 函数，也就是说会依次触发数组 callbacks 中的函数，其中包括 _resolve(ctx)
+      而一旦执行了 _resolve(ctx)，就会执行 then 的第一个回调函数，即打印出 ctx
+     */
   }
 })();
 
@@ -1657,17 +1693,20 @@ function set (target, key, val) {
   if (Array.isArray(target) && isValidArrayIndex(key)) {
     // 数组长度变为 target.length, key 中的较大者
     target.length = Math.max(target.length, key);
-    // 在 key 位置新增一个 val
+    // 在 key 位置删除 1 个元素，并新增 1 个元素 val，其实就是替换（设置）
     target.splice(key, 1, val);
     // 数组设置完值，就在这里返回
     return val
   }
-  // 如果 key 是 target 自身对象，直接赋值，返回
+  // 如果 key 是 target 自身属性，直接赋值，返回
   if (hasOwn(target, key)) {
     target[key] = val;
     return val
   }
+
+  // Observer 实例
   var ob = (target).__ob__;
+  // target 对象是 Vue 实例，或者 Vue 实例的根数据对象
   if (target._isVue || (ob && ob.vmCount)) {
     // 开发环境发出警告：不能给 Vue 实例或根 $data 添加 reactive 属性
     "development" !== 'production' && warn(
@@ -1696,7 +1735,7 @@ function del (target, key) {
     return
   }
   var ob = (target).__ob__;
-  // 开发环境发出警告：不能删除 Vue 实例或根 $data 的 reactive 属性
+  // target 对象是 Vue 实例，或者 Vue 实例的根数据对象
   if (target._isVue || (ob && ob.vmCount)) {
     "development" !== 'production' && warn(
       'Avoid deleting properties on a Vue instance or its root $data ' +
@@ -6113,7 +6152,7 @@ function initUse (Vue) {
     }
 
     // additional parameters
-    // 将实参转成数组形式，并剔除第一个实参
+    // 将实参转成数组形式，并剔除第一个实参，也就是说从第二个参数开始为 plugin/plugin.install 方法的实参
     var args = toArray(arguments, 1);
     // 将 Vue 添加到 args 数组开头
     args.unshift(this);
@@ -6138,6 +6177,7 @@ function initMixin$1 (Vue) {
     this.options = mergeOptions(this.options, mixin);
     return this
   };
+  // 因为 Vue.mixin() 改变的是 Vue.options。所以这是全局注册一个混合，影响注册之后所有创建的每个 Vue 实例。
 }
 
 
@@ -6156,8 +6196,8 @@ function initExtend (Vue) {
    * Class inheritance 类继承
    */
   /*
-    该方法的作用是使用基础 Vue 构造器，创建一个“子类”。参数是一个包含组件选项的对象。
-    其中，data 选项是特例，它在 Vue.extend() 中它必须是函数
+    该方法的作用是使用基础 Vue 构造器，创建一个“子类”（组件的构造函数）。参数是一个包含组件选项的对象。
+    其中，data 选项是特例，它在 Vue.extend() 中它必须是函数。
 
     eg：
     <div id="mount-point"></div>
@@ -6176,7 +6216,7 @@ function initExtend (Vue) {
     // 创建 Profile 实例，并挂载到一个元素上。
     new Profile().$mount('#mount-point')
   */
-  // 构造函数继承。返回一个新的构造函数 Sub
+  // 构造函数继承。返回一个新的构造函数 Sub。可以理解为返回一个组件的构造函数。
   Vue.extend = function (extendOptions) {
     // 参数未定义则初始化为空对象
     extendOptions = extendOptions || {};
@@ -6184,9 +6224,17 @@ function initExtend (Vue) {
     // 父类
     var Super = this;
     var SuperId = Super.cid;
-    // 缓存的构造函数
+    // 缓存的构造函数，cachedCtors 缓存跟配置对象 extendOptions 相关的所有子类，只要给定父类 id 就可以唯一确定子类
+    /*
+      cachedCtors 缓存"父类 cid - 子类"集合，结构为：
+      {
+        SuperId1 ： Sub1,
+        SuperId2 ： Sub2,
+        ...
+      }
+     */
     var cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {});
-    // 如果找到了缓存的构造函数，就此返回
+    // 如果找到了缓存的构造函数，就此返回。配置对象 extendOptions 和父类 Super 确定了，确实可以唯一确定一个子类
     if (cachedCtors[SuperId]) {
       return cachedCtors[SuperId]
     }
@@ -6283,13 +6331,7 @@ function initExtend (Vue) {
 function initProps$1 (Comp) {
   var props = Comp.options.props;
   for (var key in props) {
-    /*
-    给 Comp.prototype 对象添加 key 属性
-    ① get 操作：
-       return this["_props"][key]
-    ② set 操作：
-       this["_props"][key] = val
-    */
+    // Comp.prototype["_props"][key] 代理 Comp.prototype[key]
     proxy(Comp.prototype, "_props", key);
   }
 }
@@ -6315,13 +6357,32 @@ function initAssetRegisters (Vue) {
       'directive',
       'filter'
     ];
+
+    以获取/注册指令为例：
+    // 注册（两个实参）
+    Vue.directive('my-directive', {
+      bind: function () {},
+      inserted: function () {},
+      update: function () {},
+      componentUpdated: function () {},
+      unbind: function () {}
+    })
+
+    // 注册（两个实参）
+    Vue.directive('my-directive', function () {
+      // 这里将会被 `bind` 和 `update` 调用
+    })
+
+    // 获取已注册的指令（一个实参）
+    var myDirective = Vue.directive('my-directive')
   */
   ASSET_TYPES.forEach(function (type) {
     // 对 definition 进行修正，最后返回 definition
     Vue[type] = function (id, definition) {
-      // 只有一个实参就是获取注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
+      // ① 只有一个实参就是【获取】注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
       if (!definition) {
         return this.options[type + 's'][id]
+      // ② 两个参数，注册组件
       } else {
         /* istanbul ignore if */
         {
@@ -6333,14 +6394,33 @@ function initAssetRegisters (Vue) {
             );
           }
         }
-        // Vue['component'](id, definition) 其中 definition 为普通对象，修正 definition
+
+        /*
+          // 注册组件，传入一个扩展过的构造器
+          Vue.component('my-component', Vue.extend({ ... }))
+
+          // 注册组件，传入一个选项对象 (自动调用 Vue.extend)
+          Vue.component('my-component', { ... })
+
+          // 获取注册的组件 (始终返回构造器)
+          var MyComponent = Vue.component('my-component')
+
+          Vue['component'](id, definition) 其中 definition 为普通对象，修正 definition
+         */
         if (type === 'component' && isPlainObject(definition)) {
           // 如果没有 name 属性就取第一个参数 id
           definition.name = definition.name || id;
           // Vue.options._base = Vue，所以 definition = Vue.extend(definition);
           definition = this.options._base.extend(definition);
         }
-        // Vue['directive'](id, definition) 其中 definition 为函数，修正 definition 为对象
+      
+        /*
+          Vue.directive('my-directive', function () {
+            // 这里将会被 `bind` 和 `update` 调用
+          })
+
+          Vue['directive'](id, definition) 其中 definition 为函数，修正 definition 为对象
+         */
         if (type === 'directive' && typeof definition === 'function') {
           definition = { bind: definition, update: definition };
         }
@@ -6495,13 +6575,13 @@ function initGlobalAPI (Vue) {
     };
   }
   /*
-     定义 Vue.config 是一个对象，包含 Vue 的全局配置
+     Vue.config 是一个对象，包含 Vue 的全局配置
 
      之前定义了一个全局的 config 对象，包含 silent、optionMergeStrategies、devtools、mustUseProp、isReservedTag、isReservedAttr ... 等属性/方法
 
      不过，这个全局 config 的很多方法都是没有具体定义的，一般是空方法。
     
-     这里相当于定义：Vue.config = config（获取 Vue.config 属性，就会返回全局的 config 对象）
+     这里相当于定义：Vue.config = config（获取 Vue.config 就会返回之前定义的那个全局的 config 对象）
 
      后面又定义了以下语句：
 
