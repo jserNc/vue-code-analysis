@@ -14828,10 +14828,10 @@ function createCompileToFunctionFn (compile) {
     var fnGenErrors = [];
 
     // 第 2 步，将代码文本转为真正的函数
-    // 文本（compiled.render） -> 函数（res.render），发生的错误加入到数组 fnGenErrors 中
+    // 文本（compiled.render）-> 函数（res.render），发生的错误加入到数组 fnGenErrors 中
     res.render = createFunction(compiled.render, fnGenErrors);
 
-    // 文本数组（compiled.staticRenderFns） -> 函数数组（res.staticRenderFns），发生的错误加入到数组 fnGenErrors 中
+    // 文本数组（compiled.staticRenderFns）-> 函数数组（res.staticRenderFns），发生的错误加入到数组 fnGenErrors 中
     res.staticRenderFns = compiled.staticRenderFns.map(function (code) {
       return createFunction(code, fnGenErrors)
     });
