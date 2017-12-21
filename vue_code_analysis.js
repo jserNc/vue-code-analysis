@@ -2308,16 +2308,12 @@ props 和 propsData 的区别：
 */
 
 // 返回合法的属性值
-function validateProp (
-  key,
-  propOptions,
-  propsData,
-  vm
-) {
+function validateProp (key, propOptions, propsData, vm) {
   var prop = propOptions[key];
   // key 不是 propsData 自身属性
   var absent = !hasOwn(propsData, key);
   var value = propsData[key];
+
   // handle boolean props
   // prop.type 这个函数是 Boolean，修正 value 为 true 或 false
   if (isType(Boolean, prop.type)) {
@@ -2328,6 +2324,7 @@ function validateProp (
       value = true;
     }
   }
+
   // check default value
   if (value === undefined) {
     // 获取默认值
@@ -2362,6 +2359,25 @@ function validateProp (
 // 获取一个属性的默认值
 function getPropDefaultValue (vm, prop, key) {
   // no default, return undefined
+  /*
+    Vue.component('props-demo-advanced', {
+      props: {
+        // 检测类型
+        height: Number,
+        // 检测类型 + 其他验证
+        age: {
+          type: Number,
+          default: 0,
+          required: true,
+          validator: function (value) {
+            return value >= 0
+          }
+        }
+      }
+    })
+
+    // 若属性 prop 没有默认值，就返回 undefined
+   */
   if (!hasOwn(prop, 'default')) {
     return undefined
   }
@@ -2909,7 +2925,7 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
     } else if (isUndef(old)) {
       // 如果 cur.fns 为 undefined 或 null，那么，cur 重置为 cur 函数调用器
       if (isUndef(cur.fns)) {
-		// 初始化。on[name] 保存的是调用器，由调用器触发函数 cur。
+		    // 初始化。on[name] 保存的是调用器，由调用器触发函数 cur。
         cur = on[name] = createFnInvoker(cur);
       }
       // 事件绑定
@@ -3362,6 +3378,7 @@ function initEvents (vm) {
   vm._hasHookEvent = false;
   // init parent attached events
   var listeners = vm.$options._parentListeners;
+  // 如果父级事件存在，那就添加到 vm._events 中
   if (listeners) {
     // 更新监听
     updateComponentListeners(vm, listeners);
@@ -3386,11 +3403,7 @@ function remove$1 (event, fn) {
 }
 
 // 更新组件 listeners
-function updateComponentListeners (
-  vm,
-  listeners,
-  oldListeners
-) {
+function updateComponentListeners (vm, listeners, oldListeners) {
   target = vm;
   // 更新监听
   updateListeners(listeners, oldListeners || {}, add, remove$1, vm);
@@ -3552,12 +3565,9 @@ function eventsMixin (Vue) {
  * Runtime helper for resolving raw children VNodes into a slot object.
  */
 // 插槽处理
-function resolveSlots (
-  children,
-  context
-) {
+function resolveSlots (children, context) {
   var slots = {};
-  // children 不存在，就返回空数组
+  // children 不存在，就返回空对象
   if (!children) {
     return slots
   }
@@ -3586,25 +3596,53 @@ function resolveSlots (
         slot.push(child);
       }
     } else {
-      // 不是命名插槽，就是默认插槽
+      // 不是命名插槽，就是匿名的默认插槽
       defaultSlot.push(child);
     }
   }
   // ignore whitespace
   // every 方法，只有数组中所有项全部满足才会返回 true
   if (!defaultSlot.every(isWhitespace)) {
-    // 只要 defaultSlot 数组中有一个 child 不为空节点，那么默认插槽就是 defaultSlot
+    // 数组 defaultSlot 的每一项都是注释或空白文本
     slots.default = defaultSlot;
   }
   /*
   于是，slots 结构大致为：
   {
-    default : defaultSlot,
-    name1 : slot1,
-    name2 : slot2,
+    default : [...],
+    name1 : [...],
+    name2 : [...],
     ...
   }
-  */
+  注意，每一个插槽名都对应一个数组，存放多个元素。如子组件 app-layout 模板：
+   <div class="container">
+       <header>
+            <slot name="header"></slot>
+       </header>
+       <main>
+            <slot></slot>
+       </main>
+       <footer>
+            <slot name="footer"></slot>
+       </footer>
+   </div>
+
+  父组件模板：
+   <div>
+       <app-layout>
+           <h1 slot="header">这里是一个页面标题</h1>
+           <h1 slot="header">这里是另一个页面标题</h1>
+
+           <p>主要内容的一个段落。</p>
+           <p>另一个主要段落。</p>
+
+           <p slot="footer">这里有一些联系信息</p>
+           <p slot="footer">这里有另一些联系信息</p>
+       </app-layout>
+   </div>
+
+   不管是命名插槽还是匿名插槽都可以对应多个节点
+   */
   return slots
 }
 
@@ -3654,15 +3692,15 @@ function initLifecycle (vm) {
   var parent = options.parent;
   
   if (parent && !options.abstract) {
-    // 修正 parent
+    // 层层上溯修正 parent，找到第一个非抽象父元素
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent;
     }
-    // 将当前 vm 添加到修正后的 parent.$children 数组中
+    // 将当前 vm 添加到第一个非抽象父元素的 parent.$children 数组中，也就是 vm 作为第一个非抽象父元素的"子元素"
     parent.$children.push(vm);
   }
 
-  // 父实例
+  // 非抽象父元素
   vm.$parent = parent;
   // 当前组件树的根 Vue 实例。如果当前实例没有父实例，此根 Vue 实例将会是其自己
   vm.$root = parent ? parent.$root : vm;
@@ -3907,7 +3945,7 @@ function mountComponent (vm, el, hydrating) {
     var vnode = vm._render();
     vm._update(vnode, hydrating);
 
-	其中，vm._render() 的作用就是生成虚拟节点 vnode
+	  其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
     updateComponent = function () {
 	  // 根据新的 vnode 对 dom 进行更新
@@ -4004,6 +4042,7 @@ function updateChildComponent (
 function isInInactiveTree (vm) {
   // 从父元素开始依次遍历祖先实例，只要有一个祖先实例拥有 _Inactive 属性，就返回 true
   while (vm && (vm = vm.$parent)) {
+    // 只要有一个失效父元素，就返回 true
     if (vm._inactive) { return true }
   }
   return false
@@ -5330,7 +5369,7 @@ function createComponent (Ctor, data, context, children, tag) {
   return vnode
 }
 
-// 创建 Vnode 类型的组件实例
+// 创建组件实例
 function createComponentInstanceForVnode (
   vnode, // we know it's MountedComponentVNode but flow doesn't
   parent, // activeInstance in lifecycle state
@@ -5356,6 +5395,8 @@ function createComponentInstanceForVnode (
     options.staticRenderFns = inlineTemplate.staticRenderFns;
   }
   // 根据以上 options 选项，返回实例。这里的 Ctor 指的是“构造函数”
+  // vnodeComponentOptions.Ctor 应该是 Vue.extend() 产生的组件构造函数
+  // new vnodeComponentOptions.Ctor(options) 为组件实例
   return new vnodeComponentOptions.Ctor(options)
 }
 
@@ -5810,7 +5851,7 @@ function initRender (vm) {
   // args order: tag, data, children, normalizationType, alwaysNormalize
   // internal version is used by render functions compiled from templates
   /*
-    将 createElement 方法绑定到这个实例。这里我们可以获取适当的渲染上下文。
+    将 createElement 方法绑定到这个实例。这里我们可以获取正确的渲染上下文。
     参数顺序：tag, data, children, normalizationType, alwaysNormalize
 
     内部版本是被模板编译而成的渲染函数用的
@@ -5878,8 +5919,8 @@ function renderMixin (Vue) {
 
     /*
         注意区别：
-        vm.$vnode  保存的是 vm 对应的 _parentVnode
-        vm._vnode  保存的是 vm 对应的 vnode
+        vm.$vnode  保存的是 vm 对应的 _parentVnode，父树中的占位节点
+        vm._vnode  保存的是 vm 对应的 vnode，子树的根
     */
 
     // render self
@@ -6020,6 +6061,7 @@ function initMixin (Vue) {
 function initInternalComponent (vm, options) {
   var opts = vm.$options = Object.create(vm.constructor.options);
   // doing this because it's faster than dynamic enumeration.
+  // 之所以一个个列举而不是循环遍历，是因为这样会比较快
   opts.parent = options.parent;
   opts.propsData = options.propsData;
   opts._parentVnode = options._parentVnode;
@@ -6034,7 +6076,7 @@ function initInternalComponent (vm, options) {
   }
 }
 
-// 处理构造函数选项，最终返回 Ctor.options
+// 处理构造函数选项，最终返回 Ctor.options，子类选项 = 父类选项 + 子类扩展的选项
 function resolveConstructorOptions (Ctor) {
   var options = Ctor.options;
   if (Ctor.super) {
@@ -6050,14 +6092,14 @@ function resolveConstructorOptions (Ctor) {
       Ctor.superOptions = superOptions;
 
       // check if there are any late-modified/attached options (#4976)
-      // 检查是还有最新修改的选项
+      // 检查是否还有最新修改的选项
       var modifiedOptions = resolveModifiedOptions(Ctor);
 
       // update base extend options
       if (modifiedOptions) {
         extend(Ctor.extendOptions, modifiedOptions);
       }
-      // 合并选项
+      // 子类构造函数的 options 是父类构造函数的 options 和自身扩展的 options 和并集
       options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions);
       if (options.name) {
         options.components[options.name] = Ctor;
@@ -12775,6 +12817,33 @@ function parse (template,options) {
           // 如果移除结构化的 attribute 和 key 后，该元素不存在属性，那么 plain 属性为 true
           currentParent.plain = false;
           var name = element.slotTarget || '"default"';
+
+          /*
+            关于作用域插槽，理解官网这个例子：
+            ① 父组件模板
+           <my-awesome-list :items="items">
+               <li slot="item" slot-scope="props" class="my-fancy-item">{{ props.text }}</li>
+           </my-awesome-list>
+
+           ② 子组件 my-awesome-list 模板
+           <ul>
+               <slot name="item" v-for="item in items" :text="item.text">备选内容</slot>
+           </ul>
+
+           加入父作用域中 items 为:
+           [
+               { text: 'Foo' },
+               { text: 'Bar' },
+               { }
+           ]
+
+           渲染结果为：
+           <ul>
+                <li class="my-fancy-item">Foo</li>
+                <li class="my-fancy-item">Bar</li>
+                <li class="my-fancy-item">备选内容</li>
+           </ul>
+           */
           (currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element;
         // 绑定父子关系
         } else {
@@ -13087,6 +13156,15 @@ function processSlot (el) {
       // 若 slotTarget 为 '""'，则取 '"default"'
       el.slotTarget = slotTarget === '""' ? '"default"' : slotTarget;
     }
+    /*
+      参考官网作用域插槽描述：
+      在父级中，具有特殊特性 slot-scope 的 <template> 元素必须存在，表示它是作用域插槽的模板。slot-scope 的值将被用作一个临时变量名，此变量接收从子组件传递过来的 prop 对象
+     
+      slot-scope 属性被解析成了 scope 属性吗？
+      经验证，2.4.0 版本（当前版本）应该是 scope 属性而不是 slot-scope 属性
+
+      2.5.0+ 版本才改成 slot-scope 属性
+     */
     if (el.tag === 'template') {
       el.slotScope = getAndRemoveAttr(el, 'scope');
     }
