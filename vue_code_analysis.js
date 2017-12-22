@@ -29,15 +29,17 @@ Essential Git: 一些git操作
   }
 
   function defineReactive (obj, key, val) {
-
+    // 一个属性 key 对应一个依赖对象
     var dep = new Dep();
 
     Object.defineProperty(obj, key, {
+      // 获取 key 属性时收集关注它的 watcher
       get: function () {
-        // 添加订阅者 watcher 到主题对象 Dep
+        // 添加订阅者 watcher 到依赖对象 Dep
         if (Dep.target) dep.addSub(Dep.target);
         return val
       },
+      // 更新 key 属性时通知关注它的 watcher
       set: function (newVal) {
         if (newVal === val) return
         val = newVal;
@@ -67,12 +69,13 @@ Essential Git: 一些git操作
       // 解析属性
       for (var i = 0; i < attr.length; i++) {
         if (attr[i].nodeName == 'v-model') {
-          var name = attr[i].nodeValue; // 获取v-model绑定的属性名
+          // 获取 v-model 绑定的属性名
+          var name = attr[i].nodeValue;
           node.addEventListener('input', function (e) {
             // 给 vm[name] 属性赋值，进而触发该属性的 set 方法
             vm[name] = e.target.value;
           });
-              // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
+          // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
           node.value = vm[name]; 
           node.removeAttribute('v-model');
         }
@@ -80,6 +83,7 @@ Essential Git: 一些git操作
 
       new Watcher(vm, node, name, 'input');
     }
+
     // 节点类型为text
     if (node.nodeType === 3) {
       if (reg.test(node.nodeValue)) {
@@ -102,6 +106,7 @@ Essential Git: 一些git操作
   }
 
   Watcher.prototype = {
+    // 更新 dom
     update: function () {
       this.get();
       if (this.nodeType == 'text') {
@@ -2289,25 +2294,8 @@ function resolveAsset (options, type, id, warnMissing) {
   return res
 }
 
-/*
-props 和 propsData 的区别：
-参考：https://cn.vuejs.org/v2/api/#propsData
 
-① props
-   props 可以是数组或对象，用于接收来自父组件的数据。
-   props 可以是简单的数组，或者使用对象作为替代，对象允许配置高级选项，如类型检测、自定义校验和设置默认值。
-
-② propsData
-   只用于 new 创建的实例中，主要作用是方便测试。例如：
-   var vm = new Comp({
-        propsData: {
-            msg: 'hello'
-        }
-   })
-   这里的 propsData 就可以传给 props 了
-*/
-
-// 返回合法的属性值
+// 返回合法的属性值，也就是使得属性合法化
 function validateProp (key, propOptions, propsData, vm) {
   var prop = propOptions[key];
   // key 不是 propsData 自身属性
@@ -2325,7 +2313,7 @@ function validateProp (key, propOptions, propsData, vm) {
     }
   }
 
-  // check default value
+  // 如果 value 为 undefined，那就获取默认值
   if (value === undefined) {
     // 获取默认值
     value = getPropDefaultValue(vm, prop, key);
@@ -2347,7 +2335,7 @@ function validateProp (key, propOptions, propsData, vm) {
     observerState.shouldConvert = prevShouldConvert;
   }
   {
-    // 验证属性的有效性
+    // 对代码流程没影响，只是验证属性的有效性，对不符合要求的值发出 3 种警告
     assertProp(prop, key, value, vm, absent);
   }
   return value
@@ -2381,6 +2369,7 @@ function getPropDefaultValue (vm, prop, key) {
   if (!hasOwn(prop, 'default')) {
     return undefined
   }
+
   var def = prop.default;
   // warn against non-factory defaults for Object & Array
   // 默认值不能是对象或者数组，必须用工厂函数返回默认值
@@ -2392,13 +2381,14 @@ function getPropDefaultValue (vm, prop, key) {
       vm
     );
   }
+
   // the raw prop value was also undefined from previous render,
   // return previous default value to avoid unnecessary watcher trigger
   if (vm && vm.$options.propsData &&
     vm.$options.propsData[key] === undefined &&
     vm._props[key] !== undefined
   ) {
-    // 直接返回 vm._props[key]
+    // 返回先前的默认值 vm._props[key]
     return vm._props[key]
   }
   // call factory function for non-Function types
@@ -2416,15 +2406,37 @@ function getPropDefaultValue (vm, prop, key) {
 /**
  * Assert whether a prop is valid.
  */
-// 验证属性的有效性
-function assertProp (
-  prop,
-  name,
-  value,
-  vm,
-  absent
-) {
-  // prop 必需，并且 absent 为真。发出警告，然后返回
+/*
+ Vue.component('props-demo-advanced', {
+     props: {
+         // 检测类型
+         height: Number,
+         // 检测类型 + 其他验证
+         age: {
+             type: Number,
+             default: 0,
+             required: true,
+             validator: function (value) {
+                return value >= 0
+             }
+         }
+     }
+ })
+
+ prop 对应为：
+ {
+     type: Number,
+     default: 0,
+     required: true,
+     validator: function (value) {
+        return value >= 0
+     }
+ }
+ name 对应为 age
+ */
+// 对代码流程没影响，只是验证属性的有效性，对不符合要求的发出 3 种警告
+function assertProp (prop, name, value, vm, absent) {
+  // ① prop 必需，并且 key 不是 propsData 自身属性。发出警告，然后返回
   if (prop.required && absent) {
     warn(
       'Missing required prop: "' + name + '"',
@@ -2432,21 +2444,26 @@ function assertProp (
     );
     return
   }
-  // prop 非必需，并且 value 为 undefined 或 null，直接返回
+
+  // 若为非必需项，直接返回就好
   if (value == null && !prop.required) {
     return
   }
+
   var type = prop.type;
-  // type 为假（undefined、null、false、0、NaN、""）或 true 时，valid 为 true
+  // 没有指定 type 或 type 为 true 时，valid 暂定为 true
   var valid = !type || type === true;
+
+  // name 属性可接受的值类型
   var expectedTypes = [];
-  // prop.type 为真
+
+  // 对 valid 和 expectedTypes 进行修正
   if (type) {
-    // 如果 type 不是数组，手动转为数值形式
+    // 如果 type 不是数组，手动转为数组。注意，type 变为数组并不影响 prop.type
     if (!Array.isArray(type)) {
       type = [type];
     }
-    // 只要 valid 变为 true，就终止该循环。也就是说，只要 valid 匹配到 type 数组中任一个即可
+    // 只要 valid 变为 true，就终止该循环。也就是说，只要 value 匹配到 type 数组中任类型即可
     for (var i = 0; i < type.length && !valid; i++) {
       /*
       assertedType 的格式为：
@@ -2461,7 +2478,8 @@ function assertProp (
       valid = assertedType.valid;
     }
   }
-  // 经过上面的循环匹配后，valid 还是假，那就发出警告：该属性无效
+
+  // ② 若 valid 为假，那就发出警告：该属性无效
   if (!valid) {
     warn(
       'Invalid prop: type check failed for prop "' + name + '".' +
@@ -2477,10 +2495,16 @@ function assertProp (
     // 属性无效，在此返回
     return
   }
+
+  /*
+   比如：
+   validator: function (value) {
+        return value >= 0
+   }
+   */
   var validator = prop.validator;
-  // 如果属性有验证器，就要验证器检验之
+  // ③ 如果属性有验证器，就要验证器检验之，没通过验证器检验，则发出警告
   if (validator) {
-    // 没通过验证器检验，发出警告
     if (!validator(value)) {
       warn(
         'Invalid prop: custom validator check failed for prop "' + name + '".',
@@ -2492,19 +2516,22 @@ function assertProp (
 
 var simpleCheckRE = /^(String|Number|Boolean|Function|Symbol)$/;
 
-// 判断 value 是否是 type 的实例。返回一个 json 对象
+// 判断 value 是否是 type 类型的实例。返回一个 json 对象
 function assertType (value, type) {
   var valid;
   // getType 方法用于获取函数名，如果没有就返回空字符串，例如：getType(Boolean) -> "Boolean"
   var expectedType = getType(type);
-  // expectedType 为 String|Number|Boolean|Function|Symbol 其中一种
+  // simpleCheckRE 为 String|Number|Boolean|Function|Symbol 其中一种
   if (simpleCheckRE.test(expectedType)) {
     /*
     这里有赋值（=）、typeof、全等（===）、成员访问（.）等 4 种运算符，优先级从高到低分别是：
-    . 高于 typeof 高于 === 高于 =
-
-    那只有 value 类型为 function，并且 expectedType 为 Function 才会返回 true
-    typeof (function myFunc(){}) === 'Function'.toLowerCase() -> true
+    ① . 
+    ② typeof 
+    ③ ===
+    ④ =
+    
+    typeof 1 -> "number"
+    typeof 'abc' -> "string"
     */
     valid = typeof value === expectedType.toLowerCase();
   // value 为对象
@@ -2529,14 +2556,16 @@ function assertType (value, type) {
  * across different vms / iframes.
  */
 /*
-获取函数名，如果没有就返回空字符串
+获取函数名的字符串形式，如果没有就返回空字符串
 eg:
-① var match = Boolean.toString().match(/^\s*function (\w+)/)
+① fn = Boolean
+   match = Boolean.toString().match(/^\s*function (\w+)/)
    -> ["function Boolean", "Boolean", index: 0, input: "function Boolean() { [native code] }"]
 
    match[1] -> "Boolean"
 
-② var match = (function myFn(){}).toString().match(/^\s*function (\w+)/)
+② fn = function myFn(){}
+   match = (function myFn(){}).toString().match(/^\s*function (\w+)/)
    -> ["function myFn", "myFn", index: 0, input: "function myFn(){}"]
 
    match[1] -> "myFn"
@@ -3948,7 +3977,7 @@ function mountComponent (vm, el, hydrating) {
 	  其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
     updateComponent = function () {
-	  // 根据新的 vnode 对 dom 进行更新
+	    // 根据新的 vnode 对 dom 进行更新
       vm._update(vm._render(), hydrating);
     };
   }
@@ -3959,6 +3988,7 @@ function mountComponent (vm, el, hydrating) {
 
   // manually mounted instance, call mounted on self
   // mounted is called for render-created child components in its inserted hook
+  // $vnode 为 vm 在父树种的占位节点，现在占位节点为 null，就是安装成功了
   if (vm.$vnode == null) {
     vm._isMounted = true;
     // 安装成功回调
@@ -4296,6 +4326,7 @@ var uid$2 = 0;
  * This is used for both the $watch() api and directives.
  */
 // Watcher 实例用来解析表达式、收集 Dep 依赖，以及当表达式值变化时触发回调函数。$watch() 方法和指令中将会用的。
+// 参考 initComputed 方法来理解 Watcher 函数
 var Watcher = function Watcher (vm, expOrFn, cb, options) {
   // 当前 watcher 的 vm 属性指向 vm
   this.vm = vm;
@@ -4658,7 +4689,7 @@ function checkOptionType (vm, name) {
   }
 }
 
-// 初始化属性
+// 初始化 props，props 挂载到 vm._props 对象上
 function initProps (vm, propsOptions) {
   /*
     var vm = new Comp({
@@ -4888,21 +4919,19 @@ function createComputedGetter (key) {
         // 将 watcher 对应的 dep 都依次执行 Dep.target.addDep(dep)
         watcher.depend();
       }
+      // 返回最新的值
       return watcher.value
     }
   }
 }
 
-// 初始化 methods
+// 初始化 methods，将 methods 挂载到 vm 对象上
 function initMethods (vm, methods) {
   // 开发环境下，检查 vm.$options["computed"] 是否为对象，若不是对象，发出警告
   "development" !== 'production' && checkOptionType(vm, 'methods');
   var props = vm.$options.props;
   for (var key in methods) {
-    /*
-    ① methods[key] 为 undefined 或 null，取 noop
-    ② 否则，将函数 methods[key] 内部的 this 绑定到 vm
-    */
+    // 将 vm.$options.methods 对象里的函数都挂载到 vm 对象上，并且绑定函数内部 this 为 vm
     vm[key] = methods[key] == null ? noop : bind(methods[key], vm);
     {
       if (methods[key] == null) {
@@ -4913,7 +4942,7 @@ function initMethods (vm, methods) {
           vm
         );
       }
-      // method 不能和 props 重名
+      // method 不能和 prop 重名
       if (props && hasOwn(props, key)) {
         // 警告： key 方法已经被定义为一个 prop 了
         warn(
@@ -4944,21 +4973,17 @@ function initWatch (vm, watch) {
 }
 
 // 创建一个 watcher，返回值为一个函数，该函数执行会调用 watcher.teardown()
-function createWatcher (
-  vm,
-  keyOrFn,
-  handler,
-  options
-) {
-  // handler 为对象，修正为 handler.handler
+function createWatcher (vm, keyOrFn, handler, options) {
+  // ① 若 handler 为对象，修正为 handler.handler
   if (isPlainObject(handler)) {
     options = handler;
     handler = handler.handler;
   }
-  // handler 为字符串，修正为 vm[handler]
+  // ② 若 handler 为字符串，修正为 vm[handler]
   if (typeof handler === 'string') {
     handler = vm[handler];
   }
+  // 观察 expOrFn ，若 expOrFn 变化了，就调用函数 handler
   return vm.$watch(keyOrFn, handler, options)
 }
 
@@ -4994,24 +5019,64 @@ function stateMixin (Vue) {
   Vue.prototype.$set = set;
   Vue.prototype.$delete = del;
 
-  Vue.prototype.$watch = function (
-    expOrFn,
-    cb,
-    options
-  ) {
+  // 观察 expOrFn ，若 expOrFn 变化了，就调用函数 cb
+  Vue.prototype.$watch = function (expOrFn, cb, options) {
     var vm = this;
-    // cb 是对象，调用 createWatcher 方法，createWatcher 方法又会调用该 $watch 方法
+    // cb 是对象，调用 createWatcher 方法，然后将 cb 修正为 cb.handler
     if (isPlainObject(cb)) {
       return createWatcher(vm, expOrFn, cb, options)
     }
     options = options || {};
     options.user = true;
-    // 新建 watcher
+    /*
+      vm.$watch 观察 Vue 实例变化的一个表达式或计算属性函数。回调函数得到的参数为新值和旧值。表达式只接受监督的键路径。对于更复杂的表达式，用一个函数取代。
+      // ① 键路径形式的表达式
+      vm.$watch('a.b.c', function (newVal, oldVal) {
+        // 回调函数做点什么
+      })
+
+      // ② 函数形式的表达式
+      vm.$watch(
+        function () {
+          return this.a + this.b
+        },
+        function (newVal, oldVal) {
+          // 回调函数做点什么
+        }
+      )
+
+      为了发现对象内部值的变化，可以在选项参数中指定 deep: true 。注意监听数组的变动不需要这么做。
+
+      vm.$watch('someObject', callback, {
+        deep: true
+      })
+      vm.someObject.nestedValue = 123
+      // callback is fired
+     */
+    // 新建 watcher，观察 expOrFn，若 expOrFn 变动，则调用 cb 函数
     var watcher = new Watcher(vm, expOrFn, cb, options);
+    /*
+      在选项参数中指定 immediate: true 将立即以表达式的当前值触发回调：
+
+      vm.$watch('a', callback, {
+        immediate: true
+      })
+      立即以 `a` 的当前值触发回调
+     */
     // options.immediate 存在，直接调用 cb 方法
     if (options.immediate) {
+      // watcher.value 就是 expOrFn 的当前值，作为 cb 的参数
       cb.call(vm, watcher.value);
     }
+
+    /*
+      vm.$watch 返回一个取消观察函数，用来停止触发回调：
+
+      var unwatch = vm.$watch('a', cb)
+      
+      unwatch()
+      // 之后取消观察
+     */
     return function unwatchFn () {
       watcher.teardown();
     }
