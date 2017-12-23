@@ -4388,7 +4388,18 @@ var Watcher = function Watcher (vm, expOrFn, cb, options) {
       );
     }
   }
-  // 下面会定义 Watcher.prototype.get 方法
+  /*
+    vm._watcher = new Watcher(vm, updateComponent, noop)
+    这句代码会执行 updateComponent 函数，原因如下：
+
+    分解上面的 new 运算符执行过程：
+    vm._watcher = {}；
+    vm._watcher._proto__ = Vue$3.prototype;
+    ...
+    vm._watcher.value = vm._watcher.get();
+
+    vm._watcher.get() 会触发 vm._watcher.getter()，即 updateComponent()
+   */
   this.value = this.lazy ? undefined : this.get();
 };
 
@@ -4651,19 +4662,20 @@ function proxy (target, sourceKey, key) {
 function initState (vm) {
   vm._watchers = [];
   var opts = vm.$options;
-  // 初始化属性
+  // 初始化属性，将 props 挂载到 vm._props 对象上
   if (opts.props) { initProps(vm, opts.props); }
-  // 初始化方法
+  // 初始化方法，将 methods 挂载到 vm 对象上
   if (opts.methods) { initMethods(vm, opts.methods); }
 
-  // 初始化 data
+  // 初始化 data，将 data 挂载到 vm._data 对象上
   if (opts.data) {
     initData(vm);
   } else {
+    // 观察 vm._data 对象
     observe(vm._data = {}, true /* asRootData */);
   }
 
-  // 初始化 computed
+  // 初始化 computed，将对应的 Watcher 实例挂载到 vm._computedWatchers 对象上
   if (opts.computed) { initComputed(vm, opts.computed); }
 
   /*
@@ -4673,6 +4685,7 @@ function initState (vm) {
   初始化 watch
   */
   if (opts.watch && opts.watch !== nativeWatch) {
+    // 观察 opts.watch 的每一个值/表达式
     initWatch(vm, opts.watch);
   }
 }
