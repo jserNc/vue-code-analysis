@@ -1183,14 +1183,14 @@ var nextTick = (function () {
   参考：http://www.cnblogs.com/jscode/p/3600060.html
   再来看 MutationObserver：
 
-  Mutation Observer（变动观察器）是监视 DOM 变动的接口。当 DOM 对象树发生任何变动时，Mutation Observer 会得到通知。
+  MutationObserver（变动观察器）是监视 DOM 变动的接口。当 DOM 对象树发生任何变动时，MutationObserver 会得到通知。
 
-  在概念上，它很接近事件。可以理解为，当 DOM 发生变动会触发 Mutation Observer 事件。但是，它与事件有一个本质不同：
+  在概念上，它很接近事件。可以理解为，当 DOM 发生变动会触发 MutationObserver 事件。但是，它与事件有一个本质不同：
   a) 事件是同步触发，也就是说 DOM 发生变动立刻会触发相应的事件；
-  b) Mutation Observer 则是异步触发，DOM 发生变动以后，并不会马上触发，而是要等到当前所有 DOM 操作都结束后才触发。
+  b) MutationObserver 则是异步触发，DOM 发生变动以后，并不会马上触发，而是要等到当前所有 DOM 操作都结束后才触发。
 
   这样设计是为了应付 DOM 变动频繁的情况。举例来说，如果在文档中连续插入 1000 个段落（p 元素），会连续触发 1000 个插入事件，
-  执行每个事件的回调函数，这很可能造成浏览器的卡顿；而 Mutation Observer 完全不同，只在 1000 个段落都插入结束后才会触发，而且只触发一次。
+  执行每个事件的回调函数，这很可能造成浏览器的卡顿；而 MutationObserver 完全不同，只在 1000 个段落都插入结束后才会触发，而且只触发一次。
 
    */
   } else if (typeof MutationObserver !== 'undefined' && (
@@ -1467,12 +1467,14 @@ var observerState = {
  * object's property keys into getter/setters that
  * collect dependencies and dispatches updates.
  */
+// 本质是调用 defineReactive$$1 对 value 对象的每一个属性的 getter/setters 进行劫持
 var Observer = function Observer (value) {
   this.value = value;
   this.dep = new Dep();
+  // 如果作为根数据，那么 vmCount 属性加 1
   this.vmCount = 0;
 
-  // 通过Object.defineProperty定义__ob__属性 this指向Observer实例
+  // 通过 Object.defineProperty 定义 __ob__ 属性指向当前 Observer 实例
   def(value, '__ob__', this);
 
   // 监听数组变化
@@ -1500,7 +1502,7 @@ var Observer = function Observer (value) {
      根本作用是，对数组 value 的 push/unshift/splice/... 方法进行代理，调用这些方法时，会触发 dom 更新
      */
     augment(value, arrayMethods, arrayKeys);
-
+    // observeArray 方法还是会调用 Observer 方法，即走到下面的 walk 方法
     this.observeArray(value);
   // 监听对象变化
   } else {
@@ -1540,7 +1542,7 @@ Observer.prototype.observeArray = function observeArray (items) {
  * Augment an target Object or Array by intercepting
  * the prototype chain using __proto__
  */
-// 将 target 的原型指定为 src
+// 将 target 的原型对象指定为 src
 function protoAugment (target, src, keys) {
   /* eslint-disable no-proto */
   target.__proto__ = src;
@@ -1565,7 +1567,7 @@ function copyAugment (target, src, keys) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
-// 为 value 创建一个观察者实例。asRootData 为 true 表示当前 value 为根数据。
+// 本质就是调用 new Observer(value)。为 value 创建一个 Observer 实例。asRootData 为 true 表示当前 value 为根数据。
 function observe (value, asRootData) {
   // 如果 vulue 不是对象就不处理了
   if (!isObject(value)) {
@@ -1627,7 +1629,25 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
   var getter = property && property.get;
   var setter = property && property.set;
 
-  // observe(val) 为 val 创建一个 Observer 实例，并返回该实例
+  /*
+   shallow 的意思是"浅的"，也就是说没有指定"浅观察"，就是深度观察
+
+   举例来说：
+   obj = {
+     a : {
+        aa : 1
+     },
+     b : {
+        bb : 2
+     }
+   }
+
+   这里的 val 就不同普通的原始类型值了，val 是 {aa : 1}，{bb : 1} 这样的对象
+   那么就继续递归遍历 val 对象的属性，劫持其属性的 getter/setter
+
+  */
+  // observe(val) -> new Observer(val) -> defineReactive$$1()
+  // 【重要】所以这句作用就是：递归遍历 val 的所有子属性
   var childOb = !shallow && observe(val);
 
 
@@ -1640,10 +1660,10 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
     get: function reactiveGetter () {
       var value = getter ? getter.call(obj) : val;
       if (Dep.target) {
-        //相当于 Dep.target.addDep(dep)
+        // 相当于 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里
         dep.depend();
         if (childOb) {
-          //相当于 Dep.target.addDep(childOb.dep)
+          // 相当于 Dep.target.addDep(childOb.dep)，即把 Dep.target 这个 Watcher 实例添加到 childOb.dep.subs 数组里
           childOb.dep.depend();
         }
         if (Array.isArray(value)) {
@@ -1674,11 +1694,11 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
       if (setter) {
         setter.call(obj, newVal);
       } else {
-        // set 函数在这里是一个闭包，所以能保留 val 的值？
+        // 注意：set/set 函数在这里是闭包，所以能共用 val 的值
         val = newVal;
       }
       
-      // observe(newVal) 为 newVal 创建一个 Observer 实例，并返回该实例
+      // 递归遍历 newVal 的所有子属性
       childOb = !shallow && observe(newVal);
 
       // 发出通知，执行订阅者
