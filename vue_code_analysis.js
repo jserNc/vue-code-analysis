@@ -4347,6 +4347,41 @@ var uid$2 = 0;
  */
 // Watcher 实例用来解析表达式、收集 Dep 依赖，以及当表达式值变化时触发回调函数。$watch() 方法和指令中将会用的。
 // 参考 initComputed 方法来理解 Watcher 函数
+ /*
+    为什么新建一个 watcher 就可以起到观察表达式/函数的作用呢？
+
+    / 新建 Vue 实例
+    vm = new Vue({
+      data : {
+        aaa : {
+            bbb : {
+                ccc : {
+                    ddd : 1
+                }
+            }
+        }
+      }
+    });
+
+    // 新建 watcher
+    var watcher = new Watcher(vm, 'aaa.bbb.ccc' , cb, options);
+
+    理一理这个 watcher 工作的基本流程：
+
+    (1) 执行 watcher = new Watcher() 会定义 watcher.getter = parsePath('aaa.bbb.ccc')（这是一个函数，稍后会解释），同时也会定义 watcher.value = watcher.get()，而这会触发执行 watcher.get()
+    (2) 执行 watcher.get() 就是执行 watcher.getter.call(vm, vm)
+    (3) parsePath('aaa.bbb.ccc').call(vm, vm) 会触发 vm.aaa.bbb.ccc 属性读取操作
+    (5) vm.aaa.bbb.ccc 属性读取会触发 aaa.bbb.cc 属性的 get 函数（在 defineReactive$$1 函数中定义）
+    (6) get 函数会触发 dep.depend()，也就是 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里（也就是说，dep 可以发布消息通知给订阅者 Dep.target）
+    (7) 那么 Dep.targe 又是什么呢？其实 (2) 中执行 watcher.get() 之前已经将 Dep.target 锁定为当前 watcher（等到 watcher.get() 执行结束时释放 Dep.target）
+    (8) 于是，watcher 就进入了 aaa.bbb.ccc 属性的订阅数组，也就是说 watcher 这个订阅者订阅了 aaa.bbb.ccc 属性
+    (9) 当给 aaa.bbb.ccc 属性赋值时，如 vm.aaa.bbb.ccc = 100 会触发 vm 的 aaa.bbb.ccc 属性的 set 函数（在 defineReactive$$1 函数中定义）
+    (10) set 函数触发 dep.notify()
+    (11) 执行 dep.notify() 就会遍历 dep.subs 中的所有 watcher，并依次执行 watcher.update()
+    (12) 执行 watcher.update() 又会触发 watcher.run()
+    (13) watcher.run() 触发 watcher.cb.call(watcher.vm, value, oldValue);
+
+*/
 var Watcher = function Watcher (vm, expOrFn, cb, options) {
   // 当前 watcher 的 vm 属性指向 vm
   this.vm = vm;
@@ -4374,15 +4409,28 @@ var Watcher = function Watcher (vm, expOrFn, cb, options) {
   // 表达式转为字符串形式
   this.expression = expOrFn.toString();
   // parse expression for getter
+  // ① 如果 expOrFn 是函数，那么 this.getter = expOrFn
   if (typeof expOrFn === 'function') {
     this.getter = expOrFn;
+  // ② 如果 expOrFn 是表达式，那么 this.getter = parsePath(expOrFn) 也是函数，根据这个函数可以定位到 vm 的某个元素
   } else {
     /*
-    根据路径 expOrFn 返回数据
+    结合 parsePath 定义看：
     eg：
-    var path = 'aaa.bbb.ccc'
-    var getter = parsePath(path);
-    var o = {
+    path = 'aaa.bbb.ccc' 
+    -> segments = path.split('.')
+    -> segments = ["aaa", "bbb", "ccc"]
+
+    this.getter = parsePath(path) = function (obj) {
+      for (var i = 0; i < segments.length; i++) {
+        if (!obj) { return }
+        obj = obj[segments[i]];
+      }
+      return obj
+    };
+
+    eg:
+    var vm = {
         aaa : {
             bbb : {
                 ccc : {
@@ -4392,9 +4440,9 @@ var Watcher = function Watcher (vm, expOrFn, cb, options) {
         }
      }
 
-     getter(o) -> {ddd: 1}
+     this.getter(vm) -> vm.aaa.bbb.ccc -> {ddd: 1}
 
-     parsePath (path)(o) 在对象 o 中找到路径 path 对应的值。如果路径 expOrFn 不合符，parsePath(expOrFn) 就是 undefined
+     vm.aaa.bbb.ccc 这个获取属性的操作会触发对于的 get 函数（在 defineReactive$$1 函数中定义）
     */
     this.getter = parsePath(expOrFn);
     if (!this.getter) {
@@ -4433,6 +4481,31 @@ Watcher.prototype.get = function get () {
   var vm = this.vm;
   try {
     // this.getter 执行时的 this 和实参都为 vm
+    /*
+      例如：
+      var vm = new Vue({
+        data : {
+            a : 1
+        }
+      });
+
+      对于 expOrFn = 'a'
+      this.getter = parsePath('a')
+
+      参考函数 parsePath 的定义，this.getter 可理解为：
+      function (obj) {
+        obj = obj['a'];
+        return obj
+      }
+
+      于是 this.getter.call(vm, vm)
+      -> vm.a
+
+      【重要】这里属性获取操作触发当前 Watcher 实例对 vm.a 属性的订阅
+
+      这里对 vm.a 的属性读取会触发 defineReactive$$1 函数中对 vm 的 a 属性的 get 操作的拦截
+      于是当前 Watcher 实例会订阅 a 属性的变化（添加到 dep.subs 数组里）
+     */
     value = this.getter.call(vm, vm);
   } catch (e) {
     if (this.user) {
@@ -4842,7 +4915,7 @@ function initData (vm) {
     }
   }
   // observe data
-  // 为 value 创建一个 Observer 实例。asRootData 为 true 表示当前 data 为根数据。
+  // 劫持 data 对象。asRootData 为 true 表示当前 data 为根数据。
   observe(data, true /* asRootData */);
 }
 
@@ -5088,6 +5161,21 @@ function stateMixin (Vue) {
      */
     // 新建 watcher，观察 expOrFn，若 expOrFn 变动，则调用 cb 函数
     var watcher = new Watcher(vm, expOrFn, cb, options);
+    /*
+        为什么新建一个 watcher 就可以起到观察的作用呢？
+
+        ① expOrFn 变化时会触发对应的 dep.notify()
+        ② dep.notify() 即执行对应的 watcher.update()
+        ③ watcher.update() 又会触发 watcher.run()
+        ④ watcher.run() 执行过程很简单：
+           value = watcher.get();
+           oldValue = watcher.value;
+           watcher.cb.call(watcher.vm, value, oldValue);
+
+        这其实也是一个 watcher 工作的基本流程
+     */
+
+
     /*
       在选项参数中指定 immediate: true 将立即以表达式的当前值触发回调：
 
