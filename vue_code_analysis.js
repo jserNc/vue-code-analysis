@@ -1949,11 +1949,7 @@ function mergeData (to, from) {
  * Data
  */
  // 合并 data 或 function
-function mergeDataOrFn (
-  parentVal,
-  childVal,
-  vm
-) {
+function mergeDataOrFn (parentVal, childVal, vm) {
   if (!vm) {
     // in a Vue.extend merge, both should be functions
     if (!childVal) {
@@ -6345,6 +6341,56 @@ function initInternalComponent (vm, options) {
 // 处理构造函数选项，最终返回 Ctor.options，子类选项 = 父类选项 + 子类扩展的选项
 function resolveConstructorOptions (Ctor) {
   var options = Ctor.options;
+  /*
+    看一看 Vue.options，最基本的有以下 4 个选项：
+    {
+        components: {KeepAlive: {…}, Transition: {…}, TransitionGroup: {…}},
+        directives: {model: {…}, show: {…}},
+        filters: {},
+        _base: Vue
+    }
+
+    Vue.options = Object.create(null);
+
+    ① Vue.options._base = Vue;
+
+    ② ASSET_TYPES.forEach(function (type) {
+        Vue.options[type + 's'] = Object.create(null);
+    });
+    -> 相当于：
+    Vue.options.components = {};
+    Vue.options.directives = {};
+    Vue.options.filters = {};
+
+    其中，Vue.options.components 会被以下语句修改：
+
+    // 平台相关组件
+    var platformComponents = {
+        Transition: Transition,
+        TransitionGroup: TransitionGroup
+    };
+    // 通用内置组件
+    var builtInComponents = {
+        KeepAlive: KeepAlive
+    };
+
+    extend(Vue$3.options.components, platformComponents);
+    extend(Vue.options.components, builtInComponents);
+
+    于是：
+    Vue.options.components = {KeepAlive: {…}, Transition: {…}, TransitionGroup: {…}};
+
+    其中，Vue.options.directives 会被以下语句修改：
+    var platformDirectives = {
+        model: model$1,
+        show: show
+    };
+
+    extend(Vue$3.options.directives, platformDirectives);
+
+    于是：
+    Vue.options.directives = {model: {…}, show: {…}}
+   */
   if (Ctor.super) {
     // 处理构造函数的父类选项
     var superOptions = resolveConstructorOptions(Ctor.super);
@@ -6927,9 +6973,9 @@ function initGlobalAPI (Vue) {
       'filter'
     ];
     以下相当于：
-    Vue.options['components'] = {};
-    Vue.options['directive'] = {};
-    Vue.options['filter'] = {};
+    Vue.options.components = {};
+    Vue.options.directives = {};
+    Vue.options.filters = {};
   */
   ASSET_TYPES.forEach(function (type) {
     Vue.options[type + 's'] = Object.create(null);
