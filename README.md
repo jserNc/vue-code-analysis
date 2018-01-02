@@ -1,19 +1,16 @@
 # 目录/文件说明
 
-## 根目录文件说明
-
 1. .editorconfig
+    
     参考：http://www.jianshu.com/p/712cea0ef70e
 
-    当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。就前端开发者来说，有人喜欢 Sublime，有人喜欢 Webstorm , 也有人喜欢 Atom，还有人喜欢 Vim，HBuilder 等等。各种不同编程语言的开发者喜欢各种不同的编辑器。
+    当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
 
-    问题来了，如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
+    EditorConfig 能很好地解决这个问题。只需两步：
 
-    EditorConfig 能很好的“无痛”地解决上面问题。下面我就来介绍使用 EditorConfig 来解决上面的问题。只需两步~
-
-    ① 在项目根创建一个名为 .editorconfig 的文件。
-    该文件的内容定义该项目的编码规范。
+    ① 在项目根创建一个名为 .editorconfig 的文件。该文件的内容定义该项目的编码规范。
     ② 安装与编辑器对应的 EditorConfig 插件。
+
     其工作原理是：当你在编码时，EditorConfig 插件会去查找当前编辑文件的所在文件夹或其上级文件夹中是否有 .editorconfig 文件。如果有，则编辑器的行为会与 .editorconfig 文件中定义的一致，并且其优先级高于编辑器自身的设置。
 
 2. .eslintignore 设置可忽略文件，这样 eslint 就不会校验这些文件代码了
@@ -23,22 +20,17 @@
 4. .babelrc 语法编译器 babel 的配置文件
 
 5. .flowconfig 静态类型检测工具 flow 的配置文件
+
     参考：
     https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
     http://www.jianshu.com/p/41f9d7461844
     https://segmentfault.com/a/1190000006983211
 
     flow 允许我们给变量添加类型，它可以在代码运行前对类型错误进行检查，包括：
-    ・ 类型错误
-    ・ 对 null 的引用
-    ・ 以及可怕的 “undefined is not a function”
 
-    两个问题：
-    a. 为什么是 flow.js 而不是其它编译到 js 的强类型语言，如 TypeScript ?
-    答：js 的灵活性，它为编程带来极大便捷。而且 flow.js 对工程的侵入性很小，无需大量的额外工作就能使用起来。
-
-    b. 为什么不加强注释，完善注释，而是再加入一个工具？
-    答：因为写注释很烦，并且有无注释不会影响代码执行。flow.js则是一种基本保障，确保检查无误才能运行。
+    · 类型错误
+    · 对 null 的引用
+    · 以及可怕的 “undefined is not a function”
 
     flow 的安装和使用：
     ① 安装 
@@ -50,6 +42,7 @@
 
     对于需要使用 flow 进行类型检查的 js 文件，在开头加入 @flow 的注释
 
+    ```
     /* @flow */
     // @flow  任何一个都可以
     只要带有这个注释，都会进行类型检测
@@ -127,6 +120,8 @@
     "comments": false}
     注意：在 babel6 的 babel-preset-react 的插件中已经内置了 transform-flow-strip-types（Syntax），如果使用了 babel-preset-react 那么无需再引入 transform-flow-strip-types
 
+    ```
+
 6. .gitignore 版本控制工具 git 配置忽略文件
 
 7. BACKERS.md 项目的捐款名单（backer 的意思为“支持者，赞助者”）
@@ -136,11 +131,15 @@
 9. LICENSE 该软件的使用协议和服务条款等
 
 10. package.json 
+
     参考： https://www.brooch.me/2017/03/17/vue-source-notes-1/
+
     定义了这个项目所需要的各种模块，以及项目的配置信息（比如名称、版本、许可证等元数据）。npm install 命令根据这个配置文件，自动下载所需的模块，也就是配置项目所需的运行和开发环境。
 
     vue 是用 npm 的 scripts 来定义工作流命令的。构建命令大体分为四类，dev、build、test、release。
     如： 
+
+    ```
         test:unit   单元测试
         test:cover  覆盖率测试
         test:e2e    end to end，用户真实场景测试
@@ -151,6 +150,7 @@
         flow        静态类型检查
         sauce       兼容性测试
         bench:ssr   基准测试，测试性能
+   ```
 
     ① dev 系列
         vue 是用 rollup 打包的。如 "dev": "rollup -w -c build/config.js --environment TARGET:web-full-dev"
@@ -169,12 +169,14 @@
     Yarn 类似于 npm，是一个由 Facebook 推出的新 JavaScript 包管理器。yarn.lock 锁定了安装包的精确版本以及所有依赖项。有了这个文件，你可以确定项目团队的每个成员都安装了精确的软件包版本，部署可以轻松地重现，且没有意外的 bug。
 
 ## 源码 src
+    ```
     ・ compiler      编译器，解析模板
     ・ core          vue 核心
     ・ platforms     不同平台下各自独特的代码
     ・ server        server side render，即 ssr
     ・ sfc           将 .vue 文件转换为 sfc 对象（可识别组件）
     ・ shared        共享的模块，一个工具集
+    ```
 
     以入口文件 src/platforms/web 为例：
     ・ entry-compiler.js  只包含 vue 的模板解析器和 .vue 解析器
