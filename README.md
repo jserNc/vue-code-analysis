@@ -2,9 +2,7 @@
 
 **(1) .editorconfig 定义项目编码规范**
 
-当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
-
-EditorConfig 能很好地解决这个问题。只需两步：
+当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)呢？EditorConfig 能很好地解决这个问题。只需两步：
 
 ① 在项目根创建一个名为 .editorconfig 的文件。该文件的内容定义该项目的编码规范。
 
@@ -36,7 +34,7 @@ npm install --save-dev flow-bin
 
 ② 基本使用：
 
-安装完成后我们在要执行静态检查的文件跟目录下执行一下 flow init ，之后会发现多出一个 .flowconfig 文件，这个文件告诉 Flow 在这个目录下开始检测。此外 .flowconfig 文件可以进行一下更为高级的配置，比如仅包含一些目录、忽略一下目录等等。
+安装完成后我们在要执行静态检查的项目根目录下执行一下 flow init，之后会发现多出一个 .flowconfig 文件，这个文件告诉 Flow 在这个目录下开始检测。此外 .flowconfig 文件可以进行一下更为高级的配置，比如仅包含一些目录、忽略一下目录等等。
 
 对于需要使用 flow 进行类型检查的 js 文件，在开头加入 @flow 的注释
 
@@ -233,12 +231,17 @@ function copyAugment (target, src, keys) {
     def(target, key, src[key]);
   }
 }
+
 ```  
 
-参考：
 
+参考：
 [1] http://www.jianshu.com/p/712cea0ef70e
+
 [2] https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
+
 [3] http://www.jianshu.com/p/41f9d7461844
+
 [4] https://segmentfault.com/a/1190000006983211
+
 [5] https://www.brooch.me/2017/03/17/vue-source-notes-1/
