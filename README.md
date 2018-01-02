@@ -1,230 +1,251 @@
 # 目录/文件说明
 
-1. .editorconfig
-    
-    参考：http://www.jianshu.com/p/712cea0ef70e
+1. **.editorconfig 定义项目编码规范**
 
-    当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
+当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
 
-    EditorConfig 能很好地解决这个问题。只需两步：
+EditorConfig 能很好地解决这个问题。只需两步：
 
-    ① 在项目根创建一个名为 .editorconfig 的文件。该文件的内容定义该项目的编码规范。
-    ② 安装与编辑器对应的 EditorConfig 插件。
+① 在项目根创建一个名为 .editorconfig 的文件。该文件的内容定义该项目的编码规范。
+② 安装与编辑器对应的 EditorConfig 插件。
 
-    其工作原理是：当你在编码时，EditorConfig 插件会去查找当前编辑文件的所在文件夹或其上级文件夹中是否有 .editorconfig 文件。如果有，则编辑器的行为会与 .editorconfig 文件中定义的一致，并且其优先级高于编辑器自身的设置。
+其工作原理是：当你在编码时，EditorConfig 插件会去查找当前编辑文件的所在文件夹或其上级文件夹中是否有 .editorconfig 文件。如果有，则编辑器的行为会与 .editorconfig 文件中定义的一致，并且其优先级高于编辑器自身的设置。
 
-2. .eslintignore 设置可忽略文件，这样 eslint 就不会校验这些文件代码了
+2. **.eslintignore 设置可忽略文件，这样 eslint 就不会校验这些文件代码了**
 
-3. eslintrc 代码校验工具 eslint 的配置文件
+3. **eslintrc 代码校验工具 eslint 的配置文件**
 
-4. .babelrc 语法编译器 babel 的配置文件
+4. **.babelrc 语法编译器 babel 的配置文件**
 
-5. .flowconfig 静态类型检测工具 flow 的配置文件
+5. **.flowconfig 静态类型检测工具 flow 的配置文件**
 
-    参考：
-    https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
-    http://www.jianshu.com/p/41f9d7461844
-    https://segmentfault.com/a/1190000006983211
+flow 允许我们给变量添加类型，它可以在代码运行前对类型错误进行检查，包括：
 
-    flow 允许我们给变量添加类型，它可以在代码运行前对类型错误进行检查，包括：
+> 类型错误
+> 对 null 的引用
+> 以及可怕的 “undefined is not a function”
 
-    · 类型错误
-    · 对 null 的引用
-    · 以及可怕的 “undefined is not a function”
+flow 的安装和使用：
 
-    flow 的安装和使用：
-    ① 安装 
-    npm install --save-dev flow-bin
+① 安装 
 
-    ② 基本使用：
+```
+npm install --save-dev flow-bin
+```
 
-    安装完成后我们在要执行静态检查的文件跟目录下执行一下 flow init ，之后会发现多出一个 .flowconfig 文件，这个文件告诉 Flow 在这个目录下开始检测。此外 .flowconfig 文件可以进行一下更为高级的配置，比如仅包含一些目录、忽略一下目录等等。
+② 基本使用：
 
-    对于需要使用 flow 进行类型检查的 js 文件，在开头加入 @flow 的注释
+安装完成后我们在要执行静态检查的文件跟目录下执行一下 flow init ，之后会发现多出一个 .flowconfig 文件，这个文件告诉 Flow 在这个目录下开始检测。此外 .flowconfig 文件可以进行一下更为高级的配置，比如仅包含一些目录、忽略一下目录等等。
 
-    ```
-    /* @flow */
-    // @flow  任何一个都可以
-    只要带有这个注释，都会进行类型检测
+对于需要使用 flow 进行类型检查的 js 文件，在开头加入 @flow 的注释
 
-    或者
-    /* @flow weak */ 只对有加类型注解的变量进行类型检测
-    例如：
+```
+/* @flow */
+// @flow 
+/* @flow weak */ （只对有加类型注解的变量进行类型检测）
+```
 
-    /* @flow */
-    function multiple10 (num) {  
-        return num * 10
-    }
-    multiple10('20')
+例如：
 
-    function getLength (str) {  
-        return str.length
-    }
-    getLength('3')
-    getLength([1,2,3])
+```javascript
+/* @flow */
+function square (num) {  
+    return num * num
+}
+square('2')
+```
 
-    接下来执行 flow check 看一下结果：
+接下来执行 flow check 看一下结果：
 
-    3: return num * 10
-              ^^^ string. The operand of an arithmetic operation must be a number.
+```
+3: return num * num
+          ^^^ string. The operand of an arithmetic operation must be a number.
+```
 
-    Found 1 error
-    multiple10 函数中的类型转换被 flow 标记出。
+③ 自定义类型
 
-    ③ 自定义类型
+很多时候，除了 number、string 这些基础类型外，我们还会有一些自定义的类型，比如：
 
-    很多时候，除了 number 、 string 这些基础类型外，我们还会有一些自定义的类型，比如：
+```javascript
+var someData = {
+    id: 1,
+    text: '选项1'
+}
+```
 
-    var someData = {
-        id: 1,
-        text: '选项1'
-    }
-    这时候可以在一个单独的文件中将 someData 申明了一个自定义类型。方式如下：
+这时候可以在一个单独的文件中将 someData 申明了一个自定义类型。方式如下：
 
-    /* /decls/data.js.flow */
-    declare type SomeData = {
-      id: number;
-      text: strin;
-    }
-    然后在 .flowconfig 文件中引入该申明文件
+```javascript
+/* /decls/data.js.flow */
+declare type SomeData = {
+  id: number;
+  text: string;
+}
+```
 
-    [libs]
-    decls/
+然后在 .flowconfig 文件中引入该申明文件
 
-    ④ flow server
-    在大型项目中，如果每修改完代码，就执行以下 flow check ，然后等待看结果，显然会被逼疯的。flow 为我们提供了一个 flow server ，支持在后台运行，并且只监测有修改的文件。方法很简单，只有一个命令
+```
+[libs]
+decls/
+```
 
-    $> flow # 开启一个后台服务，输出首次检测结果
-    $> flow # 第二次使用 flow，连接正在运行的后台服务，输出检测结果
-    $> flow stop # 关闭 flow server
+④ flow server
+在大型项目中，如果每修改完代码，就执行以下 flow check ，然后等待看结果，太麻烦了。flow 为我们提供了一个 flow server ，支持在后台运行，并且只监测有修改的文件。方法很简单，只有一个命令
 
-    ⑤ babel+flow
+```
+$> flow # 开启一个后台服务，输出首次检测结果
+$> flow # 第二次使用 flow，连接正在运行的后台服务，输出检测结果
+$> flow stop # 关闭 flow server
+```
 
-    由于 flow 中类型注解的语法不属于 javascript 规范中的内容。所以在最终的代码中，我们需要移除 flow 的内容。flow 提供了 flow-remove-types 和 babel 插件两种方式，推荐使用 babel 插件来完成这项工作。
+⑤ babel+flow
 
-    a. flow-remove-types
-    这种方法比较简单粗暴: 安装 flow-remove-types，然后执行命令：
+由于 flow 中类型注解的语法不属于 javascript 规范中的内容。所以在最终的代码中，我们需要移除 flow 的内容。flow 提供了 flow-remove-types 和 babel 插件两种方式，推荐使用 babel 插件来完成这项工作。
 
-    $> npm install -g flow-remove-types
-    $> flow-remove-types src/ --out-dir build/
+a. flow-remove-types
+这种方法比较简单粗暴: 安装 flow-remove-types，然后执行命令：
 
-    b. babel 插件
-    安装 babel 插件
+```
+$> npm install -g flow-remove-types
+$> flow-remove-types src/ --out-dir build/
+```
 
-    $> npm install babel-plugin-transform-flow-strip-types
-    babel 的 plugin 中加入该插件
+b. babel 插件
+① 安装 babel 插件
 
-    {"presets":
-     ["es2015", "stage-2"],
-    "plugins": ["transform-runtime", "transform-flow-strip-types"],
-    "comments": false}
-    注意：在 babel6 的 babel-preset-react 的插件中已经内置了 transform-flow-strip-types（Syntax），如果使用了 babel-preset-react 那么无需再引入 transform-flow-strip-types
+```
+$> npm install babel-plugin-transform-flow-strip-types
+```
 
-    ```
+② 在 babel 的 plugin 中加入该插件
+```
+{
+  "presets":["es2015", "stage-2"],
+  "plugins": ["transform-runtime", "transform-flow-strip-types"],
+  "comments": false
+}
+```
 
-6. .gitignore 版本控制工具 git 配置忽略文件
+注意：在 babel6 的 babel-preset-react 的插件中已经内置了 transform-flow-strip-types（Syntax），如果使用了 babel-preset-react 那么无需再引入 transform-flow-strip-types
 
-7. BACKERS.md 项目的捐款名单（backer 的意思为“支持者，赞助者”）
+6. **.gitignore 版本控制工具 git 配置忽略文件**
 
-8. circle.yml 为 CircleCI 集成测试平台的配置文件
+7. **BACKERS.md 项目的捐款名单（backer 的意思为“支持者，赞助者”）**
 
-9. LICENSE 该软件的使用协议和服务条款等
+8. **circle.yml 为 CircleCI 集成测试平台的配置文件**
 
-10. package.json 
+9. **LICENSE 该软件的使用协议和服务条款等**
 
-    参考： https://www.brooch.me/2017/03/17/vue-source-notes-1/
+10. **package.json**
 
-    定义了这个项目所需要的各种模块，以及项目的配置信息（比如名称、版本、许可证等元数据）。npm install 命令根据这个配置文件，自动下载所需的模块，也就是配置项目所需的运行和开发环境。
+定义了这个项目所需要的各种模块，以及项目的配置信息（比如名称、版本、许可证等元数据）。npm install 命令根据这个配置文件，自动下载所需的模块，也就是配置项目所需的运行和开发环境。
 
-    vue 是用 npm 的 scripts 来定义工作流命令的。构建命令大体分为四类，dev、build、test、release。
-    如： 
+vue 是用 npm 的 scripts 来定义工作流命令的。构建命令大体分为四类，dev、build、test、release。
+如： 
 
-    ```
-        test:unit   单元测试
-        test:cover  覆盖率测试
-        test:e2e    end to end，用户真实场景测试
-        test:weex   week 的单元测试
-        test:ssr    server side render 测试
-        test:types  类型校验
-        lint        代码规范检查
-        flow        静态类型检查
-        sauce       兼容性测试
-        bench:ssr   基准测试，测试性能
-   ```
+```
+    test:unit   单元测试
+    test:cover  覆盖率测试
+    test:e2e    end to end，用户真实场景测试
+    test:weex   week 的单元测试
+    test:ssr    server side render 测试
+    test:types  类型校验
+    lint        代码规范检查
+    flow        静态类型检查
+    sauce       兼容性测试
+    bench:ssr   基准测试，测试性能
+```
 
-    ① dev 系列
-        vue 是用 rollup 打包的。如 "dev": "rollup -w -c build/config.js --environment TARGET:web-full-dev"
-        -w 是 wacth，-c 是指定 config 文件，这里的 build/config.js 就是配置文件。build/config.js 内部根据 TARGET 参数获取不同的构建配置。
+① dev 类
+vue 是用 rollup 打包的。如：
 
-    ② build 系列
-        可以看到 "build:ssr"、"build:weex" 等命令本质上都是执行 "build" 命令，也就是运行 "build" 命令，所以 build 系列命令都是运行 build/build.js 这个文件。这个文件中的逻辑就是通过 build/config.js 获取所有的配置，然后串行用 rollup 打包。
+```
+"dev": "rollup -w -c build/config.js --environment TARGET:web-full-dev"
+```
 
-    ③ test 系列
-        test 系列命令是用来搞自动化测试的。不过这些命令也都不是让你自己执行的，这些都是用来搞自动化测试的，自动自动化测试的命令配置在 build/ci.sh 这个脚本文件里面。这个脚本会在 CircleCI 的 hook 中被调用。
+其中：    
+-w 是 wacth，-c 是指定 config 文件，这里的 build/config.js 就是配置文件。build/config.js 内部根据 TARGET 参数获取不同的构建配置。
 
-    ④ release 系列
-        release 系列命令是用来发布 release 版本的。调用了 build 文件下对应的 sh 文件。脚本里主要做了设置版本、自动化测试、构建、打 tag、提交、npm 推送这几件事。另外还提别为 weex 做了独立的发布脚本。
+② build 类
+可以看到 "build:ssr"、"build:weex" 等命令本质上都是执行 "build" 命令，也就是运行 "build" 命令，所以 build 系列命令都是运行 build/build.js 这个文件。这个文件中的逻辑就是通过 build/config.js 获取所有的配置，然后串行用 rollup 打包。
 
-11. yarn.lock
-    Yarn 类似于 npm，是一个由 Facebook 推出的新 JavaScript 包管理器。yarn.lock 锁定了安装包的精确版本以及所有依赖项。有了这个文件，你可以确定项目团队的每个成员都安装了精确的软件包版本，部署可以轻松地重现，且没有意外的 bug。
+③ test 类
+test 系列命令是用来搞自动化测试的。不过这些命令也都不是让你自己执行的，这些都是用来搞自动化测试的，自动自动化测试的命令配置在 build/ci.sh 这个脚本文件里面。这个脚本会在 CircleCI 的 hook 中被调用。
+
+④ release 类
+release 系列命令是用来发布 release 版本的。调用了 build 文件下对应的 sh 文件。脚本里主要做了设置版本、自动化测试、构建、打 tag、提交、npm 推送这几件事。另外还提别为 weex 做了独立的发布脚本。
+
+11. **yarn.lock**
+Yarn 类似于 npm，是一个由 Facebook 推出的新 JavaScript 包管理器。yarn.lock 锁定了安装包的精确版本以及所有依赖项。有了这个文件，你可以确定项目团队的每个成员都安装了精确的软件包版本，部署可以轻松地重现，且没有意外的 bug。
 
 ## 源码 src
-    ```
-    ・ compiler      编译器，解析模板
-    ・ core          vue 核心
-    ・ platforms     不同平台下各自独特的代码
-    ・ server        server side render，即 ssr
-    ・ sfc           将 .vue 文件转换为 sfc 对象（可识别组件）
-    ・ shared        共享的模块，一个工具集
-    ```
+  
+- compiler      编译器，解析模板
+- core          vue 核心
+- platforms     不同平台下各自独特的代码
+- server        server side render，即 ssr
+- sfc           将 .vue 文件转换为 sfc 对象（可识别组件）
+- shared        共享的模块，一个工具集
 
-    以入口文件 src/platforms/web 为例：
-    ・ entry-compiler.js  只包含 vue 的模板解析器和 .vue 解析器
-      这个文件比较简单，就是导出了解析 sfc 模块和 compiler 模块的接口。compiler 模块的作用是用来解析模板的，对应的是 src/compiler 模块，大概是使用 new Function 将字符串转换为 js 代码，所以对于不支持或者认为这样不安全的环境，vue 会给出错误提示。
+以入口文件 src/platforms/web 为例：
 
-    ・ entry-runtime.js  只包含 vue 的运行时部分的代码
-      
-    ・ entry-runtime-with-compiler.js   这个模块既包含解析器又包含运行时
-      这个文件作为一个入口，将已经整合好的 compiler 和 runtime 再一次整合封装，最终导出浏览器用的vue构造函数。
+① entry-compiler.js  只包含 vue 的模板解析器和 .vue 解析器
+这个文件比较简单，就是导出了解析 sfc 模块和 compiler 模块的接口。compiler 模块的作用是用来解析模板的，对应的是 src/compiler 模块，大概是使用 new Function 将字符串转换为 js 代码，所以对于不支持或者认为这样不安全的环境，vue 会给出错误提示。
 
-    ・ entry-server-basic-renderer.js   ssr 基础
-    ・ entry-server-renderer.js   ssr
-      这个是 server side render 的入口，所以与 brower 端用到的方法差别很大。server 端只是做初步的渲染，所以只有一个生成 render 的函数，结构比较简单。
-    
-    源码中经常出现一组注释：
-    /* istanbul ignore if */
-    /* istanbul ignore else */
-    /* istanbul ignore next */
-    Istanbul 是 JavaScript 程序的代码覆盖率工具。这个软件以土耳其最大城市伊斯坦布尔命名，因为土耳其地毯世界闻名，而地毯是用来覆盖的。
-    以上 3 个语句是 Istanbul 提供的注释语法，允许某些代码不计入覆盖率，用官网的原文说明其作用：
-   
-    Ignoring code for coverage
-    ・ Skip an if or else path with /* istanbul ignore if */ or /* istanbul ignore else */ respectively.
-    ・ For all other cases, skip the next 'thing' in the source with: /* istanbul ignore next */
-    
-    在 vue 源码中应用如下：
+② entry-runtime.js  只包含 vue 的运行时部分的代码
+  
+③ entry-runtime-with-compiler.js 
 
-    /* istanbul ignore if */ 下个代码段的 if 块不计入代码覆盖率计算
-    if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
-      startTag = `vue-perf-start:${vm._uid}`
-      endTag = `vue-perf-end:${vm._uid}`
-      mark(startTag)
-    }
+这个模块既包含解析器又包含运行时这个文件作为一个入口，将已经整合好的 compiler 和 runtime 再一次整合封装，最终导出浏览器用的vue构造函数。
 
-     /* istanbul ignore else */ 下个代码段的 else 块不计入代码覆盖率计算
-    if (process.env.NODE_ENV !== 'production') {
-      initProxy(vm)
-    } else {
-      vm._renderProxy = vm
-    }
+④ entry-server-basic-renderer.js entry-server-renderer.js
+这个是 server side render 的入口，所以与 brower 端用到的方法差别很大。server 端只是做初步的渲染，所以只有一个生成 render 的函数，结构比较简单。
 
-    /* istanbul ignore next */ 下个代码段不计入代码覆盖率计算
-    function copyAugment (target, src, keys) {
-      for (var i = 0, l = keys.length; i < l; i++) {
-        var key = keys[i];
-        // 依次将 src[key] 赋予 target[key]
-        def(target, key, src[key]);
-      }
-    }
-       
+源码中经常出现一组注释：
 
+```javascript
+/* istanbul ignore if */
+/* istanbul ignore else */
+/* istanbul ignore next */
+```
+
+Istanbul 是 JavaScript 程序的代码覆盖率工具。这个软件以土耳其最大城市伊斯坦布尔命名，因为土耳其地毯世界闻名，而地毯是用来覆盖的。以上 3 个语句是 Istanbul 提供的注释语法，允许某些代码不计入覆盖率，用官网的原文说明其作用：
+
+Ignoring code for coverage
+・ Skip an if or else path with /* istanbul ignore if */ or /* istanbul ignore else */ respectively.
+・ For all other cases, skip the next 'thing' in the source with: /* istanbul ignore next */
+
+在 vue 源码中应用如下：
+
+```javascript
+/* istanbul ignore if */ 下个代码段的 if 块不计入代码覆盖率计算
+if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
+  startTag = `vue-perf-start:${vm._uid}`
+  endTag = `vue-perf-end:${vm._uid}`
+  mark(startTag)
+}
+
+ /* istanbul ignore else */ 下个代码段的 else 块不计入代码覆盖率计算
+if (process.env.NODE_ENV !== 'production') {
+  initProxy(vm)
+} else {
+  vm._renderProxy = vm
+}
+
+/* istanbul ignore next */ 下个代码段不计入代码覆盖率计算
+function copyAugment (target, src, keys) {
+  for (var i = 0, l = keys.length; i < l; i++) {
+    var key = keys[i];
+    // 依次将 src[key] 赋予 target[key]
+    def(target, key, src[key]);
+  }
+}
+```  
+
+参考：
+[1] http://www.jianshu.com/p/712cea0ef70e
+[2] https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
+[3] http://www.jianshu.com/p/41f9d7461844
+[4] https://segmentfault.com/a/1190000006983211
+[5] https://www.brooch.me/2017/03/17/vue-source-notes-1/
