@@ -1,6 +1,6 @@
-# 目录/文件说明
+## 目录/文件说明
 
-**.editorconfig 定义项目编码规范**
+**(1) .editorconfig 定义项目编码规范**
 
 当多人共同开发一个项目的时候，往往会出现大家用不同编辑器的情况。那么如何让使用不同编辑器的开发者在共同开发一个项目时“无痛”地遵循编码规范(编码风格)？
 
@@ -12,13 +12,13 @@ EditorConfig 能很好地解决这个问题。只需两步：
 
 其工作原理是：当你在编码时，EditorConfig 插件会去查找当前编辑文件的所在文件夹或其上级文件夹中是否有 .editorconfig 文件。如果有，则编辑器的行为会与 .editorconfig 文件中定义的一致，并且其优先级高于编辑器自身的设置。
 
-**.eslintignore 设置可忽略文件，这样 eslint 就不会校验这些文件代码了**
+**(2) .eslintignore 设置可忽略文件，这样 eslint 就不会校验这些文件代码了**
 
-**eslintrc 代码校验工具 eslint 的配置文件**
+**(3) eslintrc 代码校验工具 eslint 的配置文件**
 
-**.babelrc 语法编译器 babel 的配置文件**
+**(4) .babelrc 语法编译器 babel 的配置文件**
 
-**.flowconfig 静态类型检测工具 flow 的配置文件**
+**(5) .flowconfig 静态类型检测工具 flow 的配置文件**
 
 flow 允许我们给变量添加类型，它可以在代码运行前对类型错误进行检查，包括：
 
@@ -125,15 +125,15 @@ $> npm install babel-plugin-transform-flow-strip-types
 
 注意：在 babel6 的 babel-preset-react 的插件中已经内置了 transform-flow-strip-types（Syntax），如果使用了 babel-preset-react 那么无需再引入 transform-flow-strip-types
 
-**.gitignore 版本控制工具 git 配置忽略文件**
+**(6) .gitignore 版本控制工具 git 配置忽略文件**
 
-**BACKERS.md 项目的捐款名单（backer 的意思为“支持者，赞助者”）**
+**(7) BACKERS.md 项目的捐款名单（backer 的意思为“支持者，赞助者”）**
 
-**circle.yml 为 CircleCI 集成测试平台的配置文件**
+**(8) circle.yml 为 CircleCI 集成测试平台的配置文件**
 
-**LICENSE 该软件的使用协议和服务条款等**
+**(9) LICENSE 该软件的使用协议和服务条款等**
 
-**package.json**
+**(10) package.json**
 
 定义了这个项目所需要的各种模块，以及项目的配置信息（比如名称、版本、许可证等元数据）。npm install 命令根据这个配置文件，自动下载所需的模块，也就是配置项目所需的运行和开发环境。
 
@@ -153,7 +153,7 @@ sauce       兼容性测试
 bench:ssr   基准测试，测试性能
 ```
 
-(1) dev 类
+① dev 类
 vue 是用 rollup 打包的。如：
 
 ```
@@ -162,23 +162,23 @@ vue 是用 rollup 打包的。如：
 
 其中：-w 是 wacth，-c 是指定 config 文件，这里的 build/config.js 就是配置文件。build/config.js 内部根据 TARGET 参数获取不同的构建配置。
 
-(2) build 类
+② build 类
 
 可以看到 "build:ssr"、"build:weex" 等命令本质上都是执行 "build" 命令，也就是运行 "build" 命令，所以 build 系列命令都是运行 build/build.js 这个文件。这个文件中的逻辑就是通过 build/config.js 获取所有的配置，然后串行用 rollup 打包。
 
-(3) test 类
+③ test 类
 
 test 系列命令是用来搞自动化测试的。不过这些命令也都不是让你自己执行的，这些都是用来搞自动化测试的，自动自动化测试的命令配置在 build/ci.sh 这个脚本文件里面。这个脚本会在 CircleCI 的 hook 中被调用。
 
-(4) release 类
+④ release 类
 
 release 系列命令是用来发布 release 版本的。调用了 build 文件下对应的 sh 文件。脚本里主要做了设置版本、自动化测试、构建、打 tag、提交、npm 推送这几件事。另外还提别为 weex 做了独立的发布脚本。
 
-**yarn.lock**
+**(11) yarn.lock**
 
 Yarn 类似于 npm，是一个由 Facebook 推出的新 JavaScript 包管理器。yarn.lock 锁定了安装包的精确版本以及所有依赖项。有了这个文件，你可以确定项目团队的每个成员都安装了精确的软件包版本，部署可以轻松地重现，且没有意外的 bug。
 
-**源码 src**
+**(12) 源码 src**
   
 - compiler      编译器，解析模板
 - core          vue 核心
@@ -189,17 +189,17 @@ Yarn 类似于 npm，是一个由 Facebook 推出的新 JavaScript 包管理器�
 
 以入口文件 src/platforms/web 为例：
 
-(1) entry-compiler.js  只包含 vue 的模板解析器和 .vue 解析器
+① entry-compiler.js  只包含 vue 的模板解析器和 .vue 解析器
 
 这个文件比较简单，就是导出了解析 sfc 模块和 compiler 模块的接口。compiler 模块的作用是用来解析模板的，对应的是 src/compiler 模块，大概是使用 new Function 将字符串转换为 js 代码，所以对于不支持或者认为这样不安全的环境，vue 会给出错误提示。
 
-(2) entry-runtime.js  只包含 vue 的运行时部分的代码
+② entry-runtime.js  只包含 vue 的运行时部分的代码
   
-(3) entry-runtime-with-compiler.js 
+③ entry-runtime-with-compiler.js 
 
 这个模块既包含解析器又包含运行时这个文件作为一个入口，将已经整合好的 compiler 和 runtime 再一次整合封装，最终导出浏览器用的vue构造函数。
 
-(4) entry-server-basic-renderer.js entry-server-renderer.js
+④ entry-server-basic-renderer.js entry-server-renderer.js
 
 这个是 server side render 的入口，所以与 brower 端用到的方法差别很大。server 端只是做初步的渲染，所以只有一个生成 render 的函数，结构比较简单。
 
