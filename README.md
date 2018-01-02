@@ -236,8 +236,8 @@ function copyAugment (target, src, keys) {
 
 
 参考：
-[1] http://www.jianshu.com/p/712cea0ef70e
-[2] https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
-[3] http://www.jianshu.com/p/41f9d7461844
-[4] https://segmentfault.com/a/1190000006983211
-[5] https://www.brooch.me/2017/03/17/vue-source-notes-1/
+1. http://www.jianshu.com/p/712cea0ef70e
+2. https://zhuanlan.zhihu.com/p/24649359?utm_source=tuicool&utm_medium=referral
+3. http://www.jianshu.com/p/41f9d7461844
+4. https://segmentfault.com/a/1190000006983211
+5. https://www.brooch.me/2017/03/17/vue-source-notes-1/
