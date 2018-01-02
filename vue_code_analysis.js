@@ -1470,6 +1470,7 @@ var observerState = {
 // 本质是调用 defineReactive$$1 对 value 对象的每一个属性的 getter/setters 进行劫持
 var Observer = function Observer (value) {
   this.value = value;
+  // 管理对 value 值关注的订阅者，例如 value 数组 push/unshift/splice 操作时，会通知所有的订阅者
   this.dep = new Dep();
   // 如果作为根数据，那么 vmCount 属性加 1
   this.vmCount = 0;
@@ -1531,7 +1532,17 @@ Observer.prototype.walk = function walk (obj) {
 // 依次观察数组 items 的每一项。监听数组变化。
 Observer.prototype.observeArray = function observeArray (items) {
   for (var i = 0, l = items.length; i < l; i++) {
-    // 依次观察每一个 item 对象
+    /*
+      依次观察每一个 item 对象，如：
+      data: {
+        items: [
+          { message: 'Foo' },
+          { message: 'Bar' }
+        ]
+      }
+
+      可见，数组 items 的每一项 items[i] 还需是对象，不然 observe(items[i]) 方法会直接返回
+     */
     observe(items[i]);
   }
 };
@@ -1647,7 +1658,7 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
 
   */
   // observe(val) -> new Observer(val) -> defineReactive$$1()
-  // 【重要】所以这句作用就是：递归遍历 val 的所有子属性
+  // 【重要】所以这句作用就是：递归遍历劫持 val 的所有子属性，这里的 val 必须为对象或者数组 childOb 才有值
   var childOb = !shallow && observe(val);
 
 
@@ -1659,12 +1670,53 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
     // 获取 obj 的 key 属性时触发该方法
     get: function reactiveGetter () {
       var value = getter ? getter.call(obj) : val;
+      /*
+          只有 watcher 新建过程，Dep.target 才会有值，就是当前时刻正在新建的 watcher
+          如果哪个 watcher 新建过程中来获取这个 key 属性，说明它关注这个 key 属性
+          那就把它加入到 key 属性的订阅者数组里，等到 key 属性更新了，就通知它
+       */
       if (Dep.target) {
         // 相当于 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里
         dep.depend();
         if (childOb) {
-          // 相当于 Dep.target.addDep(childOb.dep)，即把 Dep.target 这个 Watcher 实例添加到 childOb.dep.subs 数组里
-          childOb.dep.depend();
+            // 若 childOb 为真，说明 val 为数组和对象，所有对 val 感兴趣的订阅者都会加到 childOb.dep 这个主题对象里
+            childOb.dep.depend();
+          /*
+            注意：childOb = observe(value) -> childOb = new Observer(value)
+            也就是说 childOb 是 Observer 实例，而 childOb.dep 表示对 value 感兴趣的所有订阅者 watcher
+
+            另外，要想 childOb 不是 undefined，那么 isObject (value) 为 true ,
+            即 value !== null && typeof value === 'object' 为 true，那么 value 必须为数组或对象
+
+            (1) 例如 obj.value 是数组
+                obj: {
+                    value : [
+                       { message: 'Foo' },
+                       { message: 'Bar' }
+                    ]
+                }
+
+            当对 value 数组进行 push/unshift/splice 等操作时：
+            ① ob = value.__ob__ （也就是 childOb）
+            ② ob.dep.notify() （也就是 childOb.dep.notify()）
+
+            还是那句话，既然在执行 watcher = new Watcher() 时会获取 obj.value
+            说明 watcher 对 obj 的 value 属性感兴趣，那么 value 属性变化时就应该通知 watcher
+
+            (2) 例如 obj.value 是对象
+               obj: {
+                   value : {
+                        a : 1
+                   }
+               }
+
+            当对 value 对象进行 set 新属性操作时：（全局 set (value, key, val) 函数）
+            ① ob = (value).__ob__ （也就是 childOb）
+            ② defineReactive$$1(value, key, val);
+            ③ ob.dep.notify(); （也就是 childOb.dep.notify()）
+
+            当给 value 对象添加新属性 key 时，先把 key 属性劫持了，然后通知所有关注 value 对象的订阅者
+           */
         }
         if (Array.isArray(value)) {
           // 对数组 value 的每一项 e 调用 Dep.target.addDep(e.__ob__.dep)
@@ -1694,11 +1746,30 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
       if (setter) {
         setter.call(obj, newVal);
       } else {
-        // 注意：set/set 函数在这里是闭包，所以能共用 val 的值
+        /*
+          注意：set/set 函数在这里是闭包，所以能共用 val 的值，简化一下 defineReactive$$1 函数看得更清楚：
+
+          function defineReactive$$1 (obj, key, val) {
+            Object.defineProperty(obj, key, {
+              get: function () {
+                return val
+              },
+              set: function (newVal) {
+                val = newVal;
+              }
+            });
+          }
+
+          ① 当我们给 key 赋值时，如 obj[key] = 100 -> val = 100
+          ② 当我们获取 key 的值时，即 obj[key] -> val (100)
+          
+          也就是说 100 是存在 val 这个中间变量里，这个 val 变量不属于 get 函数，也不属于 set 函数
+          但它们可以共用
+         */
         val = newVal;
       }
       
-      // 递归遍历 newVal 的所有子属性
+      // 因为 newVal 已经赋值给 val 了，所以劫持 newVal 就是劫持 val
       childOb = !shallow && observe(newVal);
 
       // 发出通知，执行订阅者
@@ -1723,13 +1794,13 @@ function set (target, key, val) {
     // 数组设置完值，就在这里返回
     return val
   }
-  // 如果 key 是 target 自身属性，直接赋值，返回
+  // ① 如果 key 已经存在于 target 对象中，直接赋值，返回
   if (hasOwn(target, key)) {
     target[key] = val;
     return val
   }
 
-  // Observer 实例
+  // ② key 是新增的属性才会执行以下部分
   var ob = (target).__ob__;
   // target 对象是 Vue 实例，或者 Vue 实例的根数据对象
   if (target._isVue || (ob && ob.vmCount)) {
@@ -1744,7 +1815,9 @@ function set (target, key, val) {
     target[key] = val;
     return val
   }
+  // 劫持新增属性 key
   defineReactive$$1(ob.value, key, val);
+  // 通知所有关注 target 的订阅者
   ob.dep.notify();
   return val
 }
@@ -4526,7 +4599,6 @@ Watcher.prototype.get = function get () {
   }
   return value
 };
-
 /**
  * Add a dependency to this directive.
  */
@@ -4860,7 +4932,11 @@ function initProps (vm, propsOptions) {
   observerState.shouldConvert = true;
 }
 
-// 初始化 data
+/*
+  做两件事：
+  1. 代理。proxy(vm, "_data", key)，也就是对 vm[key] 的获取和设置实际操作的都是 vm["_data"][key]
+  2. 劫持。observe(data, true)，劫持 data 属性的 get/set 操作
+ */
 function initData (vm) {
   var data = vm.$options.data;
 
@@ -4872,9 +4948,13 @@ function initData (vm) {
    也就是 vm["_data"][key] 代理 vm[key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
   */
   data = vm._data = typeof data === 'function'
-	// getData(data, vm) -> data.call(vm)
+	  // getData(data, vm) -> data.call(vm)
     ? getData(data, vm)
     : data || {};
+  /*
+    注意 === 和 || 运算符的优先级都大于 ? :
+    所以如果 data 不是对象，只能说明 getData(data, vm) 的返回值不是对象
+   */
 
   // 如果 data 不是对象，强制转为对象，并发出警告：data 函数应该返回一个对象
   if (!isPlainObject(data)) {
@@ -4910,7 +4990,7 @@ function initData (vm) {
         vm
       );
     } else if (!isReserved(key)) {
-      // vm["_data"][key] 代理 vm[key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
+      // vm[key] 代理 vm["_data"][key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
       proxy(vm, "_data", key);
     }
   }
