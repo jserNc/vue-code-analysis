@@ -4010,7 +4010,7 @@ function mountComponent (vm, el, hydrating) {
           /*
             发出警告：你正在用只包含运行时的版本，这个版本的模板编译器是不可用的。可采取的方式有两种：
             ① 将模板预编译成渲染函数；
-              ② 用包含模板编译器的版本
+            ② 用包含模板编译器的版本
           */
         warn(
           'You are using the runtime-only build of Vue where the template ' +
@@ -12455,6 +12455,21 @@ function decodeAttr (value, shouldDecodeNewlines) {
   return value.replace(re, function (match) { return decodingMap[match]; })
 }
 
+/*
+  例如：
+  parseHTML(template, {
+    warn: warn$2, // 报警函数
+    expectHTML: options.expectHTML, // 是否为 html，布尔值
+    isUnaryTag: options.isUnaryTag, // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+    canBeLeftOpenTag: options.canBeLeftOpenTag, // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
+    shouldDecodeNewlines: options.shouldDecodeNewlines, // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
+    shouldKeepComment: options.comments, // 是否保留注释
+    start: function start (tag, attrs, unary) {...}, // 解析开始标签时调用的钩子函数
+    end: function end () {...}, // 解析结束标签时调用的钩子函数
+    chars: function chars (text) {...}, // 添加 Attr/Text 子节点
+    comment: function comment (text) {...} // 添加注释节点
+  });
+ */
 // 解析 html
 function parseHTML (html, options) {
   var stack = [];
@@ -12947,20 +12962,50 @@ function parse (template,options) {
     }
   }
 
+  /*
+    例如：
+    <div id='app'>
+          {{message}}
+    </div>
+    <script>
+        var app = new Vue({
+            el: '#app',
+            data: {
+                message: 'Hello Vue!'
+            }
+        });
+    </script>
+    
+    于是：
+    template = "<div id="app">↵ {{message}}↵ </div>"
+
+    root = {
+      attrs : [{name: "id", value: ""app""}],
+      attrsList : [{name: "id", value: "app"}],
+      attrsMap : {id: "app"},
+      children : [{type: 2, expression: ""\n "+_s(message)+"\n "", text: "↵ {{message}}↵ ", static: false}],
+      parent : undefined,
+      plain : false,
+      static : false,
+      staticRoot : false,
+      tag : "div",
+      type : 1
+    }
+   */
   // 解析模板 template
   parseHTML(template, {
     warn: warn$2,
-       // 是否为 html 模板
+    // 是否为 html 模板
     expectHTML: options.expectHTML,
-       // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+    // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
     isUnaryTag: options.isUnaryTag,
-       // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
+    // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
     canBeLeftOpenTag: options.canBeLeftOpenTag,
-       // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
+    // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
     shouldDecodeNewlines: options.shouldDecodeNewlines,
-       // 是否保留注释
+    // 是否保留注释
     shouldKeepComment: options.comments,
-       // 解析开始标签时调用的钩子函数
+    // 解析开始标签时调用的钩子函数
     start: function start (tag, attrs, unary) {
       // check namespace.
       // inherit parent ns if there is one，获取命名空间
@@ -13078,7 +13123,7 @@ function parse (template,options) {
       function checkRootConstraints (el) {
         {
           if (el.tag === 'slot' || el.tag === 'template') {
-            // 不能将  slot / template 标签作为组件根元素，因为它可能包含多个节点
+            // 不能将 slot/template 标签作为组件根元素，因为它可能包含多个节点
             warnOnce(
               "Cannot use <" + (el.tag) + "> as component root element because it may " +
               'contain multiple nodes.'
@@ -13131,8 +13176,8 @@ function parse (template,options) {
           var name = element.slotTarget || '"default"';
 
           /*
-            关于作用域插槽，理解官网这个例子：
-            ① 父组件模板
+           关于作用域插槽，理解官网这个例子：
+           ① 父组件模板
            <my-awesome-list :items="items">
                <li slot="item" slot-scope="props" class="my-fancy-item">{{ props.text }}</li>
            </my-awesome-list>
@@ -13142,12 +13187,19 @@ function parse (template,options) {
                <slot name="item" v-for="item in items" :text="item.text">备选内容</slot>
            </ul>
 
-           加入父作用域中 items 为:
+           假如父作用域中 items 为:
            [
                { text: 'Foo' },
                { text: 'Bar' },
                { }
            ]
+          
+           有几点注意下：
+           a. 父组件中的 <li slot="item" slot-scope="props" class="my-fancy-item">{{ props.text }}</li> 是子组件中 slot 标签的模板
+           b. 当给 li 标签传不同的 props 对象时，它会渲染不同的结果
+           c. props 是个对象，包括子组件传入的 text 等属性
+           d. 子组件中 for 循环生成很多的 slot，每个 slot 的 text 属性不同
+           e. text 属性由 props 对象带给父组件中的 li
 
            渲染结果为：
            <ul>
@@ -13183,33 +13235,52 @@ function parse (template,options) {
     end: function end () {
       // remove trailing whitespace
       var element = stack[stack.length - 1];
-         // element 最后一个子元素
+      // element 最后一个子元素
       var lastNode = element.children[element.children.length - 1];
-         // 移除最末尾的空白？
+      // 移除最末尾的空白？
       if (lastNode && lastNode.type === 3 && lastNode.text === ' ' && !inPre) {
         element.children.pop();
       }
       // pop stack，相当于 stack.pop()
       stack.length -= 1;
-         // 前一个元素就是当前元素的父元素
+      // 前一个元素就是当前元素的父元素
       currentParent = stack[stack.length - 1];
-         // 将 inVPre 和 inPre 值置为 false
+      // 将 inVPre 和 inPre 值置为 false
       endPre(element);
     },
 
-       // 添加 Attr/Text 子节点
+    // 添加 Text 子节点
+    /*
+      简单点就是：
+      chars: function chars (text) {
+        // ① 表达式文本，如 {{ message }}
+        if (expression = parseText(text, delimiters)) {
+          currentParent.children.push({
+            type: 2,
+            expression: expression,
+            text: text
+          });
+        // ② 普通文本，如 someText
+        } else {
+          currentParent.children.push({
+            type: 3,
+            text: text
+          });
+        }
+      }
+     */
     chars: function chars (text) {
-         // 如果不存在父元素，发出警告，就此返回
+      // 如果不存在父元素，发出警告，就此返回
       if (!currentParent) {
         {
+          // 组件模板需要有一个根元素，而不能仅仅是文本
           if (text === template) {
-                   // 组件模板需要有一个根元素，而不能仅仅是文本
             warnOnce(
               'Component template requires a root element, rather than just text.'
             );
-              // text 去掉左右空格后还有内容，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
+          // text 去掉左右空格后还有内容，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
           } else if ((text = text.trim())) {
-                   // 根元素之外的文本将被忽略
+            // 根元素之外的文本将被忽略
             warnOnce(
               ("text \"" + text + "\" outside root element will be ignored.")
             );
@@ -13225,29 +13296,29 @@ function parse (template,options) {
 
       var children = currentParent.children;
 
-         // 对 text 进行修正
+      // 对 text 进行修正
       text = inPre || text.trim()
-            /*
-                ① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
-                ② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
-            */
+        /*
+            ① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
+            ② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+        */
         ? isTextTag(currentParent) ? text : decodeHTMLCached(text)
         // only preserve whitespace if its not right after a starting tag
-            // 只有不是开始标签后（children.length > 0）的空白文本可以保留
+        // 只有不是开始标签后（children.length > 0）的空白文本可以保留
         : preserveWhitespace && children.length ? ' ' : '';
 
       if (text) {
         var expression;
-            // 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
+        // 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
         if (!inVPre && text !== ' ' && (expression = parseText(text, delimiters))) {
-          // nodeType 为 2 表示 Attr，代表属性
-              children.push({
+          // ① 表达式文本，如 {{ message }}
+          children.push({
             type: 2,
             expression: expression,
             text: text
           });
         } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
-              // nodeType 为 3 表示 Text，代表元素或属性中的文本内容
+          // ② 普通文本，如 someText
           children.push({
             type: 3,
             text: text
@@ -15517,3 +15588,4 @@ return Vue$3;
 // http://www.cnblogs.com/QH-Jimmy/archive/2017/05.html
 // https://www.brooch.me/2017/03/17/vue-source-notes-1/
 // https://www.brooch.me/tags/vue/
+// https://www.gitbook.com/book/114000/read-vue-code/details
