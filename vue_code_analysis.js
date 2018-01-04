@@ -906,17 +906,17 @@ var formatComponentName = (null); // work around flow check
     }
   };
 
-  // 格式化组件名
+  // 返回格式化的字符串形式组件名
   formatComponentName = function (vm, includeFile) {
-     // 如果一个 vm 的根节点就是自身，那就返回 '<Root>'
+    // 如果一个 vm 的根节点就是自身，那就返回 '<Root>'
     if (vm.$root === vm) {
       return '<Root>'
     }
     /*
-    ① vm 是字符串类型，那么 name 就是 vm 自身
-    ② vm 是函数，并且有 options 属性，那么 name 就是 vm.options.name
-    ③ vm 是 Vue 实例，那么 name 就是 vm.$options.name || vm.$options._componentTag
-    ④ 其他，name 就是 vm.name
+      ① vm 是字符串类型，那么 name 就是 vm 自身
+      ② vm 是函数，并且有 options 属性，那么 name 就是 vm.options.name
+      ③ vm 是 Vue 实例，那么 name 就是 vm.$options.name || vm.$options._componentTag
+      ④ 其他，name 就是 vm.name
     */
     var name = typeof vm === 'string'
       ? vm
@@ -942,9 +942,9 @@ var formatComponentName = (null); // work around flow check
     }
 
     /*
-    ① 组件名'aaa-bbb' -> "<AaaBbb>"
-    ② 如果没有组件名，就用匿名，"<Anonymous>"
-    ③ 如果需要，还可以跟上文件名 "<AaaBbb> at aaa-bbb.vue"
+      ① 组件名'aaa-bbb' -> "<AaaBbb>"
+      ② 如果没有组件名，就用匿名，"<Anonymous>"
+      ③ 如果需要，还可以跟上文件名 "<AaaBbb> at aaa-bbb.vue"
     */
     return (
       (name ? ("<" + (classify(name)) + ">") : "<Anonymous>") +
@@ -956,8 +956,8 @@ var formatComponentName = (null); // work around flow check
   字符串 str 重复 n 遍，我们很容易想到循环 n 次，拼接字符串，可这里没这么做
 
   右移 >> 运算可以模拟整除：
-  21 >> 2 -> 21 / 4 -> 5
-  21 >> 3 -> 21 / 8 -> 2
+  21 >> 2 -> 21 / (2^2) -> 5
+  21 >> 3 -> 21 / (2^3) -> 2
 
   1 >> 1 -> 1 / 2 -> 0
   2 >> 1 -> 2 / 2 -> 1
@@ -967,6 +967,10 @@ var formatComponentName = (null); // work around flow check
 
   所以，n >> 1 相当于 n / 2
 
+  repeat('a',1) -> 'a'       因为 1 = 2^0
+  repeat('a',2) -> 'aa'      因为 2 = 2^1
+  repeat('a',3) -> 'aaa'     因为 3 = 2^0 + 2^1
+  repeat('a',4) -> 'aaaa'    因为 4 = 2^2
   repeat('a',5) -> "aaaaa"   因为 5 = 2^0 + 2^2
   repeat('a',6) -> "aaaaaa"  因为 6 = 2^1 + 2^2
   repeat('a',7) -> "aaaaaaa" 因为 7 = 2^0 + 2^1 + 2^2
@@ -976,6 +980,7 @@ var formatComponentName = (null); // work around flow check
   var repeat = function (str, n) {
     var res = '';
     while (n) {
+      // n 为基数
       if (n % 2 === 1) { res += str; }
       if (n > 1) { str += str; }
       n >>= 1;
@@ -983,7 +988,7 @@ var formatComponentName = (null); // work around flow check
     return res
   };
 
-  // 获取组件栈，用于警告和提示中打印信息
+  // 返回组件栈相关信息的字符串
   var generateComponentTrace = function (vm) {
     if (vm._isVue && vm.$parent) {
       var tree = [];
@@ -992,10 +997,12 @@ var formatComponentName = (null); // work around flow check
       while (vm) {
         if (tree.length > 0) {
           var last = tree[tree.length - 1];
+          // ① 当前组件和父组件的构造函数相同，则不会在将该构造函数 push 进 tree 数组了
           if (last.constructor === vm.constructor) {
             currentRecursiveSequence++;
             vm = vm.$parent;
             continue
+          // ② 当前组件和父组件的构造函数不同
           } else if (currentRecursiveSequence > 0) {
             tree[tree.length - 1] = [last, currentRecursiveSequence];
             currentRecursiveSequence = 0;
@@ -1004,6 +1011,25 @@ var formatComponentName = (null); // work around flow check
         tree.push(vm);
         vm = vm.$parent;
       }
+      /*
+        最后得到的 tree 数组应该是这样的：
+        [
+          [vm1,num1],
+          [vm2,num2],
+          [vm3]
+          ...
+        ]
+        
+        map 函数的回调函数第一个参数为数组元素，第二个参数为元素索引
+        ['a', 'b', 'c', 'd'].map(function(item,index) {
+            console.log(item,index);
+        });   
+        打印结果如下：
+        a 0
+        b 1
+        c 2
+        d 3
+       */
       // 返回警告/提示信息字符串
       return '\n\nfound in\n\n' + tree
         .map(function (vm, i) { return ("" + (i === 0 ? '---> ' : repeat(' ', 5 + i * 2)) + (Array.isArray(vm)
@@ -1088,6 +1114,20 @@ if (inBrowser) {
       }
     })); // https://github.com/facebook/flow/issues/285
     window.addEventListener('test-passive', null, opts);
+    /*
+      target.addEventListener(type, listener, options);
+      ① type：表示事件类型
+      ② listener：回调函数/null
+      ③ options：指定有关 listener 属性的可选参数对象
+        {
+          capture:  Boolean，表示 listener 会在该类型的事件捕获阶段传播到该 EventTarget 时触发。
+          once:  Boolean，表示 listener 在添加之后最多只调用一次。如果是 true， listener 会在其被调用之后自动移除。
+          passive: Boolean，表示 listener 永远不会调用 preventDefault()。如果 listener 仍然调用了这个函数，客户端将会忽略它并抛出一个控制台警告。
+        } 
+
+      以上的 options 对象的 passive 选项不是所有的环境都支持，所以这里做一个试探：
+      添加一个 'test-passive' 类型事件，若系统试图去读取 opts 对象的 passive 属性，那就说明支持 passive 配置选项，于是标志 supportsPassive = true
+     */
   } catch (e) {}
 }
 

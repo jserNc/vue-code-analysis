@@ -1,10 +1,14 @@
 /* @flow */
 
+/*
+  关于方法 Object.freeze(obj) ：
+  ① 冻结对象 obj，冻结指的是不能向这个对象添加新的属性，不能修改其已有属性的值，不能删除已有属性，以及不能修改该对象已有属性的可枚举性、可配置性、可写性。也就是说，这个对象永远是不可变的。
+  ② 但是，如果一个属性的值是个对象，则这个对象中的属性是可以修改的，除非它也是个冻结对象。
+  ③ 返回值，被冻结的对象 obj
+*/
 export const emptyObject = Object.freeze({})
 
-/**
- * Check if a string starts with $ or _
- */
+// 判断一个字符串是否以 $ 或 _ 开头
 export function isReserved (str: string): boolean {
   const c = (str + '').charCodeAt(0)
   return c === 0x24 || c === 0x5F

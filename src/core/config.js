@@ -49,7 +49,7 @@ export default ({
 
   /**
    * Show production mode tip message on boot?
-   * 是否在生成环境显示提示
+   * 是否在生产环境显示提示/警告
    */
   productionTip: process.env.NODE_ENV !== 'production',
 
