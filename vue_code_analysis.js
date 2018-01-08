@@ -767,7 +767,7 @@ function isReserved (str) {
   var c = (str + '').charCodeAt(0);
   /*
     '$'.charCodeAt(0) -> 36 -> 0x24
-    '$'.charCodeAt(0) -> 95 -> 0x5F
+    '_'.charCodeAt(0) -> 95 -> 0x5F
   */
   return c === 0x24 || c === 0x5F
 }
@@ -1920,7 +1920,7 @@ function dependArray (value) {
   可以为该对象添加方法属性，自定义合并策略的选项
   optionMergeStrategies: Object.create(null)
 
-  后面会给 strats 添加若干属性，每一个属性 key 有对应的方法 f(parentVal, childVal)。这些方法的作用都是定义如果合并 key 属性的。
+  后面会给 strats 添加若干属性，每一个属性 key 有对应的方法 f(parentVal, childVal)。这些方法的作用都是定义如何合并 key 属性的。
   如果没有属性 key 指定对应的方法，那就取默认的合并策略方法 defaultStrat(parentVal, childVal)，只要 childVal 不是 undefined，那就返回 childVal，childVal 全等于 undefined，才返回 parentVal。
  
   例如：
@@ -2032,11 +2032,7 @@ function mergeDataOrFn (parentVal, childVal, vm) {
 }
 
 // 调用 mergeDataOrFn 函数
-strats.data = function (
-  parentVal,
-  childVal,
-  vm
-) {
+strats.data = function (parentVal, childVal, vm) {
   if (!vm) {
     // childVal 不是函数，返回 parentVal
     if (childVal && typeof childVal !== 'function') {
@@ -2073,13 +2069,13 @@ function mergeHook (
   childVal
 ) {
   /*
-  (1) childVal 为真值
-      ① parentVal 为真值，返回 parentVal.concat(childVal)
-      ② parentVal 为假值
-         a) childVal 是数组，直接返回 childVal
-         b) childVal 不是数组，返回 [childVal]
+    (1) childVal 为真值
+        ① parentVal 为真值，返回 parentVal.concat(childVal)
+        ② parentVal 为假值
+           a) childVal 是数组，直接返回 childVal
+           b) childVal 不是数组，返回 [childVal]
 
-  (2) childVal 为假值，返回 parentVal
+    (2) childVal 为假值，返回 parentVal
    */
   return childVal
     ? parentVal
@@ -2117,8 +2113,8 @@ LIFECYCLE_HOOKS.forEach(function (hook) {
  */
 function mergeAssets (parentVal, childVal) {
   /*
-  ① 以 parentVal 为原型创建对象 res
-  ② 如果 childVal 为真值，那就将 childVal 的属性都赋给 res，否则直接返回 res
+    ① 以 parentVal 为原型创建对象 res
+    ② 如果 childVal 为真值，那就将 childVal 的属性都赋给 res，否则直接返回 res
    */
   var res = Object.create(parentVal || null);
   return childVal
@@ -2129,15 +2125,15 @@ function mergeAssets (parentVal, childVal) {
 /*
      // 配置类型
      var ASSET_TYPES = [
-     'component',
-     'directive',
-     'filter'
+       'component',
+       'directive',
+       'filter'
      ];
 
      于是：
-     strats.components =
-     strats.directives =
-     strats.filters = mergeAssets
+     strats.components = mergeAssets;
+     strats.directives = mergeAssets;
+     strats.filters = mergeAssets;
 */
 ASSET_TYPES.forEach(function (type) {
   strats[type + 's'] = mergeAssets;
@@ -2228,9 +2224,27 @@ function checkComponents (options) {
 /*
     将 options.props 转为以下形式：
     {
-        name1 : { type : null },
-        name2 : { type : val2 },
-        ...
+      propA: Number,
+      propB: [String, Number],
+      propC: {
+        type: String,
+        required: true
+      },
+      propD: {
+        type: Number,
+        default: 100
+      },
+      propE: {
+        type: Object,
+        default: function () {
+          return { message: 'hello' }
+        }
+      },
+      propF: {
+        validator: function (value) {
+          return value > 10
+        }
+      }
     }
 */
 function normalizeProps (options) {
