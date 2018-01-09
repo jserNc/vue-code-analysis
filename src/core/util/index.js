@@ -1,5 +1,6 @@
 /* @flow */
 
+// 将工具方法暴露出去
 export * from 'shared/util'
 export * from './lang'
 export * from './env'

@@ -2539,7 +2539,7 @@ function getPropDefaultValue (vm, prop, key) {
   /*
   getType(Function) -> "Function"
   ① def 是 function 类型，并且 prop.type 的函数名不是 Function，def 的 this 绑定 vm 执行，返回执行结果；
-  ② 否则，时间返回 def
+  ② 否则，直接返回 def
   */
   return typeof def === 'function' && getType(prop.type) !== 'Function'
     ? def.call(vm)
@@ -2593,7 +2593,7 @@ function assertProp (prop, name, value, vm, absent) {
     return
   }
 
-  var type = prop.type;
+  var type = propassertTypeassertType.type;
   // 没有指定 type 或 type 为 true 时，valid 暂定为 true
   var valid = !type || type === true;
 
@@ -2606,7 +2606,7 @@ function assertProp (prop, name, value, vm, absent) {
     if (!Array.isArray(type)) {
       type = [type];
     }
-    // 只要 valid 变为 true，就终止该循环。也就是说，只要 value 匹配到 type 数组中任类型即可
+    // 只要 valid 变为 true，就终止该循环。也就是说，只要 value 匹配到 type 数组中任一类型即可
     for (var i = 0; i < type.length && !valid; i++) {
       /*
       assertedType 的格式为：

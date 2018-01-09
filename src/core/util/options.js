@@ -192,17 +192,17 @@ function mergeAssets (parentVal: ?Object, childVal: ?Object): Object {
 }
 
 /*
-     // 配置类型
-     var ASSET_TYPES = [
-       'component',
-       'directive',
-       'filter'
-     ];
+   配置类型
+   var ASSET_TYPES = [
+     'component',
+     'directive',
+     'filter'
+   ];
 
-     于是：
-     strats.components = mergeAssets;
-     strats.directives = mergeAssets;
-     strats.filters = mergeAssets;
+   于是：
+   strats.components = mergeAssets;
+   strats.directives = mergeAssets;
+   strats.filters = mergeAssets;
 */
 ASSET_TYPES.forEach(function (type) {
   strats[type + 's'] = mergeAssets
