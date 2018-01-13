@@ -5090,8 +5090,9 @@ function initComputed (vm, computed) {
     // component-defined computed properties are already defined on the
     // component prototype. We only need to define computed properties defined
     // at instantiation here.
+    // 定义计算属性 key
     if (!(key in vm)) {
-      // 给 vm 对象添加 key 属性
+      // 将计算属性 key 直接挂在到 vm 对象上，vm[key] 会触发计算属性重算，即执行上面的 getter 方法
       defineComputed(vm, key, userDef);
     } else {
       // 计算属性和 data 属性不能同名
@@ -5105,9 +5106,9 @@ function initComputed (vm, computed) {
   }
 }
 
-// 以代理方式给 target 对象添加 key 属性
+// 定义计算属性 key。将计算属性 key 直接挂在到 vm 对象上，vm[key] 会触发计算属性重算
 function defineComputed (target, key, userDef) {
-  // userDef 是 function
+  // ① userDef 是 function
   if (typeof userDef === 'function') {
     /*
     var sharedPropertyDefinition = {
@@ -5119,7 +5120,7 @@ function defineComputed (target, key, userDef) {
     */
     sharedPropertyDefinition.get = createComputedGetter(key);
     sharedPropertyDefinition.set = noop;
-  // userDef 是 { get : function(){}, set : function(){} } 这种形式
+  // ② userDef 是 { get : function(){}, set : function(){} } 这种形式
   } else {
     /*
         ① userDef.get 存在
@@ -5151,8 +5152,9 @@ function createComputedGetter (key) {
         // 也就是 watcher.value = watcher.get(); watcher.dirty = false;
         watcher.evaluate();
       }
+      // 注意，Dep.target 只有在新建 watcher 过程中才会有值
       if (Dep.target) {
-        // 将 watcher 对应的 dep 都依次执行 Dep.target.addDep(dep)
+        // watcher 对应的所有 dep 添加 watcher 这个订阅者
         watcher.depend();
       }
       // 返回最新的值
@@ -6605,7 +6607,7 @@ function initExtend (Vue) {
    */
   /*
     该方法的作用是使用基础 Vue 构造器，创建一个“子类”（组件的构造函数）。参数是一个包含组件选项的对象。
-    其中，data 选项是特例，它在 Vue.extend() 中它必须是函数。
+    其中，data 选项是特例，它在 Vue.extend() 中必须是函数。
 
     eg：
     <div id="mount-point"></div>
@@ -6759,7 +6761,7 @@ function initAssetRegisters (Vue) {
    * Create asset registration methods.
    */
   /*
-    配置类型
+    资源类型
     var ASSET_TYPES = [
       'component',
       'directive',
@@ -6787,14 +6789,14 @@ function initAssetRegisters (Vue) {
   ASSET_TYPES.forEach(function (type) {
     // 对 definition 进行修正，最后返回 definition
     Vue[type] = function (id, definition) {
-      // ① 只有一个实参就是【获取】注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
+      // ① 只有一个实参就是【获取】已注册的组件，例如 Vue.component('my-component') -> Vue.options['components']['my-component']
       if (!definition) {
         return this.options[type + 's'][id]
-      // ② 两个参数，注册组件
+      // ② 两个参数，注册新组件
       } else {
         /* istanbul ignore if */
         {
-          // 如果 type 是 'component'，则 id 不能是保留标签名
+          // 特殊处理一：若 Vue.component 的参数 id 不能是保留标签名
           if (type === 'component' && config.isReservedTag(id)) {
             warn(
               'Do not use built-in or reserved HTML elements as component ' +
@@ -6803,36 +6805,35 @@ function initAssetRegisters (Vue) {
           }
         }
 
-        /*
-          // 注册组件，传入一个扩展过的构造器
-          Vue.component('my-component', Vue.extend({ ... }))
-
-          // 注册组件，传入一个选项对象 (自动调用 Vue.extend)
-          Vue.component('my-component', { ... })
-
-          // 获取注册的组件 (始终返回构造器)
-          var MyComponent = Vue.component('my-component')
-
-          Vue['component'](id, definition) 其中 definition 为普通对象，修正 definition
-         */
+        // 特殊处理二：若 Vue.component 的参数 definition 为普通对象
         if (type === 'component' && isPlainObject(definition)) {
-          // 如果没有 name 属性就取第一个参数 id
           definition.name = definition.name || id;
-          // Vue.options._base = Vue，所以 definition = Vue.extend(definition);
+          /*
+            其中 Vue.options._base = Vue，所以 definition = Vue.extend(definition)，也就是说：
+            如果 definition 是普通对象，自动调用 Vue.extend 将它修正为一个组件
+            
+            所以：Vue.component('my-com', {...})
+            实质是：Vue.component('my-com', Vue.extend({...}))
+          */
           definition = this.options._base.extend(definition);
         }
       
-        /*
-          Vue.directive('my-directive', function () {
-            // 这里将会被 `bind` 和 `update` 调用
-          })
-
-          Vue['directive'](id, definition) 其中 definition 为函数，修正 definition 为对象
-         */
+        // 特殊处理三：若 Vue.directive 的参数 definition
         if (type === 'directive' && typeof definition === 'function') {
+          /*
+            如果 definition 是函数，那就将它修正为对象：
+            { bind: definition, update: definition }
+
+            也就是说以下两种写法等价：
+            Vue.directive('my-directive', myFunc)
+            Vue.directive('my-directive', {
+              bind: myFunc,
+              update: myFunc
+            })
+          */
           definition = { bind: definition, update: definition };
         }
-        // 注册组件，然后返回
+        // 注册组件，然后返回。注意 type 后跟 's'
         this.options[type + 's'][id] = definition;
         return definition
       }
