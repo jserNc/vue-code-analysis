@@ -18,6 +18,7 @@ export function initEvents (vm: Component) {
 
   // init parent attached events
   const listeners = vm.$options._parentListeners
+  // 将父组件的事件绑定到当前组件
   if (listeners) {
     updateComponentListeners(vm, listeners)
   }
@@ -57,11 +58,11 @@ export function eventsMixin (Vue: Class<Component>) {
         this.$on(event[i], fn)
       }
     } else {
-	  // 将函数 fn 添加到数组 vm._events[event] 中
+      // 将函数 fn 添加到数组 vm._events[event] 中
       (vm._events[event] || (vm._events[event] = [])).push(fn)
       // optimize hook:event cost by using a boolean flag marked at registration
       // instead of a hash lookup
-	  // event 以 hook 开头
+      // event 以 hook 开头
       if (hookRE.test(event)) {
         vm._hasHookEvent = true
       }
@@ -69,21 +70,21 @@ export function eventsMixin (Vue: Class<Component>) {
     return vm
   }
 
-  // 绑定事件（函数执行一次后，调用解绑）
+  // 绑定事件（回调函数执行一次后，解除事件绑定）
   Vue.prototype.$once = function (event: string, fn: Function): Component {
     const vm: Component = this
     function on () {
-	  // 解绑
+      // 解绑
       vm.$off(event, on)
       fn.apply(vm, arguments)
     }
     on.fn = fn
-	// 绑定
+    // 绑定
     vm.$on(event, on)
     return vm
   }
 
-  // 解绑
+  // 解绑事件
   Vue.prototype.$off = function (event?: string | Array<string>, fn?: Function): Component {
     const vm: Component = this
     // all，没有实参，清空所有事件
@@ -98,12 +99,12 @@ export function eventsMixin (Vue: Class<Component>) {
       }
       return vm
     }
-    // specific event
+    // 事件 event 对应的监听函数数组
     const cbs = vm._events[event]
     if (!cbs) {
       return vm
     }
-	// 清空某一具体事件对应的所有监听函数
+    // 清空事件 event 对应的所有监听函数
     if (arguments.length === 1) {
       vm._events[event] = null
       return vm
@@ -113,9 +114,12 @@ export function eventsMixin (Vue: Class<Component>) {
     let i = cbs.length
     while (i--) {
       cb = cbs[i]
-	  // cb === fn 对应 $on 方法绑定的；cb.fn === fn 对应 $once 方法绑定的
+      /*
+        ① cb === fn 对应 $on 方法绑定的监听函数；
+        ② cb.fn === fn 对应 $once 方法绑定的监听函数
+       */
       if (cb === fn || cb.fn === fn) {
-		// 删除某一具体事件的某一具体监听函数
+		    // 删除事件 event 的一个监听函数 fn
         cbs.splice(i, 1)
         break
       }
@@ -129,6 +133,14 @@ export function eventsMixin (Vue: Class<Component>) {
     if (process.env.NODE_ENV !== 'production') {
       const lowerCaseEvent = event.toLowerCase()
       if (lowerCaseEvent !== event && vm._events[lowerCaseEvent]) {
+        /*
+          tip 函数的作用是：调用 console.warn 函数发出警告，例如："[Vue tip]: some tip"
+
+          翻译一下提示：
+          组件 <AaaBbb>（格式化后的组件名）发出了事件 lowerCaseEvent（全小写字母构成），但是注册的事件类型是 event（非全小写字母构成）。
+          需要注意的是 html 属性是大小写不敏感的。我们不能在模板中用 v-on 来监听驼峰写法的事件类型。
+          我们应该使用连字符写法。如 hyphenate('aaBbCc') -> "aa-bb-cc"。
+        */
         tip(
           `Event "${lowerCaseEvent}" is emitted in component ` +
           `${formatComponentName(vm)} but the handler is registered for "${event}". ` +
@@ -141,12 +153,12 @@ export function eventsMixin (Vue: Class<Component>) {
     let cbs = vm._events[event]
     if (cbs) {
       cbs = cbs.length > 1 ? toArray(cbs) : cbs
-	  // 将第一个实参 event 排除掉，剩下的参数真正被回调函数用的实参
+      // 将第一个实参 event 排除掉，剩下的参数真正被回调函数用的实参
       const args = toArray(arguments, 1)
-	  // 依次执行 vm._events[event] 数组中的回调函数，也就是说执行 event 类型的所有回调函数
+      // 依次执行 vm._events[event] 数组中的回调函数，也就是说执行事件 event 对应的所有回调函数
       for (let i = 0, l = cbs.length; i < l; i++) {
         try {
-	      // 回调函数执行时的实参 args 是除了参数 event 以外的其他参数
+          // 回调函数执行时的实参 args 是除了参数 event 以外的其他参数
           cbs[i].apply(vm, args)
         } catch (e) {
           handleError(e, vm, `event handler for "${event}"`)

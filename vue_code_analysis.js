@@ -4111,16 +4111,16 @@ function mountComponent (vm, el, hydrating) {
     };
   } else {
     /*
-    生产环境下，直接渲染、更新
-    
-    其实，跟上面的 if 块一样，注意执行这两句：
-    var vnode = vm._render();
-    vm._update(vnode, hydrating);
+        生产环境下，直接渲染、更新
 
-	  其中，vm._render() 的作用就是生成虚拟节点 vnode
+        其实，跟上面的 if 块一样，注意执行这两句：
+        var vnode = vm._render();
+        vm._update(vnode, hydrating);
+
+	    其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
     updateComponent = function () {
-	    // 根据新的 vnode 对 dom 进行更新
+      // 根据新的 vnode 对 dom 进行更新
       vm._update(vm._render(), hydrating);
     };
   }
@@ -4266,7 +4266,12 @@ function deactivateChildComponent (vm, direct) {
   }
 }
 
-// 调用钩子函数
+/*
+     比如，传进来的钩子名是 'beforeUpdate'，而之前我们还监听了事件 'hook:beforeUpdate'
+     那么，callHook(vm,'evtA') 会导致：
+     ① 执行钩子 'beforeUpdate' 的所有回调函数
+     ② 执行事件 'hook:beforeUpdate' 的所有回调函数
+  */
 function callHook (vm, hook) {
   // 钩子处理函数
   var handlers = vm.$options[hook];
@@ -5381,9 +5386,9 @@ function resolveInject (inject, vm) {
     // inject is :any because flow is not smart enough to figure out cached
     var result = Object.create(null);
     /*
-    ① hasSymbol 为 true 表示原生支持 Symblo 和 Reflect
-    ② Reflect.ownKeys 方法用于返回对象的所有属性，基本等同于 Object.getOwnPropertyNames 与 Object.getOwnPropertySymbols 之和
-    ③ Object.keys 方法返回对象的可枚举属性组成的数组
+        ① hasSymbol 为 true 表示原生支持 Symblo 和 Reflect
+        ② Reflect.ownKeys 方法用于返回对象的所有属性，基本等同于 Object.getOwnPropertyNames 与 Object.getOwnPropertySymbols 之和
+        ③ Object.keys 方法返回对象的可枚举属性组成的数组
     */
     var keys = hasSymbol
         ? Reflect.ownKeys(inject)
@@ -5408,9 +5413,9 @@ function resolveInject (inject, vm) {
           // ...
         }
 
-        可以看到，inject【属性值】对应 provide【属性名】
+        可以看到，子组件的 inject 会去祖先组件的 provide 中取值
       */
-      // inject【属性值】
+      // inject【数组索引 | 属性名】
       var key = keys[i];
       // inject【属性值】对应 provide【属性名】
       var provideKey = inject[key];
