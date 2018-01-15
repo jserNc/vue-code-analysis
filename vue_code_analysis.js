@@ -3823,7 +3823,7 @@ function isWhitespace (node) {
   return node.isComment || node.text === ' '
 }
 
-// 局部的插槽处理
+// 作用域插槽处理
 function resolveScopedSlots (
   fns, // see flow/vnode
   res
@@ -3840,13 +3840,13 @@ function resolveScopedSlots (
     }
   }
   /*
-  于是，res 的结构大致如下：
-  {
-    keyVal1 : fnVal1,
-    keyVal2 : fnVal2,
-    keyVal3 : fnVal3,
-    ...
-  }
+      于是，res 的结构大致如下：
+      {
+        keyVal1 : fnVal1,
+        keyVal2 : fnVal2,
+        keyVal3 : fnVal3,
+        ...
+      }
   */
   return res
 }
@@ -5937,7 +5937,7 @@ function renderList (val,render) {
       ret[i] = render(val[key], key, i);
     }
   }
-  // val 是以上 3 中情况之一，ret 就会被赋值为数组，在此给 ret 添加一个 _isVList 属性
+  // val 是以上 3 种情况之一，ret 就会被赋值为数组，在此给 ret 添加一个 _isVList 属性
   if (isDef(ret)) {
     (ret)._isVList = true;
   }
@@ -6015,13 +6015,7 @@ function checkKeyCodes (eventKeyCode, key, builtInAlias) {
  * Runtime helper for merging v-bind="object" into a VNode's data.
  */
 // 将 v-bind="object" 转换成 VNode 的 data，以下操作会修改 data，最后返回 data
-function bindObjectProps (
-  data,
-  tag,
-  value,
-  asProp,
-  isSync
-) {
+function bindObjectProps (data, tag, value, asProp, isSync) {
   if (value) {
     // value 不是对象
     if (!isObject(value)) {
@@ -6095,7 +6089,7 @@ function renderStatic (index, isInFor) {
   // otherwise, render a fresh tree.
   // 否则，重新渲染静态树
   tree = this._staticTrees[index] =
-    // vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）。也可以简单地把 this._renderProxy 看作 this(vm)
+    // vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）。也可以简单地把 this._renderProxy 看作 this.vm
     this.$options.staticRenderFns[index].call(this._renderProxy);
 
   // 标记静态节点 tree.isStatic = true; tree.key = "__static__" + index; tree.isOnce = false;
