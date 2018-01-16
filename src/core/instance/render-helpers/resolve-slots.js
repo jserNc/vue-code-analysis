@@ -3,6 +3,7 @@
 /**
  * Runtime helper for resolving raw children VNodes into a slot object.
  */
+// vm.$slots = resolveSlots(vm.$options._renderChildren, renderContext)
 export function resolveSlots (
   children: ?Array<VNode>,
   context: ?Component

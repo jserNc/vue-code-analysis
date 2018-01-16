@@ -12,28 +12,7 @@ import { initRender } from './render'
 import { initEvents } from './events'
 // mark 打标签，measure 测耗时
 import { mark, measure } from '../util/perf'
-/*
-  initLifecycle 生命周期初始化：
-  vm.$parent = parent
-  vm.$root = parent ? parent.$root : vm
-
-  vm.$children = []
-  vm.$refs = {}
-
-  vm._watcher = null
-  vm._inactive = null
-  vm._directInactive = false
-  vm._isMounted = false
-  vm._isDestroyed = false
-  vm._isBeingDestroyed = false
-
-  callHook 调用钩子函数
-*/
 import { initLifecycle, callHook } from './lifecycle'
-/*
-  initProvide(vm) 函数初始化 vm._provided
-  initInjections(vm) 函数初始化注入
-*/
 import { initProvide, initInjections } from './inject'
 /*
   extend (to,_from) 用 _from 对象的属性覆盖 to 对象的属性
@@ -50,7 +29,7 @@ let uid = 0
 
 // 初始化混入，定义 Vue.prototype._init 函数
 export function initMixin (Vue: Class<Component>) {
-  // 这是 Vue 构造函数中唯一调用的一个方法，完成一系列初始化操作
+  // 这是 Vue 构造函数中唯一调用的方法，完成一系列初始化操作
   Vue.prototype._init = function (options?: Object) {
     const vm: Component = this
     // a uid，每个实例 vm 的 _uid 是唯一的
@@ -65,20 +44,20 @@ export function initMixin (Vue: Class<Component>) {
     }
 
     // a flag to avoid this being observed
-	// 标志当前对象是 Vue 实例，有了这个标志就不会被 observe 了
+    // 标志当前对象是 Vue 实例，有了这个标志就不会被 observe 了
     vm._isVue = true
 
-    // merge options，给 vm.$options 赋值
+    // 给 vm.$options 赋值
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
       // internal component options needs special treatment.
-	  // 直接给 vm.$options 添加属性。优化内部组件实例化。由于动态选项合并相当慢，并且没有一个内部组件的选项需要特殊处理
+      // 直接给 vm.$options 添加属性。优化内部组件实例化。由于动态选项合并相当慢，并且没有一个内部组件的选项需要特殊处理
       initInternalComponent(vm, options)
     } else {
-	  // 合并构造函数的 options 和参数 options
+      // 合并构造函数的 options 和参数 options
       vm.$options = mergeOptions(
-		// 合并父构造函数和当前构造函数 vm.constructor 的 options
+        // 合并父构造函数和当前构造函数的 options
         resolveConstructorOptions(vm.constructor),
         options || {},
         vm
@@ -86,12 +65,13 @@ export function initMixin (Vue: Class<Component>) {
     }
 
 
-    // 非生产环境
+    // 初始化 vm._renderProxy
     if (process.env.NODE_ENV !== 'production') {
       initProxy(vm)
     } else {
       vm._renderProxy = vm
     }
+
     // expose real self
     vm._self = vm
     initLifecycle(vm)
@@ -103,13 +83,13 @@ export function initMixin (Vue: Class<Component>) {
     initProvide(vm) // resolve provide after data/props
     callHook(vm, 'created')
 
-    /* istanbul ignore if */
     if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
       vm._name = formatComponentName(vm, false)
       mark(endTag)
       measure(`${vm._name} init`, startTag, endTag)
     }
 
+    // 将 vm 挂载到真实 dom 上
     if (vm.$options.el) {
       vm.$mount(vm.$options.el)
     }
@@ -137,37 +117,88 @@ function initInternalComponent (vm: Component, options: InternalComponentOptions
 }
 
 /*
-	① Ctor.super 存在，返回父构造函数和当前构造函数合并后的 options
+    看一看 Vue.options，最基本的有以下 4 个选项：
+    {
+        components: {KeepAlive: {…}, Transition: {…}, TransitionGroup: {…}},
+        directives: {model: {…}, show: {…}},
+        filters: {},
+        _base: Vue
+    }
+
+    Vue.options = Object.create(null);
+
+    ① Vue.options._base = Vue;
+
+    ② ASSET_TYPES.forEach(function (type) {
+        Vue.options[type + 's'] = Object.create(null);
+    });
+    -> 相当于：
+    Vue.options.components = {};
+    Vue.options.directives = {};
+    Vue.options.filters = {};
+
+    其中，Vue.options.components 会被以下语句修改：
+
+    // 平台相关组件
+    var platformComponents = {
+        Transition: Transition,
+        TransitionGroup: TransitionGroup
+    };
+    // 通用内置组件
+    var builtInComponents = {
+        KeepAlive: KeepAlive
+    };
+
+    extend(Vue$3.options.components, platformComponents);
+    extend(Vue.options.components, builtInComponents);
+
+    于是：
+    Vue.options.components = {KeepAlive: {…}, Transition: {…}, TransitionGroup: {…}};
+
+    其中，Vue.options.directives 会被以下语句修改：
+    var platformDirectives = {
+        model: model$1,
+        show: show
+    };
+
+    extend(Vue$3.options.directives, platformDirectives);
+
+    于是：
+    Vue.options.directives = {model: {…}, show: {…}}
+*/
+
+/*
+	① 父类构造函数存在，返回父构造函数选项 + 当前构造函数选项合并后的 Ctor.options
 	② 否则，直接返回当前构造函数的 options
 */
 export function resolveConstructorOptions (Ctor: Class<Component>) {
   let options = Ctor.options
   // 如果当前构造函数 Ctor 有父类，那么对 Ctor.options 进行修正
   if (Ctor.super) {
-	// 父类的 options，即 Ctor.super.options
+    // 父类的 options，即 Ctor.super.options
     const superOptions = resolveConstructorOptions(Ctor.super)
     // 缓存的父类 options
-	const cachedSuperOptions = Ctor.superOptions
+    const cachedSuperOptions = Ctor.superOptions
     
-	// 如果缓存的父类 options 和最新的不一样，更新之
-	if (superOptions !== cachedSuperOptions) {
-      // super option changed,
-      // need to resolve new options.更新缓存
-      Ctor.superOptions = superOptions
-      // check if there are any late-modified/attached options (#4976)
-	  // 返回最近更新的 Ctor.options
-      const modifiedOptions = resolveModifiedOptions(Ctor)
-      // update base extend options
-      if (modifiedOptions) {
-		// 更新修改的属性
-        extend(Ctor.extendOptions, modifiedOptions)
-      }
-	  // 合并父类和当前类的选项
-      options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions)
-      if (options.name) {
-		// 构造函数加入到数组 options.components 中
-        options.components[options.name] = Ctor
-      }
+    // 如果缓存的父类 options 和最新的不一样，更新之
+  	if (superOptions !== cachedSuperOptions) {
+        // 更新缓存
+        Ctor.superOptions = superOptions
+        
+        // 返回最近更新的 Ctor.options
+        const modifiedOptions = resolveModifiedOptions(Ctor)
+        
+        // 更新子类扩展选项
+        if (modifiedOptions) {
+          // 更新修改的属性
+          extend(Ctor.extendOptions, modifiedOptions)
+        }
+        // 子类选项 = 父类选项 + 子类扩展的选项
+        options = Ctor.options = mergeOptions(superOptions, Ctor.extendOptions)
+        if (options.name) {
+          // 构造函数加入到数组 options.components 中
+          options.components[options.name] = Ctor
+        }
     }
   }
   return options
@@ -184,10 +215,11 @@ function resolveModifiedOptions (Ctor: Class<Component>): ?Object {
   for (const key in latest) {
     if (latest[key] !== sealed[key]) {
       if (!modified) modified = {}
-	  // 过滤数组 latest[key]，选出属于数组 extended[key] 或不属于数组 sealed[key] 的元素
+      // 过滤数组 latest[key]，选出属于数组 extended[key] 或不属于数组 sealed[key] 的元素
       modified[key] = dedupe(latest[key], extended[key], sealed[key])
     }
   }
+
   return modified
 }
 
@@ -202,14 +234,14 @@ function dedupe (latest, extended, sealed) {
   // 比较 latest 和 sealed，以确保生命周期钩子在合并的时候不会重复
   if (Array.isArray(latest)) {
     const res = []
-	// sealed 转为数组 
+    // sealed 转为数组
     sealed = Array.isArray(sealed) ? sealed : [sealed]
-	// extended 转为数组
+    // extended 转为数组
     extended = Array.isArray(extended) ? extended : [extended]
 	
     for (let i = 0; i < latest.length; i++) {
       // push original options and not sealed options to exclude duplicated options
-	  // 保留原始选项和没有密封的选项以排除重复选项
+      // 保留原始选项和没有被冰冻的选项，以排除重复选项
       if (extended.indexOf(latest[i]) >= 0 || sealed.indexOf(latest[i]) < 0) {
         res.push(latest[i])
       }

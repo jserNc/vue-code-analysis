@@ -1656,7 +1656,13 @@ function observe (value, asRootData) {
 /**
  * Define a reactive property on an Object.
  */
-// 在 obj 对象上拦截 key 属性的 get/set 操作
+
+/*
+    在 obj 对象上拦截 key 属性的 get/set 操作，通俗地说有两点：
+
+    ① 若在新建 watcher = new Watcher() 实例时，获取 obj[key] 属性，说明这个 watcher 对 obj[key] 属性感兴趣，那么就收集这个 watcher；
+    ② 在设置 obj[key] = val 时，执行 customSetter()，并通知 watcher，然后 watcher 会执行相应的动作
+*/
 function defineReactive$$1 (obj, key, val, customSetter, shallow) {
 
   // 新建一个依赖管理器
@@ -2440,9 +2446,11 @@ function resolveAsset (options, type, id, warnMissing) {
 
 // 返回合法的属性值，也就是使得属性合法化
 function validateProp (key, propOptions, propsData, vm) {
+  // ① prop 是属性值的各种约束条件
   var prop = propOptions[key];
   // key 不是 propsData 自身属性
   var absent = !hasOwn(propsData, key);
+  // ② value 才是真正的属性值
   var value = propsData[key];
 
   // handle boolean props
@@ -4978,7 +4986,7 @@ function initProps (vm, propsOptions) {
     // instantiation here.
     // 静态 props 在 Vue.extend() 中已经代理掉了，这里只需要代理实例上定义的 props 就好了
     if (!(key in vm)) {
-      // 用 vm["_props"][key] 代理 vm[key]
+      // 用 vm[key] 代理 vm["_props"][key]
       proxy(vm, "_props", key);
     }
   };
@@ -5147,7 +5155,14 @@ function defineComputed (target, key, userDef) {
   Object.defineProperty(target, key, sharedPropertyDefinition);
 }
 
-// 新建一个计算属性 getter
+/*
+     首先看一下这个函数执行的场景：
+     经过 defineComputed(vm, key, userDef) 定义 key 为计算属性后：
+     获取 vm[key]
+     -> computedGetter()
+     -> 如果脏了，就执行 this._computedWatchers[key].evaluate() 重新计算属性值
+     -> 返回属性值 this._computedWatchers[key].value
+*/
 function createComputedGetter (key) {
   return function computedGetter () {
     var watcher = this._computedWatchers && this._computedWatchers[key];
@@ -5157,7 +5172,24 @@ function createComputedGetter (key) {
         // 也就是 watcher.value = watcher.get(); watcher.dirty = false;
         watcher.evaluate();
       }
-      // 注意，Dep.target 只有在新建 watcher 过程中才会有值
+      /*
+         某个 watcher 实例执行 get() 方法是，Dep.target 是有值的。
+         a. watcher.get() 执行开始时，会执行 pushTarget(watcher) 也就是 Dep.target = watcher;
+         a. watcher.get() 执行结束之前，会执行 popTarget() 也就是恢复原来的 Dep.target = targetStack.pop();
+
+         这也印证了作者对 Watcher.prototype.get 函数的注释：
+         "Evaluate the getter, and re-collect dependencies."
+         计算 getter 并重新收集 dep 依赖
+
+         走到这里，有两点可以确定：
+         ① 某个 watcherA 在执行 get()
+         ② 正在执行获取 vm[key]
+
+         也就是说，若某个 watcherA 在执行 get() 的过程中（Dep.target 有值），获取了 vm[key]
+         -> 说明这个新的动作也对 vm[key] 感兴趣，那就需要重新收集 key 的依赖了
+         -> 重新收集 key 对应依赖就是，重新遍历 watcher 的 deps，将 watcher 分别加到各个 dep 的列表里
+         -> 于是这个新的动作就可以触发 watcher 重新计算 vm[key] 的属性值
+      */
       if (Dep.target) {
         // watcher 对应的所有 dep 添加 watcher 这个订阅者
         watcher.depend();
@@ -5170,7 +5202,7 @@ function createComputedGetter (key) {
 
 // 初始化 methods，将 methods 挂载到 vm 对象上
 function initMethods (vm, methods) {
-  // 开发环境下，检查 vm.$options["computed"] 是否为对象，若不是对象，发出警告
+  // 开发环境下，检查 vm.$options["methods"] 是否为对象，若不是对象，发出警告
   "development" !== 'production' && checkOptionType(vm, 'methods');
   var props = vm.$options.props;
   for (var key in methods) {
@@ -6740,7 +6772,7 @@ function initExtend (Vue) {
 function initProps$1 (Comp) {
   var props = Comp.options.props;
   for (var key in props) {
-    // Comp.prototype["_props"][key] 代理 Comp.prototype[key]
+    // Comp.prototype[key] 代理 Comp.prototype["_props"][key]
     proxy(Comp.prototype, "_props", key);
   }
 }
