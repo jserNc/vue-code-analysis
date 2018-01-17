@@ -4346,26 +4346,35 @@ function flushSchedulerQueue () {
   //    user watchers are created before the render watcher)
   // 3. If a component is destroyed during a parent component's watcher run,
   //    its watchers can be skipped.
-  
+
   /*
-     在 flush 之前，将队列排序，这样做的目的有三：
-     1. 组件更新顺序是由父组件到子组件（因为父组件先于子组件创建）
-     2. 组件的用户观察器先于它的渲染观察器运行（因为用户观察器先于渲染观察器创建）
-     3. 如果一个组件在父组件的观察器运行期间被销毁了，那么它的观察器会被跳过
+     在 flush 之前，对 queue 进行排序，原因有三：
+     1. 组件更新时从父组件到子组件的顺序（因为父组件会比子组件先创建）
+     2. 组件的自定义 watcher 会比渲染 watcher 先执行计算（因为自定义 watcher 先创建）
+     3. 如果某个组件在父组件的 watcher 执行期间被销毁了，那么这个组件的 watcher 就可以不执行了
   */
 
   queue.sort(function (a, b) { return a.id - b.id; });
 
   // do not cache length because more watchers might be pushed
   // as we run existing watchers
-  // 之所以每次循环都重新计算 queue.length，而不把 queue.length 缓存起来，是因为在执行已有观察器过程中可能会有新的执行器加入
+  // 这里没有对 queue.length 进行缓存，是因为在循环过程中，可能还会有新的 watcher 加入到 queue 中
   for (index = 0; index < queue.length; index++) {
     watcher = queue[index];
     id = watcher.id;
     has[id] = null;
-    // watcher 跑起来
+    /*
+        ① 计算 watcher 最新的值，value = watcher.get() -> value = watcher.getter.call(vm, vm) 
+        ② 若新值与旧值不一样，就执行回调函数 watcher.cb.call(watcher.vm, value, oldValue)
+     */
     watcher.run();
-    // in dev build, check and stop circular updates.
+
+    /*
+        ① 前面说过，这个 queue 在循环执行过程中是可以动态更新的，也就是允许新的 watcher 入队
+        ② 若执行 watcher.run() 过程中，又执行 queueWatcher() 将这个 watcher 入队了，于是 has[id] = true
+        ③ 那就把 circular[id] 加 1，表示这个 watcher 又 run 了一次
+        ④ 若在这个 for 循环某个 watcher run 的次数超过了 MAX_UPDATE_COUNT（这里是 100 次），那就可能出现了无限循环，立即终止循环
+     */
     if ("development" !== 'production' && has[id] != null) {
       circular[id] = (circular[id] || 0) + 1;
       // 超过 100，发出警告
@@ -4411,6 +4420,12 @@ function callUpdatedHooks (queue) {
   while (i--) {
     var watcher = queue[i];
     var vm = watcher.vm;
+    /*
+        ① 若该 watcher 是渲染 watcher，即 watcher === watcher.vm._watcher
+        ② watcher.vm 已经在 dom 中渲染过了
+
+        ① 和 ② 同时满足，说明是 dom 更新，那就触发 updated 钩子
+     */
     if (vm._watcher === watcher && vm._isMounted) {
       callHook(vm, 'updated');
     }
@@ -4521,7 +4536,7 @@ var uid$2 = 0;
 var Watcher = function Watcher (vm, expOrFn, cb, options) {
   // 当前 watcher 的 vm 属性指向 vm
   this.vm = vm;
-  // 将当前 watcher 实例加入到 vm._watchers 数组中。所以 vm._watchers 是一组 watcher 实例。
+  // vm._watchers 数组专门用来存放跟当前 vm 相关的所有 watcher。
   vm._watchers.push(this);
 
   // options
@@ -4671,7 +4686,8 @@ Watcher.prototype.addDep = function addDep (dep) {
   if (!this.newDepIds.has(id)) {
     this.newDepIds.add(id);
     this.newDeps.push(dep);
-    // this.newDepIds 也是一个 _Set 实例 
+
+    // 没有 this.depIds 没有这个 id，说明当前 watcher 没有进入到 dep 的订阅列表里
     if (!this.depIds.has(id)) {
       // 添加订阅者。将当前 watcher 加入到 dep.subs 数组里
       dep.addSub(this);

@@ -16,6 +16,8 @@ function Vue (options) {
 
 // 定义 Vue.prototype._init 方法
 initMixin(Vue)
+
+
 /*
   定义以下 5 个方法
   Vue.prototype.$data
@@ -25,6 +27,8 @@ initMixin(Vue)
   Vue.prototype.$watch 
  */
 stateMixin(Vue)
+
+
 /*
   定义以下 4 个方法
   Vue.prototype.$on
@@ -33,6 +37,8 @@ stateMixin(Vue)
   Vue.prototype.$emit
  */
 eventsMixin(Vue)
+
+
 /*
   定义以下 3 个方法
   Vue.prototype._update
@@ -40,6 +46,8 @@ eventsMixin(Vue)
   Vue.prototype.$destroy
  */
 lifecycleMixin(Vue)
+
+
 /*
   定义以下多个方法
   Vue.prototype.$nextTick
