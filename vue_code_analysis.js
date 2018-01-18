@@ -3110,7 +3110,13 @@ var normalizeEvent = cached(function (name) {
   }
 });
 
-// 创建函数调用器，返回一个函数 invoker，函数 invoker 执行时会依次执行数组 fns 里的函数
+/*
+  创建函数调度器，执行 invoker() 函数时：
+  ① 若 fns 是一组函数，依次执行 fns 里的每一个函数
+  ② 若 fns 只是一个函数，执行该函数，并将该函数的返回值作为 invoker 函数的返回值
+ 
+  简单的理解就是，将一组函数 fns 合并成一个函数 invoker
+ */
 function createFnInvoker (fns) {
   function invoker () {
     var arguments$1 = arguments;
@@ -3122,6 +3128,7 @@ function createFnInvoker (fns) {
       var cloned = fns.slice();
       for (var i = 0; i < cloned.length; i++) {
         // 为什么要多定义一个 arguments$1 变量，直接用 arguments 不行吗？
+        // 工程化代码中确实是直接用 arguments，这里的 arguments$1 是工具自动生成的
         cloned[i].apply(null, arguments$1);
       }
     // fns 是单个函数，this 绑定全局对象执行
@@ -3153,14 +3160,14 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
     */
     // 格式化事件名（解析其中的 & ~ !）
     event = normalizeEvent(name);
-    // cur 为 undefined 或 null，这是不允许的
+    // a. cur 为 undefined 或 null，这是不允许的
     if (isUndef(cur)) {
       // 开发环境下发出警告
       "development" !== 'production' && warn(
         "Invalid handler for event \"" + (event.name) + "\": got " + String(cur),
         vm
       );
-    // cur 合法，但 old 为 undefined 或 null，那么就需要用 add 新建事件绑定了，并且初始化调用器。
+    // b. cur 合法，但 old 为 undefined 或 null，那么就需要用 add 新建事件绑定了，并且初始化调用器。
     } else if (isUndef(old)) {
       // 如果 cur.fns 为 undefined 或 null，那么，cur 重置为 cur 函数调用器
       if (isUndef(cur.fns)) {
@@ -3169,7 +3176,7 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
       }
       // 事件绑定
       add(event.name, cur, event.once, event.capture, event.passive);
-    // cur 和 old 都合法，但不相等，那么可以继续用 old 这个调用器（免得还要调用 createFnInvoker 方法重新生成调用器），把调用器触发的方法更新为新的 cur 就行了
+    // c. cur 和 old 都合法，但不相等，那么可以继续用 old 这个调用器（免得还要调用 createFnInvoker 方法重新生成调用器），把调用器触发的方法更新为新的 cur 就行了
     } else if (cur !== old) {
       old.fns = cur;
       // 更新 on[name]
@@ -3230,11 +3237,7 @@ function mergeVNodeHook (def, hookKey, hook) {
 }
 
 // 从 VNodeData 中提取 props
-function extractPropsFromVNodeData (
-  data,
-  Ctor,
-  tag
-) {
+function extractPropsFromVNodeData (data, Ctor, tag) {
   // we are only extracting raw values here.
   // validation and default values are handled in the child
   // component itself.
@@ -3280,7 +3283,10 @@ function extractPropsFromVNodeData (
           );
         }
       }
-      // key/altKey 为 props/attrs 自身属性就会往 res 对象中添加该属性
+      /*
+        ① 优先从 props 中提取 props[key | altKey] 属性，复制给 res 对象
+        ② 前者没找到，再从 attrs 中提取 props[key | altKey] 属性，复制给 res 对象，任何删除属性 props[key | altKey]
+       */
       checkProp(res, props, key, altKey, true) ||
       checkProp(res, attrs, key, altKey, false);
     }
@@ -3294,7 +3300,7 @@ function checkProp (
   hash,
   key,
   altKey,
-  // preserve 为 false 表示匹配成功后会删除 hash[key]
+  // preserve 为 false 表示不保留，也就是匹配成功后会删除 hash[key]
   preserve
 ) {
   // hash 不能为 undefined 或 null，否则返回 false
@@ -6603,6 +6609,7 @@ function resolveConstructorOptions (Ctor) {
 
       // update base extend options
       if (modifiedOptions) {
+        // Ctor.extendOptions 见 Vue.extend = function (extendOptions){...} 函数中定义
         extend(Ctor.extendOptions, modifiedOptions);
       }
       // 子类构造函数的 options 是父类构造函数的 options 和自身扩展的 options 和并集
