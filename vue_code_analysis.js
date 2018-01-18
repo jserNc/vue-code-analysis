@@ -1445,7 +1445,10 @@ var arrayMethods = Object.create(arrayProto);
 .forEach(function (method) {
   // cache original method
   var original = arrayProto[method];
-  // 依次给 push、pop 等方法赋予新的定义
+  /*
+    以上方法的共同点是：都会改变原数组
+    于是，拦截这些方法，重新定义 arrayMethods['push' | 'pop' | 'shift' | 'unshift' | 'splice' | 'sort' | 'reverse']
+   */
   def(arrayMethods, method, function mutator () {
     var args = [], len = arguments.length;
     // 以 len = 3 为例，arguments[3] 就是 undefined，但由于先执行 len--，所以根本不会取 arguments[3] 的值
@@ -1461,12 +1464,12 @@ var arrayMethods = Object.create(arrayProto);
         inserted = args;
         break
       /*
-      arrayObject.splice(index,howmany,item1,.....,itemX)
-      index 整数，规定添加/删除项目的位置，使用负数可从数组结尾处规定位置.
-      howmany 要删除的项目数量。如果设置为 0，则不会删除项目。
-      item1, ..., itemX 向数组添加的新项目。
+          arrayObject.splice(index,howmany,item1,.....,itemX)
+          index 整数，规定添加/删除项目的位置，使用负数可从数组结尾处规定位置.
+          howmany 要删除的项目数量。如果设置为 0，则不会删除项目。
+          item1, ..., itemX 向数组添加的新项目。
 
-      这里把 [item1, ..., itemX] 赋给 inserted
+          这里把 [item1, ..., itemX] 赋给 inserted
        */
       case 'splice':
         inserted = args.slice(2);
@@ -1481,14 +1484,18 @@ var arrayMethods = Object.create(arrayProto);
   });
 });
 
-/*  */
+
 
 /*
-如果没有执行前面的 forEach 方法，arrayKeys 为空数组 []
-执行了 forEach 后，arrayKeys 为 ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
+  ./array.js 中：
+  const arrayProto = Array.prototype
+  export const arrayMethods = Object.create(arrayProto)
 
-虽然以上 forEach 方法定义以上 push 等属性时都是不可枚举的，但是 Object.getOwnPropertyNames 方法是可以返回不可枚举的属性名的
- */ 
+  ① 到这里 arrayMethods 是个空对象 {}，只不过原型指向 Array.prototype
+  ② 然后，指向 foreach 循环，通过 def() 方法为 arrayMethods 添加 ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"] 等不可枚举属性
+  ③ 虽然这些属性不可枚举，但是 Object.getOwnPropertyNames 方法可以返回属性的不可枚举属性
+  ④ 所以，arrayKeys = ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
+ */
 var arrayKeys = Object.getOwnPropertyNames(arrayMethods);
 
 /**
@@ -1508,11 +1515,36 @@ var observerState = {
  * collect dependencies and dispatches updates.
  */
 // 本质是调用 defineReactive$$1 对 value 对象的每一个属性的 getter/setters 进行劫持
+/*
+  对 value 对象/数组的每个属性的 getter/setters 进行劫持，收集依赖（主题）和分发更新通知
+
+  注意对象和数组的处理方式不一样。
+  ① value 是对象，对应一个 dep，对 value 的每一个属性的 getter/setters 进行劫持
+  ② value 是数组，对应一个 dep，值得注意的是我们期待的数组每一项都是对象，所以 value 应该是这样子：
+     value: [
+          { message: 'Foo' },
+          { message: 'Bar' }
+     ]
+     于是，遍历 value 数组，对每一个 obj 子项执行 observe(obj)，实质就是 new Observer(obj)
+
+     也就是说:
+     若 value 是对象，它对应一个 dep
+     若 value 是数组，它自己对应一个 dep，每个子元素对象也各自对应一个 dep
+ */
 var Observer = function Observer (value) {
   this.value = value;
   // 管理对 value 值关注的订阅者，例如 value 数组 push/unshift/splice 操作时，会通知所有的订阅者
   this.dep = new Dep();
-  // 如果作为根数据，那么 vmCount 属性加 1
+  /*
+      vmCount 默认值为 0
+      
+      ① Observer 构造函数只会在 observe(value, asRootData) 方法中调用：
+         ob = value.__ob__（或：ob = new Observer(value)）
+      ② 如果 asRootData 为 true，表示 value 是根 $data，那就
+         ob.vmCount++;
+
+      也就是说，同一个 value 对象可以作为多个组件的根 $data，vmCount 用来标记共有多少个组件将对象 value 作为根 $data
+   */
   this.vmCount = 0;
 
   // 通过 Object.defineProperty 定义 __ob__ 属性指向当前 Observer 实例
@@ -1530,17 +1562,17 @@ var Observer = function Observer (value) {
       : copyAugment;
 
     /*
-    ① arrayMethods = Object.create(Array.prototype);
-       arrayKeys = Object.getOwnPropertyNames(arrayMethods)
-       即 arrayKeys = ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
-    ② 如果支持 __proto__ 写法
-       那么 value.__proto__ = arrayMethods;
-    ③ 如果不支持 __proto__ 写法
-       那么依次将 arrayMethods[key] 赋给 value[key]，其中 key 为 "push", "pop", "shift", "unshift", "splice", "sort", "reverse" 等 7 个方法名之一
-     
-     所以，以下这句的作用就是将数组 value 的原型对象设置为数组的原型对象 arrayMethods
-
-     根本作用是，对数组 value 的 push/unshift/splice/... 方法进行代理，调用这些方法时，会触发 dom 更新
+      ① arrayMethods = Object.create(Array.prototype);
+         之后用 foreach 循环对 arrayMethods 的 ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"] 方法重写
+         arrayKeys = Object.getOwnPropertyNames(arrayMethods)
+         即 arrayKeys = ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]
+      ② 如果支持 __proto__ 写法
+         那么 value.__proto__ = arrayMethods;
+      ③ 如果不支持 __proto__ 写法
+         那么依次将 arrayMethods[key] 赋给 value[key]，其中 key 为 "push", "pop", "shift", "unshift", "splice", "sort", "reverse" 等 7 个方法名之一
+       
+       所以，以下这句的作用就是将数组 value 的 push/unshift/splice/... 等方法进行劫持
+       劫持之后，value 数组的这些方法执行时，除了对数组操作，还会发出通知，触发 dom 更新
      */
     augment(value, arrayMethods, arrayKeys);
     // observeArray 方法还是会调用 Observer 方法，即走到下面的 walk 方法
@@ -1561,7 +1593,7 @@ Observer.prototype.walk = function walk (obj) {
   // Object.keys 用来遍历对象的属性，返回一个数组，该数组的成员都是对象自身的（而不是继承的）所有属性名。注意，Object.keys 方法只返回可枚举的属性。
   var keys = Object.keys(obj);
   for (var i = 0; i < keys.length; i++) {
-    // 在 obj 对象上拦截 keys[i] 属性的 get/set 操作
+    // 在 obj 对象上拦截 keys[i] 属性的 getter/setters 操作
     defineReactive$$1(obj, keys[i], obj[keys[i]]);
   }
 };
@@ -1608,7 +1640,7 @@ function protoAugment (target, src, keys) {
 function copyAugment (target, src, keys) {
   for (var i = 0, l = keys.length; i < l; i++) {
     var key = keys[i];
-    // 依次将 src[key] 赋予 target[key]
+    // 依次将 src[key] 赋值给 target[key]
     def(target, key, src[key]);
   }
 }
@@ -1618,6 +1650,11 @@ function copyAugment (target, src, keys) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
+/*
+  返回一个与 value 对象/数组关联的 Observer 实例
+  ① 若之前创建过关联的 Observer 实例，那就用之，不需重新创建。
+  ② 若没有关联的 Observer 实例，那就用 new Observer(value) 新创建一个
+ */
 // 本质就是调用 new Observer(value)。为 value 创建一个 Observer 实例。asRootData 为 true 表示当前 value 为根数据。
 function observe (value, asRootData) {
   // 如果 vulue 不是对象就不处理了
@@ -1625,7 +1662,7 @@ function observe (value, asRootData) {
     return
   }
   var ob;
-  // 如果已经有对应的观察者对象，就用这个已经存在的
+  // 1. 若有与 value 相关联的 Observer 实例，那就用这个实例
   if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
     ob = value.__ob__;
   // 如果没有对应的观察者对象，就新创建一个
@@ -1643,6 +1680,7 @@ function observe (value, asRootData) {
     (Array.isArray(value) || isPlainObject(value)) &&
     Object.isExtensible(value) &&
     !value._isVue
+  // 2. 新建一个与 value 相关联的 Observer 实例
   ) {
     ob = new Observer(value);
   }
@@ -1669,11 +1707,11 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
   var dep = new Dep();
   
   /*
-  获取 key 属性的属性描述对象，例如：
+      获取 key 属性的属性描述对象，例如：
 
-  var o = {a:1}
-  var props = Object.getOwnPropertyDescriptor(o,'a')
-  -> {value: 1, writable: true, enumerable: true, configurable: true}
+      var o = {a:1}
+      var props = Object.getOwnPropertyDescriptor(o,'a')
+      -> {value: 1, writable: true, enumerable: true, configurable: true}
   */
   var property = Object.getOwnPropertyDescriptor(obj, key);
 
@@ -1687,24 +1725,23 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
   var setter = property && property.set;
 
   /*
-   shallow 的意思是"浅的"，也就是说没有指定"浅观察"，就是深度观察
+    ① shallow 的意思是"浅的"，也就是说没有指定"浅观察"，就是深度观察（子属性也要劫持）
 
-   举例来说：
-   obj = {
+    举例来说：
+    obj = {
      a : {
         aa : 1
-     },
-     b : {
-        bb : 2
      }
-   }
+    }
 
-   这里的 val 就不同普通的原始类型值了，val 是 {aa : 1}，{bb : 1} 这样的对象
-   那么就继续递归遍历 val 对象的属性，劫持其属性的 getter/setter
+    这里的 val 是 {aa : 1} 这样的对象，那么就递归遍历 {aa : 1} 对象的属性，劫持其属性的 getter/setter
 
+    ② 反过来说，若 shallow 为 true，就不用管 val 的子属性了
+
+    总结一下：
+    递归：observe(val) -> new Observer(val) -> defineReactive$$1()
+    【重要】以下这句作用就是：递归遍历劫持 val 的所有子属性（这里的 val 必须为对象或者数组 childOb 才有值）
   */
-  // observe(val) -> new Observer(val) -> defineReactive$$1()
-  // 【重要】所以这句作用就是：递归遍历劫持 val 的所有子属性，这里的 val 必须为对象或者数组 childOb 才有值
   var childOb = !shallow && observe(val);
 
 
@@ -1717,10 +1754,25 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
     get: function reactiveGetter () {
       var value = getter ? getter.call(obj) : val;
       /*
-          只有 watcher 新建过程，Dep.target 才会有值，就是当前时刻正在新建的 watcher
-          如果哪个 watcher 新建过程中来获取这个 key 属性，说明它关注这个 key 属性
-          那就把它加入到 key 属性的订阅者数组里，等到 key 属性更新了，就通知它
-       */
+          看看这句代码的执行流程：
+          dep.depend()
+          -> Dep.target.addDep(dep)
+          -> Dep.target.newDepIds.add(dep.id)
+             Dep.target.newDeps.push(dep)
+             dep.addSub(Dep.target)
+
+          也就是说：
+          ① Dep.target 这个 watcher 收录 dep/dep.id（主题/主题id）
+          ② dep 主题的订阅列表也收录 Dep.target 这个 watcher
+
+          所以，这个操作可以理解为 Dep.target 和 dep ”互相关注“
+
+          再深挖一下：
+          ① Dep.targe 表示正在计算属性值的 watcher，这是全局唯一的。任意时刻只允许有一个 watcher 正在计算。
+          ② 代码流程能走到这个 reactiveGetter 方法里，说明此时要获取 obj[key] 这个值
+          ③ 这就说明正在计算属性值的 watcher 对 obj[key] 这个值感兴趣，obj[key] 会影响计算结果
+          ④ 所以 obj[key] 改变时需要通知 watcher。也就是说 watcher 需关注主题 dep，由 dep 来给 watcher 发通知。
+      */
       if (Dep.target) {
         // 相当于 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里
         dep.depend();
@@ -1777,7 +1829,6 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
       // 获取旧值
       var value = getter ? getter.call(obj) : val;
 
-      /* eslint-disable no-self-compare */
       // 如果旧值和新值相等或者旧值和新值都是 NaN，则不进行设置操作。（NaN 应该是唯一不等于自身的值）
       if (newVal === value || (newVal !== newVal && value !== value)) {
         return
@@ -1861,7 +1912,15 @@ function set (target, key, val) {
     target[key] = val;
     return val
   }
-  // 劫持新增属性 key
+  /*
+    走到这，得同时满足几个条件：
+    1. target 是对象
+    2. target 不是 Vue 实例或其根 $data
+    3. target 之前不存在 key 属性
+    4. target 是”活性“的，也就是说执行过 observe(target)，target 有对应的 Observer 实例
+   
+    于是，将这个新增的属性也定义为”活性“属性
+   */
   defineReactive$$1(ob.value, key, val);
   // 通知所有关注 target 的订阅者
   ob.dep.notify();
@@ -4531,8 +4590,13 @@ var uid$2 = 0;
     (11) 执行 dep.notify() 就会遍历 dep.subs 中的所有 watcher，并依次执行 watcher.update()
     (12) 执行 watcher.update() 又会触发 watcher.run()
     (13) watcher.run() 触发 watcher.cb.call(watcher.vm, value, oldValue);
-
 */
+/*
+    一个 watcher 实例主要做以下几件事：
+    ① 解析表达式 expOrFn，它可能是字符串形式的表达式或者是函数
+    ② 收集主题 deps。watcher 取值过程中若获取某个”活性“属性 key，那么就说明这个 watcher 对属性 key 感兴趣，就把 watcher 和 key 的 dep 互相”关注“
+    ③ 当 expOrFn 变化时，就能触发回调函数 cb 执行
+ */
 var Watcher = function Watcher (vm, expOrFn, cb, options) {
   // 当前 watcher 的 vm 属性指向 vm
   this.vm = vm;
@@ -4680,14 +4744,24 @@ Watcher.prototype.get = function get () {
 /**
  * Add a dependency to this directive.
  */
+/*
+      新增一个 dep：
+      ① 订阅者 watcher 添加主题 dep（每个订阅者也可以订阅多个主题）
+      ② 若发现 watcher.depIds 列表里没有 dep.id，那就调用 dep.addSub(watcher)，即 dep 主题添加订阅者 watcher
+   
+      这是一个互相关注的操作。订阅者有一个主题列表，主题也有一个订阅者列表。
+*/
 Watcher.prototype.addDep = function addDep (dep) {
   var id = dep.id;
-  // this.newDepIds 是一个 _Set 实例
+  // 注意新添加的 id/dep 是加入到 this.newDepIds/this.newDeps 中，而不是 this.depIds/this.deps
   if (!this.newDepIds.has(id)) {
     this.newDepIds.add(id);
     this.newDeps.push(dep);
 
-    // 没有 this.depIds 没有这个 id，说明当前 watcher 没有进入到 dep 的订阅列表里
+    /*
+          ① this.depIds 中没有 dep.id，说明 this 还不在 dep 的订阅者列表里，那就加进去
+          ② 反过来看，这次 this.newDepIds 把 dep.id 加进去了，等 this.newDepIds 替换 this.depIds 后，this.depIds 中就有这个 dep.id 了，所以不会重新订阅
+    */
     if (!this.depIds.has(id)) {
       // 添加订阅者。将当前 watcher 加入到 dep.subs 数组里
       dep.addSub(this);
@@ -4698,29 +4772,42 @@ Watcher.prototype.addDep = function addDep (dep) {
 /**
  * Clean up for dependency collection.
  */
+/*
+    两件事：
+    1. 对于 watcher 已经关注了的 watcher.deps 这组主题，逐一检查
+       若某个 dep.id 没有出现在 watcher.newDepIds 这个重新收集的集合里，说明 watcher 对这个主题不再关注了，那就取消关注
+    2. 用重新收集的 newDeps/newDepIds 替换旧的 deps/depIds
+*/
 Watcher.prototype.cleanupDeps = function cleanupDeps () {
   var this$1 = this;
 
   var i = this.deps.length;
   while (i--) {
     var dep = this$1.deps[i];
+    // 若 newDepIds 中没有 dep.id，说明这个 watcher 不再对这个 dep 感兴趣了
     if (!this$1.newDepIds.has(dep.id)) {
-      // 删除订阅者
+      // 当前 watcher 从 dep 的订阅列表中移除
       dep.removeSub(this$1);
     }
   }
 
+  /*
+      ① 更新 dep.id 组成的集合
+      这样没有创建新的集合，便完成了两个集合内容的交换。
+  */ 
   var tmp = this.depIds;
   this.depIds = this.newDepIds;
   this.newDepIds = tmp;
-  // this.newDepIds 清空
   this.newDepIds.clear();
 
-
-  tmp = this.deps;
-  this.deps = this.newDeps;
-  this.newDeps = tmp;
-  this.newDeps.length = 0;
+  /*
+      ② 更新 dep 组成的数组
+      这样没有创建新的数组，便完成了两个数组内容的交换。
+  */ 
+  tmp = this.deps;            // 将中间变量 tmp 指向 this.deps 数组
+  this.deps = this.newDeps;   // 将 this.deps 指向 this.newDeps 数组
+  this.newDeps = tmp;         // 将 this.newDeps 指向 tmp，也就是指向 this.deps 数组
+  this.newDeps.length = 0;    // 将 this.newDeps 数组清空
 };
 
 /**
@@ -4728,16 +4815,16 @@ Watcher.prototype.cleanupDeps = function cleanupDeps () {
  * Will be called when a dependency changes.
  */
 Watcher.prototype.update = function update () {
-  /* istanbul ignore else */
+  // ① dirty 置为 true
   if (this.lazy) {
-    // 标志 dirty，所以这里是类似于 angular 的脏检查机制？
-    this.dirty = true;
-  // 同步，直接执行
+    // 计算属性必须 dirty 为 true 才会重新计算
+    this.dirty = true
+  // ② 同步执行 run() 
   } else if (this.sync) {
-    this.run();
-  // 否则，将当前 watcher 加入队列
+    this.run()
+  // ③ watcher 入队，异步执行 watcher.run()
   } else {
-    queueWatcher(this);
+    queueWatcher(this)
   }
 };
 
@@ -4796,14 +4883,18 @@ Watcher.prototype.depend = function depend () {
   var i = this.deps.length;
   while (i--) {
     /*
-    Dep.prototype.depend = function depend () {
-      if (Dep.target) {
-        Dep.target.addDep(this);
-      }
-    };
+    看看 Dep.prototype.depend : function(){
+        if (Dep.target) {
+          Dep.target.addDep(this)
+        }
+    }
+    
+    所以，Watcher.prototype.depend 的作用是：
+    遍历 this.deps，然后对每一个 dep 执行 Dep.target.addDep(dep)
+    这可能会导致 Dep.target 关注 dep
 
-    如果 Dep.target 存在，那么 Dep.target 添加主题 deps[i]
-    */
+    这也算对 this.deps 的每一个主题 dep 做一个整理吧，可能使得 Dep.target 关注这里的每一个 dep
+   */
     this$1.deps[i].depend();
   }
 };
