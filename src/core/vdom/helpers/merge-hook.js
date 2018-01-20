@@ -22,7 +22,7 @@ export function mergeVNodeHook (def: Object, hookKey: string, hook: Function) {
     invoker = createFnInvoker([wrappedHook])
   // ② def[hookKey] 存在
   } else {
-    // a. 已经存在一个 invoker，那就直接合并
+    // a. 如果已经存在一个 invoker，那就直接合并
     if (isDef(oldHook.fns) && isTrue(oldHook.merged)) {
       // already a merged invoker
       invoker = oldHook
