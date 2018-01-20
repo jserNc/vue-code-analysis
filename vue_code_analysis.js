@@ -2970,19 +2970,26 @@ var VNode = function VNode (
   this.text = text;
   this.elm = elm;
   this.ns = undefined;
+  // 所在的组件实例，也就是说当前 vnode 在组件 vnode.context 中渲染
   this.context = context;
   this.functionalContext = undefined;
   this.key = data && data.key;
   this.componentOptions = componentOptions;
+  // 当前 vnode 节点对应的组件实例
   this.componentInstance = undefined;
   this.parent = undefined;
   this.raw = false;
   this.isStatic = false;
   this.isRootInsert = true;
+  // 是否为空的注释占位符
   this.isComment = false;
+  // 是否为克隆节点
   this.isCloned = false;
+  // 是否为 v-once 节点
   this.isOnce = false;
+  // 异步组件工厂方法
   this.asyncFactory = asyncFactory;
+  // 异步组件相关元数据，例如 node.asyncMeta = { data: data, context: context, children: children, tag: tag }
   this.asyncMeta = undefined;
   this.isAsyncPlaceholder = false;
 };
@@ -2996,34 +3003,34 @@ prototypeAccessors.child.get = function () {
 };
 
 /*
-Object.defineProperties() 方法直接在一个对象上定义新的属性或修改现有属性，并返回该对象。
+  Object.defineProperties() 方法直接在一个对象上定义新的属性或修改现有属性，并返回该对象。
 
-例如：
-var obj = {};
-Object.defineProperties(obj, {
-  'property1': {
-    value: true,
-    writable: true
-  },
-  'property2': {
-    value: 'Hello',
-    writable: false
-  }
-  // etc. etc.
-});
+  例如：
+  var obj = {};
+  Object.defineProperties(obj, {
+    'property1': {
+      value: true,
+      writable: true
+    },
+    'property2': {
+      value: 'Hello',
+      writable: false
+    }
+    // etc. etc.
+  });
 
-这里相当于：
-Object.defineProperties( VNode.prototype, {
-  child: {
-    get:function () {
-      return this.componentInstance
-    };
-  }
-});
+  这里相当于：
+  Object.defineProperties( VNode.prototype, {
+    child: {
+      get:function () {
+        return this.componentInstance
+      };
+    }
+  });
 
-也就是说，VNode 的实例访问 child 属性，会返回其 componentInstance 属性
-var vn = new VNode();
-vn.child -> vn.componentInstance
+  也就是说，VNode 的实例访问 child 属性，会返回其 componentInstance 属性
+  var vnode = new VNode();
+  vnode.child -> vn.componentInstance
 */
 Object.defineProperties( VNode.prototype, prototypeAccessors );
 
@@ -3048,7 +3055,18 @@ function createTextVNode (val) {
 // used for static nodes and slot nodes because they may be reused across
 // multiple renders, cloning them avoids errors when DOM manipulations rely
 // on their elm reference.
-// 克隆一个节点
+/*
+  试想：如果是浅拷贝方式来克隆一个节点，那么多个节点之间共用一个 vnode 实例
+  <div id="parent">
+      <user-profile ref="profile1"></user-profile>
+      <user-profile ref="profile2"></user-profile>
+  </div>
+  如果这里的 2 个 <user-profile> 共用一个 vnode
+
+  那么 vnode.componentInstance 到底是 profile1 还是 profile2 呢？
+  
+  所以，为了避免这种问题，克隆的节点的时候新建一个完全独立的 vnode 实例，只是沿用属性
+ */
 function cloneVNode (vnode) {
   /*
   看一下 VNode 构造函数：
@@ -7746,34 +7764,51 @@ var ref = {
   }
 };
 
-// 添加/删除 ref
+/*
+    ① 参数 isRemoval 为 true，删除引用
+    ② 否则，添加引用
+ */
 function registerRef (vnode, isRemoval) {
   var key = vnode.data.ref;
   // 如果没有 vnode.data.ref，直接返回
   if (!key) { return }
 
+  /*
+      vm 为当前 vnode 所在的父组件实例，例如上例中的 parent
+      vm.$refs 用来管理所有子组件的引用
+   */
   var vm = vnode.context;
+
+  // vnode 对应的组件实例，也就是 ref
   var ref = vnode.componentInstance || vnode.elm;
   var refs = vm.$refs;
-  // 删除引用
+
+  // 1. 删除引用
   if (isRemoval) {
+    /*
+        ① refs[key] 是数组，删除数组中的 ref
+
+        当 ref 和 v-for 一起使用时，获取到的引用会是一个数组，包含和循环数据源对应的子组件。
+        所以 refs[key] 是一组组件实例，ref 就是其中一个
+     */
     if (Array.isArray(refs[key])) {
       remove(refs[key], ref);
+    // ② refs[key] 不是数组，直接置为 undefined
     } else if (refs[key] === ref) {
       refs[key] = undefined;
     }
-  // 添加引用
+  // 2. 添加引用
   } else {
-    // 当 ref 和 v-for 一起使用时，获取到的引用会是一个数组
+    // ① 当 ref 和 v-for 一起使用时，需要 refs[key] 需要转为数组
     if (vnode.data.refInFor) {
-      // refs[key] 不是数组，初始化为数组
+      // refs[key] 不是数组，转为数组
       if (!Array.isArray(refs[key])) {
         refs[key] = [ref];
-      // refs[key] 是数组，在数组末尾添加 ref 
+      // refs[key] 是数组，添加 ref 
       } else if (refs[key].indexOf(ref) < 0) {
-        // $flow-disable-line
         refs[key].push(ref);
       }
+    // ② 一般情况，直接给 refs 添加 key 属性就好了
     } else {
       refs[key] = ref;
     }
@@ -8918,6 +8953,7 @@ var directives = {
 
 // 更新指令
 function updateDirectives (oldVnode, vnode) {
+  // 旧的 vnode 或新的 vnode 有指令就进行更新。也就是说，如果都没指令就不更新了
   if (oldVnode.data.directives || vnode.data.directives) {
     _update(oldVnode, vnode);
   }
@@ -8925,18 +8961,30 @@ function updateDirectives (oldVnode, vnode) {
 
 // 更新指令
 function _update (oldVnode, vnode) {
-  // oldVnode 是 emptyNode，说明是 create 操作
+  // ① oldVnode 是 emptyNode，说明是 create 操作
   var isCreate = oldVnode === emptyNode;
-  // vnode 是 emptyNode，说明是 destroy 操作
+  // ② vnode 是 emptyNode，说明是 destroy 操作
   var isDestroy = vnode === emptyNode;
 
   // 一个 json 对象，即所有指令的集合
   var oldDirs = normalizeDirectives$1(oldVnode.data.directives, oldVnode.context);
   var newDirs = normalizeDirectives$1(vnode.data.directives, vnode.context);
 
+  // 包含有 inserted 钩子的所有指令
   var dirsWithInsert = [];
+  // 包含有 componentUpdated 钩子的所有指令
   var dirsWithPostpatch = [];
 
+  /*
+      一个指令对象可包括以下几个钩子函数，例如：
+      dir.def ：{
+          bind：只调用一次，指令第一次绑定到元素时调用。在这里可以进行一次性的初始化设置。
+          inserted：被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)。
+          update：所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新。
+          componentUpdated：指令所在组件的 VNode 及其子 VNode 全部更新后调用。
+          unbind：只调用一次，指令与元素解绑时调用。
+      }
+  */
   var key, oldDir, dir;
   // 遍历 vnode 的所有指令
   for (key in newDirs) {
@@ -8944,38 +8992,29 @@ function _update (oldVnode, vnode) {
     oldDir = oldDirs[key];
     dir = newDirs[key];
 
-    /*
-        指令定义函数提供了几个钩子函数 (可选)：
-        bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
-        inserted：被绑定元素插入父节点时调用 (父节点存在即可调用，不必存在于 document 中)。
-        update：所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新 (详细的钩子函数参数见下)。
-        componentUpdated：所在组件的 VNode 及其孩子的 VNode 全部更新时调用。
-        unbind：只调用一次，指令与元素解绑时调用。
-    */
-
-    // 没有对应的旧指令
+    // ① 没有对应的旧指令
     if (!oldDir) {
       // new directive, bind
       // 执行 dir.def['bind'] 钩子方法，第一次绑定，所以执行指令定义函数的 bind 钩子函数
       callHook$1(dir, 'bind', vnode, oldVnode);
-      // 如果还定义了 inserted 钩子函数，那就把当前 dir 加入队列吧，后面在元素插入父节点时会用到的
+      // 如果还定义了 inserted 钩子函数，那就把当前 dir 加入队列，后面在元素插入父节点时会用到的
       if (dir.def && dir.def.inserted) {
         dirsWithInsert.push(dir);
       }
-    // 有对应的旧指令
+    // ② 有对应的旧指令
     } else {
       // existing directive, update
       dir.oldValue = oldDir.value;
       // 执行 dir.def['update'] 钩子方法
       callHook$1(dir, 'update', vnode, oldVnode);
-      // 如果还定义了 componentUpdated 钩子函数，那就把当前 dir 加入队列吧，后面在 vnode 及其孩子的 vnode 全部更新时调用时会用到的
+      // 如果还定义了 componentUpdated 钩子函数，那就把当前 dir 加入队列，后面在 vnode 及其孩子的 vnode 全部更新时调用时会用到的
       if (dir.def && dir.def.componentUpdated) {
         dirsWithPostpatch.push(dir);
       }
     }
   }
 
-  // inserted 钩子
+  // 遍历所有 inserted 钩子函数的指令
   if (dirsWithInsert.length) {
     var callInsert = function () {
       for (var i = 0; i < dirsWithInsert.length; i++) {
@@ -8983,16 +9022,23 @@ function _update (oldVnode, vnode) {
         callHook$1(dirsWithInsert[i], 'inserted', vnode, oldVnode);
       }
     };
-    // oldVnode 是 emptyNode，即第一次 create 指令
+    // ① 节点是新创的，将指令 inserted 钩子合并到组件的 insert 钩子中
     if (isCreate) {
-      // 将函数 callInsert 添加到 vnode.data.hook['insert'] 中，那么以后执行 vnode.data.hook['insert'] 这个函数时，就会执行 callInsert 了
+      /*
+          mergeVNodeHook (def, hookKey, hook) 的作用：
+          将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+       
+          下面这句的作用是将 callInsert 函数合并到整个组件的的 insert 钩子函数中
+          从这里也可以看到指令的 inserted 钩子函数是在组件 insert 时触发（插入到父元素时触发）
+       */
       mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'insert', callInsert);
+    // ② 节点已存在，说明已经合并过了，那就直接执行 inserted 钩子就好
     } else {
       callInsert();
     }
   }
 
-  // componentUpdated 钩子
+  // 遍历所有 componentUpdated 钩子函数的指令
   if (dirsWithPostpatch.length) {
     // 将匿名函数添加到 vnode.data.hook['postpatch'] 中，那么以后执行 vnode.data.hook['postpatch'] 这个函数时，就会执行这个匿名函数了
     mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'postpatch', function () {
@@ -9003,13 +9049,12 @@ function _update (oldVnode, vnode) {
     });
   }
 
-  // oldVnode 不是 emptyNode，说明之前绑定过指令
+  // 不是新创建的 vnode 才执行
   if (!isCreate) {
     // 对于不要的指令进行解绑，会调用 unbind 钩子
     for (key in oldDirs) {
       if (!newDirs[key]) {
-        // no longer present, unbind
-        // 执行 oldDirs[key].def.unbind 方法
+        // 不需要的旧指令解绑，调用 unbind 钩子函数
         callHook$1(oldDirs[key], 'unbind', oldVnode, oldVnode, isDestroy);
       }
     }
@@ -9018,10 +9063,36 @@ function _update (oldVnode, vnode) {
 
 var emptyModifiers = Object.create(null);
 
+/*
+      看看 VNodeDirective 类型的定义：
+       declare type VNodeDirective = {
+        name: string;
+        rawName: string;
+        value?: any;
+        oldValue?: any;
+        arg?: string;
+        modifiers?: ASTModifiers;
+        def?: Object;
+      };
+
+      参数 dirs 的结构如下：
+      [
+        {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        ...
+      ]
+
+      返回值为对 dirs 修正后的对象 res，结构为：
+      {
+        dirName1 : {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        dirName2 : {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        ...
+      }
+*/
 // 返回一个 json 对象，即所有指令的集合
 function normalizeDirectives$1 (dirs, vm) {
   var res = Object.create(null);
-  // 如果 dirs 为假，那就返回空对象
+  // ① 若 dirs 不存在，直接返回空对象
   if (!dirs) {
     return res
   }
@@ -9033,9 +9104,27 @@ function normalizeDirectives$1 (dirs, vm) {
       dir.modifiers = emptyModifiers;
     }
     res[getRawDirName(dir)] = dir;
-    // dir.def 值为 vm.$options['directives'][dir.name]
+    /*
+      一个指令对象可包括以下几个钩子函数，例如：
+      dir.def ：{
+          bind：只调用一次，指令第一次绑定到元素时调用。在这里可以进行一次性的初始化设置。
+          inserted：被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)。
+          update：所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新。
+          componentUpdated：指令所在组件的 VNode 及其子 VNode 全部更新后调用。
+          unbind：只调用一次，指令与元素解绑时调用。
+      }
+     */
     dir.def = resolveAsset(vm.$options, 'directives', dir.name, true);
   }
+  /*
+      res 结构如下：
+      {
+        dirName1 : {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        dirName2 : {name:\"" + (dir.name) + "\",rawName:\"" + (dir.rawName) + "\"" + (dir.value ? (",value:(" + (dir.value) + "),expression:" + (JSON.stringify(dir.value))) : '') + (dir.arg ? (",arg:\"" + (dir.arg) + "\"") : '') + (dir.modifiers ? (",modifiers:" + (JSON.stringify(dir.modifiers))) : '') + "},
+        ...
+      }
+   */
+  // ② 对每个 dir 的属性进行修正，然后存进 res 对象
   return res
 }
 
@@ -9043,18 +9132,35 @@ function normalizeDirectives$1 (dirs, vm) {
 function getRawDirName (dir) {
   /*
     ① dir.rawName 存在，那就直接返回 dir.rawName
-    ② 否则，返回 dir.name 和 dir.modifiers 用 '.' 拼起来的字符串
-       例如：
-       <div id="hook-arguments-example" v-demo:foo.a.b="message"></div>
-       demo 指令对应的 modifiers 为：{"a":true,"b":true}
+    ② 否则，返回 dir.name 和 dir.modifiers 对象的键值用 '.' 拼起来的字符串
+       
+    例如：<div id="hook-arguments-example" v-demo:foo.a.b="message"></div>
+    返回值为 rawName = "v-demo:foo.a.b"
   */
+  // return dir.rawName || ((dir.name) + "." + (Object.keys(dir.modifiers || {}).join('.')))
   return dir.rawName || ((dir.name) + "." + (Object.keys(dir.modifiers || {}).join('.')))
 }
 
-// 执行 dir.def[hook] 方法
+/*
+  执行钩子函数
+  例如：dir.def = { bind: definition, update: definition }
+ */
 function callHook$1 (dir, hook, vnode, oldVnode, isDestroy) {
   var fn = dir.def && dir.def[hook];
   if (fn) {
+    /*
+      钩子函数参数分别如下：
+      vnode.elm：指令所绑定的元素，可以用来直接操作 DOM 。
+      dir：一个对象，包含以下属性：
+          name：指令名，不包括 v- 前缀。
+          value：指令的绑定值，例如：v-my-directive="1 + 1" 中，绑定值为 2。
+          oldValue：指令绑定的前一个值，仅在 update 和 componentUpdated 钩子中可用。无论值是否改变都可用。
+          expression：字符串形式的指令表达式。例如 v-my-directive="1 + 1" 中，表达式为 "1 + 1"。
+          arg：传给指令的参数，可选。例如 v-my-directive:foo 中，参数为 "foo"。
+          modifiers：一个包含修饰符的对象。例如：v-my-directive.foo.bar 中，修饰符对象为 { foo: true, bar: true }。
+      vnode：Vue 编译生成的虚拟节点。
+      oldVnode：上一个虚拟节点，仅在 update 和 componentUpdated 钩子中可用。
+     */
     try {
       // 这个方法主要就是这一句，即执行 dir.def[hook] 方法
       fn(vnode.elm, dir, vnode, oldVnode, isDestroy);
