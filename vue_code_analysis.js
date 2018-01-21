@@ -5704,7 +5704,7 @@ function resolveInject (inject, vm) {
   }
 }
 
-// 创建功能性组件，最后返回一个 vnode
+// 创建函数式组件，最后返回一个 vnode
 function createFunctionalComponent (
   Ctor,
   propsData,
@@ -5755,7 +5755,7 @@ function createFunctionalComponent (
   return vnode
 }
 
-// 将 from 的属性都赋给 to
+// 将 from 的属性（属性名驼峰化）都赋给 to
 function mergeProps (to, from) {
   for (var key in from) {
     // camelize 方法将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
@@ -5920,7 +5920,7 @@ function createComponent (Ctor, data, context, children, tag) {
   // extract props，提取 props
   var propsData = extractPropsFromVNodeData(data, Ctor, tag);
 
-  // functional component，功能性组件，就在这里创建，然后返回
+  // functional component，函数式组件，就在这里创建，然后返回
   if (isTrue(Ctor.options.functional)) {
     return createFunctionalComponent(Ctor, propsData, data, context, children)
   }
@@ -6155,17 +6155,19 @@ function _createElement (context, tag, data, children, normalizationType) {
     return createEmptyVNode()
   }
 }
-// 核心就一句：vnode.ns = ns
+
+// 标记 vnode.ns = ns，vnode 和其子节点共用同一个 ns
 function applyNS (vnode, ns) {
   vnode.ns = ns;
   if (vnode.tag === 'foreignObject') {
     // use default namespace inside foreignObject
     return
   }
-  // 遍历子组件，递归调用 applyNS
+  // 遍历子节点，递归调用 applyNS
   if (isDef(vnode.children)) {
     for (var i = 0, l = vnode.children.length; i < l; i++) {
       var child = vnode.children[i];
+      // 子节点没有 ns 属性，标记之
       if (isDef(child.tag) && isUndef(child.ns)) {
         applyNS(child, ns);
       }

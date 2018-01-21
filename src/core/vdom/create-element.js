@@ -31,12 +31,18 @@ export function createElement (
   normalizationType: any,
   alwaysNormalize: boolean
 ): VNode {
+  // 若 data 为数组、字符串、数值，则参数含义重新分配
   if (Array.isArray(data) || isPrimitive(data)) {
     normalizationType = children
     children = data
     data = undefined
   }
+  // 强制正常标准化
   if (isTrue(alwaysNormalize)) {
+    /*
+      SIMPLE_NORMALIZE = 1; 简单标准化
+      ALWAYS_NORMALIZE = 2; 正常标准化
+    */
     normalizationType = ALWAYS_NORMALIZE
   }
   return _createElement(context, tag, data, children, normalizationType)
@@ -49,14 +55,36 @@ export function _createElement (
   children?: any,
   normalizationType?: number
 ): VNode {
+  // 避免使用被 observed 的 data 对象作为 vnode data
   if (isDef(data) && isDef((data: any).__ob__)) {
     process.env.NODE_ENV !== 'production' && warn(
       `Avoid using observed data object as vnode data: ${JSON.stringify(data)}\n` +
       'Always create fresh vnode data objects in each render!',
       context
     )
+    // 返回空的 vnode
     return createEmptyVNode()
   }
+
+  /*
+      var vm = new Vue({
+        el: '#example',
+        data: {
+          currentView: 'home'
+        },
+        components: {
+          home: { ... },
+          posts: { ...  },
+          archive: { ... }
+        }
+      })
+      <component v-bind:is="currentView">
+        <!-- 组件在 vm.currentview 变化时改变！ -->
+      </component>
+
+      对 vm.currentView 进行修改就可以在同一个挂载点动态切换多个组件了
+   */
+
   // object syntax in v-bind
   if (isDef(data) && isDef(data.is)) {
     tag = data.is
@@ -122,15 +150,18 @@ export function _createElement (
   }
 }
 
+// 标记 vnode.ns = ns，vnode 和其子节点共用同一个 ns
 function applyNS (vnode, ns) {
   vnode.ns = ns
   if (vnode.tag === 'foreignObject') {
     // use default namespace inside foreignObject
     return
   }
+  // 遍历子节点，递归调用 applyNS(child, ns)
   if (isDef(vnode.children)) {
     for (let i = 0, l = vnode.children.length; i < l; i++) {
       const child = vnode.children[i]
+      // 子节点没有 ns 属性，标记之
       if (isDef(child.tag) && isUndef(child.ns)) {
         applyNS(child, ns)
       }
