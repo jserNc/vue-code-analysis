@@ -14,7 +14,7 @@ import { isFalse, isTrue, isDef, isUndef, isPrimitive } from 'shared/util'
    主要有两种情况需要进行额外的标准化处理：
    1. 当 children 包含组件时（因为功能性组件可能会返回一个数组而不是一个单独的 root）
       这种情况下，仅需要一个简单的标准化处理。即：如果某个 child 是数组，那就通过 Array.prototype.concat 方法使之扁平化。
-      这样就可以确保 children 数组总是一维的（功能性组件也会对它的子组件进行标准化处理）。
+      这样就可以确保 children 数组总是一维的（函数式组件也会对它的子组件进行标准化处理）。
 */
 export function simpleNormalizeChildren (children: any) {
   for (let i = 0; i < children.length; i++) {

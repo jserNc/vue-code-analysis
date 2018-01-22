@@ -294,14 +294,17 @@ export function updateChildComponent (
     vm.$scopedSlots !== emptyObject // has old scoped slots 有旧的作用域 slots
   )
 
+  // ① 更新父节点
   vm.$options._parentVnode = parentVnode
   // vm 对应的占位节点
   vm.$vnode = parentVnode // update vm's placeholder node without re-render
 
-  // vm 对应的虚拟节点
   if (vm._vnode) { // update child tree's parent
+    // 更新子树的 parent
     vm._vnode.parent = parentVnode
   }
+
+  // ② 更新子节点
   vm.$options._renderChildren = renderChildren
 
   // update $attrs and $listensers hash
@@ -310,7 +313,7 @@ export function updateChildComponent (
   vm.$attrs = parentVnode.data && parentVnode.data.attrs
   vm.$listeners = listeners
 
-  // 更新 vm._props 对象
+  // ③ 更新 props
   if (propsData && vm.$options.props) {
     observerState.shouldConvert = false
     const props = vm._props
@@ -325,7 +328,7 @@ export function updateChildComponent (
     vm.$options.propsData = propsData
   }
 
-  // 更新 listeners
+  // ④ 更新监听 listeners
   if (listeners) {
     const oldListeners = vm.$options._parentListeners
     vm.$options._parentListeners = listeners
@@ -333,6 +336,7 @@ export function updateChildComponent (
   }
 
   // resolve slots + force update if has children
+  // ⑤ 更新插槽
   /*
     如果有插槽 slots
     ① 解析插槽

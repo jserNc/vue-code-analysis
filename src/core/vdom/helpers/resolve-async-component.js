@@ -43,6 +43,13 @@ export function createAsyncPlaceholder (
 }
 
 // 根据工厂函数 factory 的不同状态返回不同的组件构造函数
+/*
+    ① 异步组件工厂函数 factory 只是普通的函数，没有 factory.cid 属性
+    ② 而通过 Ctor = Vue.extend(extendOptions) 创建的组件构造函数都有 Ctor.cid 属性
+ 
+    如果执行 Ctor = resolveAsyncComponent(asyncFactory, baseCtor, context) 后
+    Ctor 为 undefined，说明异步任务没执行完，组件构造函数还没创建，那就调用 createAsyncPlaceholder() 先创建一个占位符
+ */
 export function resolveAsyncComponent (
   factory: Function, 
   baseCtor: Class<Component>,

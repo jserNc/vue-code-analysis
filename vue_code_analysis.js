@@ -3354,10 +3354,10 @@ function checkProp (
 
    主要有两种情况需要进行额外的标准化处理：
    ① 当 children 包含组件时
-      因为功能性组件可能会返回一个数组而不是一个单独的 root。
+      因为函数式组件可能会返回一个数组而不是一个单独的 root。
 
       这种情况下，仅需要一个简单的标准化处理。即：如果某个 child 是数组，那就通过 Array.prototype.concat 方法使之扁平化。
-      这样就可以确保 children 数组总是一维的（功能性组件也会对它的子组件进行标准化处理）。
+      这样就可以确保 children 数组总是一维的（函数式组件也会对它的子组件进行标准化处理）。
 
    ② 当 children 包含产生嵌套数组（多维数组）的结构时（e.g. <template>, <slot>, v-for）或 children 是用户手写的渲染函数/JSX 提供的。
       
@@ -4245,6 +4245,18 @@ function lifecycleMixin (Vue) {
   };
 }
 
+/*
+    vm.$mount() 手动地挂载一个未挂载的实例
+    a. 参数为元素选择器，挂载到该元素，替换的该元素内容
+    var MyComponent = Vue.extend({
+      template: '<div>Hello!</div>'
+    })
+    new MyComponent().$mount('#app')
+
+    b. 参数为空/undefined，在文档之外渲染，随后再挂载
+    var component = new MyComponent().$mount()
+    document.getElementById('app').appendChild(component.$el)
+ */
 // 安装组件
 function mountComponent (vm, el, hydrating) {
   vm.$el = el;
@@ -4325,7 +4337,14 @@ function mountComponent (vm, el, hydrating) {
 
   // manually mounted instance, call mounted on self
   // mounted is called for render-created child components in its inserted hook
-  // $vnode 为 vm 在父树种的占位节点，现在占位节点为 null，就是安装成功了
+  /*
+        并不是执行 vm.$mount() 方法一定会将 vm 组件挂载到文档中
+        参数为空/undefined，在文档之外渲染，随后再挂载例如：
+        var component = new MyComponent().$mount()
+        document.getElementById('app').appendChild(component.$el)
+
+        $vnode 为 vm 在父树种的占位节点，现在占位节点为 null，就是安装成功了
+   */
   if (vm.$vnode == null) {
     vm._isMounted = true;
     // 安装成功回调
@@ -4356,12 +4375,15 @@ function updateChildComponent (
     vm.$scopedSlots !== emptyObject // has old scoped slots
   );
 
+  // ① 更新父节点
   vm.$options._parentVnode = parentVnode;
   vm.$vnode = parentVnode; // update vm's placeholder node without re-render
 
   if (vm._vnode) { // update child tree's parent
     vm._vnode.parent = parentVnode;
   }
+
+  // ② 更新子节点
   vm.$options._renderChildren = renderChildren;
 
   // update $attrs and $listensers hash
@@ -4371,7 +4393,7 @@ function updateChildComponent (
   vm.$listeners = listeners;
 
   // update props
-  // 更新属性
+  // ③ 更新 props
   if (propsData && vm.$options.props) {
     observerState.shouldConvert = false;
     var props = vm._props;
@@ -4386,14 +4408,14 @@ function updateChildComponent (
   }
 
   // update listeners
-  // 更新监听
+  // ④ 更新监听 listeners
   if (listeners) {
     var oldListeners = vm.$options._parentListeners;
     vm.$options._parentListeners = listeners;
     updateComponentListeners(vm, listeners, oldListeners);
   }
   // resolve slots + force update if has children
-  // 更新插槽
+  // ⑤ 更新插槽
   if (hasChildren) {
     vm.$slots = resolveSlots(renderChildren, parentVnode.context);
     vm.$forceUpdate();
@@ -4439,6 +4461,16 @@ function activateChildComponent (vm, direct) {
   }
 }
 
+/*
+    组件失效和组件销毁对应的（componentVNodeHooks.destroy() 方法中看得清楚）：
+    // ① 不需要 keepAlive，直接销毁
+    if (!vnode.data.keepAlive) {
+      componentInstance.$destroy()
+    // ② 需要 keepAlive，那就标记失效
+    } else {
+      deactivateChildComponent(componentInstance, true)
+    }
+ */
 // 使子组件失效
 function deactivateChildComponent (vm, direct) {
   if (direct) {
@@ -5704,6 +5736,49 @@ function resolveInject (inject, vm) {
   }
 }
 
+/*
+  createFunctionalComponent 只在 createComponent 函数中调用：
+  if (isTrue(Ctor.options.functional)) {
+    return createFunctionalComponent(Ctor, propsData, data, context, children)
+  }
+  如果组件构造函数选项里 functional 为 true，那么该组件就是函数式组件
+  例如：
+  Vue.component('my-component', {
+    functional: true,
+    // 为了弥补缺少的实例，提供第二个参数作为上下文
+    render: function (createElement, context) {
+      // ...
+    },
+    // Props 可选
+    props: {
+      // ...
+    }
+  })
+  
+ 【函数式组件的特点是】：它无状态 (没有 data)，无实例 (没有 this 上下文)。
+  
+  对比一下普通的组件定义：
+  Vue.component('anchored-heading', {
+    render: function (createElement) {
+      // render 函数只有一个参数
+    },
+    props: {
+      // ...
+    }
+  })
+
+  函数式组件和普通组件定义的不同点体现在：
+  1. 显式指定 functional: true
+  2. render 函数多一个参数 context 代表上下文
+     其中，context 包括以下属性供组件使用：
+     props：提供 props 的对象
+     children: VNode 子节点的数组
+     slots: slots 对象
+     data：传递给组件的 data 对象
+     parent：对父组件的引用
+     listeners: (2.3.0+) 一个包含了组件上所注册的 v-on 侦听器的对象。这只是一个指向 data.on 的别名。
+     injections: (2.3.0+) 如果使用了 inject 选项，则该对象包含了应当被注入的属性。
+ */
 // 创建函数式组件，最后返回一个 vnode
 function createFunctionalComponent (
   Ctor,
@@ -5714,12 +5789,17 @@ function createFunctionalComponent (
 ) {
   var props = {};
   var propOptions = Ctor.options.props;
-  // 如果定义了 Ctor.options.props，将这些属性添加到 props 对象
+
+  /*
+    在 2.3.0 之前的版本中，如果一个函数式组件想要接受 props，则 props 选项是必须的。
+    在 2.3.0 或以上的版本中，你可以省略 props 选项，所有组件上的属性都会被自动解析为 props。
+   */
+  // ① 定义了 Ctor.options.props，那就以它作为 props
   if (isDef(propOptions)) {
     for (var key in propOptions) {
       props[key] = validateProp(key, propOptions, propsData || {});
     }
-  // 否则 props 对象取 data.attrs 和 data.props 的数据
+  // ② 否则，就将 data.attrs 和 data.props 作为 props
   } else {
     if (isDef(data.attrs)) { mergeProps(props, data.attrs); }
     if (isDef(data.props)) { mergeProps(props, data.props); }
@@ -5727,23 +5807,58 @@ function createFunctionalComponent (
   // ensure the createElement function in functional components
   // gets a unique context - this is necessary for correct named slot check
   /*
-    ① 确保 createElement 函数在功能性组件中
+    ① 确保 createElement 函数函数式组件中
     ② 获取唯一的上下文 —— 这对于检查命名插槽是有必要的
 
     Object.create 方法接受一个对象作为参数，然后以它为原型，返回一个实例对象。该实例完全继承继承原型对象的属性。
   */
   var _context = Object.create(context);
-  // 该函数返回一个 vnode
+  /*
+      h 是一个函数，该函数的作用是返回一个 vnode
+      h(a, b, c, d)
+      -> createElement(_context, a, b, c, d, true)
+
+      SIMPLE_NORMALIZE = 1; 简单标准化
+      ALWAYS_NORMALIZE = 2; 正常标准化
+
+      createElement 最后一个参数为 true 表示对 children(c) 强制采用”正常标准化”处理
+   */
   var h = function (a, b, c, d) { return createElement(_context, a, b, c, d, true); };
+  /*
+      函数式组件在声明的时候，render 函数有两个参数：
+      // 为了弥补缺少的实例，提供第二个参数作为上下文
+      render: function (createElement, context) {
+        // ...
+      }
+   */
   var vnode = Ctor.options.render.call(null, h, {
     data: data,
     props: props,
     children: children,
     parent: context,
     listeners: data.on || {},
+    /*
+        resolveInject() 返回一个 json 对象，键名为 inject 中【数组索引 | 属性名】，键值为 provide【属性名】中属性值
+        例如：
+        {
+          'foo' : 'bar'
+        }
+     */
     injections: resolveInject(Ctor.options.inject, context),
+    /*
+        slots 是一个函数，执行结果是一个 json 对象，每个子属性是由 dom 元素组成的数组
+        slots()
+        -> resolveSlots(children, context)
+        -> {
+          default : [...],
+          name1 : [...],
+          name2 : [...],
+          ...
+        }
+     */
     slots: function () { return resolveSlots(children, context); }
   });
+  // 给 vnode 添加属性
   if (vnode instanceof VNode) {
     vnode.functionalContext = context;
     vnode.functionalOptions = Ctor.options;
@@ -5768,14 +5883,14 @@ function mergeProps (to, from) {
 // hooks to be invoked on component VNodes during patch
 // 组件 patch 过程中的钩子方法 
 var componentVNodeHooks = {
-  // 初始化。如果没有组件实例，创建之；如果 keepAlive，则调用 prepatch 方法
+  // 1. 初始化（创建组件实例）
   init: function init (
     vnode,
     hydrating,
     parentElm,
     refElm
   ) {
-    // 不是组件实例或组件实例被销毁了
+    // ① 若该 vnode 没有对应的组件实例，那就创建一个新的
     if (!vnode.componentInstance || vnode.componentInstance._isDestroyed) {
       // 创建组件实例
       var child = vnode.componentInstance = createComponentInstanceForVnode(
@@ -5784,7 +5899,20 @@ var componentVNodeHooks = {
         parentElm,
         refElm
       );
+      /*
+          vm.$mount() 手动地挂载一个未挂载的实例
+          a. 参数为元素选择器，挂载到该元素，替换的该元素内容
+          var MyComponent = Vue.extend({
+            template: '<div>Hello!</div>'
+          })
+          new MyComponent().$mount('#app')
+
+          b. 参数为空/undefined，在文档之外渲染，随后再挂载
+          var component = new MyComponent().$mount()
+          document.getElementById('app').appendChild(component.$el)
+       */
       child.$mount(hydrating ? vnode.elm : undefined, hydrating);
+    // ② vnode 有对应的组件实例，那就更新这个组件（这里的 vnode.data.keepAlive 是个布尔值，true）
     } else if (vnode.data.keepAlive) {
       // kept-alive components, treat as a patch
       var mountedNode = vnode; // work around flow
@@ -5792,10 +5920,26 @@ var componentVNodeHooks = {
     }
   },
 
-  // 更新组件
+  // 2. prepatch（更新组件实例）
+  /*
+      看看数据类型 MountedComponentVNode：
+      declare type MountedComponentVNode = {
+        context: Component;
+        componentOptions: VNodeComponentOptions;
+        componentInstance: Component;
+        parent: VNode;
+        data: VNodeData;
+      };
+
+      prepatch(oldVnode,vnode) 的作用是更新组件：
+      ① 从 oldVnode 中获取对应的组件实例 child
+      ② 对实例 child 的 props、listeners、parent vnode、children 等进行更新
+   */
   prepatch: function prepatch (oldVnode, vnode) {
     var options = vnode.componentOptions;
+    // 组件实例
     var child = vnode.componentInstance = oldVnode.componentInstance;
+    // 对组件 child 的 props、listeners、parent vnode、children 等进行更新
     updateChildComponent(
       child,             // 组件实例
       options.propsData, // updated props，更新属性
@@ -5805,17 +5949,24 @@ var componentVNodeHooks = {
     );
   },
 
-  // 节点插入文档
+  // 3. insert（标记组件的 _isMounted、_directInactive 等状态）
   insert: function insert (vnode) {
+    /*
+        context 和 componentInstance 都是 Component 类型，也就是说都是组件实例
+        做个猜想（未验证）：
+        ① componentInstance 是 vnode 对应的组件实例
+        ② context 是父组件实例
+     */
     var context = vnode.context;
     var componentInstance = vnode.componentInstance;
-    // 如果之前没有插入过文档，那就标志 _isMounted，并调用 mounted 回调函数
+    // ① 标记 componentInstance._isMounted 为 true
     if (!componentInstance._isMounted) {
       componentInstance._isMounted = true;
       callHook(componentInstance, 'mounted');
     }
+    // ② 标记激活了组件 componentInstance
     if (vnode.data.keepAlive) {
-      // 如果上下文已经插入过文档，那就把组件加入到队列中，由队列统一激活
+      // 如果上下文已经插入过文档，那就将 componentInstance 添加到 activatedChildren 数组中（随后这个 componentInstance 组件会被标记激活了）
       if (context._isMounted) {
         // vue-router#1212
         // During updates, a kept-alive component's child components may
@@ -5827,22 +5978,22 @@ var componentVNodeHooks = {
             推荐的做法是：我们将它们加入到队列里，等这个 patch 过程结束后再执行队列。
         */
         queueActivatedComponent(componentInstance);
-      // 否则，直接在此激活子组件
+      // b. 直接标记激活了组件 componentInstance
       } else {
         activateChildComponent(componentInstance, true /* direct */);
       }
     }
   },
 
-  // 组件销毁
+  // 4. destroy（销毁组件）
   destroy: function destroy (vnode) {
     var componentInstance = vnode.componentInstance;
     // 没被销毁过，才执行
     if (!componentInstance._isDestroyed) {
-      // 如果在 keepAlive 状态，直接销毁之
+      // ① 不需要 keepAlive，直接销毁
       if (!vnode.data.keepAlive) {
         componentInstance.$destroy();
-      // 否则，使子组件失效
+      // ② 需要 keepAlive，那就标记失效
       } else {
         deactivateChildComponent(componentInstance, true /* direct */);
       }
@@ -5853,9 +6004,9 @@ var componentVNodeHooks = {
 var hooksToMerge = Object.keys(componentVNodeHooks);
 // -> ["init", "prepatch", "insert", "destroy"]
 
-// 创建组件
+// 创建组件，返回 vnode
 function createComponent (Ctor, data, context, children, tag) {
-  // 如果没构造函数，返回
+  // ① 若没指定构造函数 Ctor，就此返回
   if (isUndef(Ctor)) {
     return
   }
@@ -5863,14 +6014,14 @@ function createComponent (Ctor, data, context, children, tag) {
   var baseCtor = context.$options._base;
 
   // plain options object: turn it into a constructor
-  // Ctor 为对象，则将之转为构造函数
+  // ② 若 Ctor 是个选项对象，那就将其转为构造函数
   if (isObject(Ctor)) {
     Ctor = baseCtor.extend(Ctor);
   }
 
   // if at this stage it's not a constructor or an async component factory,
   // reject.
-  // 如果到这里 Ctor 还不是函数，那就报错。
+  // ③ 到这里，Ctor 还不是构造函数，那就发出警告，并返回
   if (typeof Ctor !== 'function') {
     {
       // 无效的组件定义
@@ -5879,13 +6030,20 @@ function createComponent (Ctor, data, context, children, tag) {
     return
   }
 
-  // async component
+  // 1. 异步组件
   var asyncFactory;
-  // Ctor.cid 为 null 或 undefined
+  /*
+    ① 异步组件工厂函数 factory 只是普通的函数，没有 factory.cid 属性
+    ② 而通过 Ctor = Vue.extend(extendOptions) 创建的组件构造函数都有 Ctor.cid 属性
+ */
   if (isUndef(Ctor.cid)) {
     asyncFactory = Ctor;
+    // 根据工厂函数 asyncFactory 的不同状态返回不同的组件构造函数
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor, context);
-    // Ctor 为 undefined，返回占位符
+    /*
+        resolveAsyncComponent() 返回值为 undefined，说明异步任务没执行完，组件构造函数还没创建
+        那就调用 createAsyncPlaceholder() 先创建一个占位符
+     */
     if (Ctor === undefined) {
       // return a placeholder node for async component, which is rendered
       // as a comment node but preserves all the raw information for the node.
@@ -5894,6 +6052,7 @@ function createComponent (Ctor, data, context, children, tag) {
         对于异步组件，这里返回一个占位符。这种占位符会作为注释节点来渲染，不过它会保留节点的所有元信息。
         这些元信息在异步的服务器渲染和 hydration 时是有用的。
       */
+     // 创建组件占位符（看起来像注释节点，但是它会保存节点所有的原始信息，水化后就可以变成正常节点了）
       return createAsyncPlaceholder(
         asyncFactory,
         data,
@@ -5909,18 +6068,28 @@ function createComponent (Ctor, data, context, children, tag) {
   // resolve constructor options in case global mixins are applied after
   // component constructor creation
   // resolve 构造函数选项，以免组件构造函数创建后全局的 mixin 被应用
+  /*
+      Ctor.options = Ctor.super.options + Ctor.extendOptions，也就是：
+      子类构造函数的 options 是父类构造函数的 options 和自身扩展的 options 和并集
+   */
   resolveConstructorOptions(Ctor);
 
   // transform component v-model data into props & events
   // 将 v-model 数据转换成 props 和 events
   if (isDef(data.model)) {
+    // 自定义组件 v-model 绑定的 prop 和 event（默认情况下是 value 和 input）
     transformModel(Ctor.options, data);
   }
 
-  // extract props，提取 props
+  /*
+    ① 遍历 Ctor.options.props 对象的键名 key
+    ② 从 data.props 和 data.attrs 提取值
+    ③ 若找到 (data.props | data.attrs)[key]，就复制到 res 对象中
+    ④ 最后返回 json 对象 res
+ */
   var propsData = extractPropsFromVNodeData(data, Ctor, tag);
 
-  // functional component，函数式组件，就在这里创建，然后返回
+  // 2. 函数式组件，返回 vnode
   if (isTrue(Ctor.options.functional)) {
     return createFunctionalComponent(Ctor, propsData, data, context, children)
   }
@@ -5928,7 +6097,13 @@ function createComponent (Ctor, data, context, children, tag) {
   // keep listeners
   var listeners = data.on;
 
-  // 抽象组件除了 props & listeners & slot，不会保留其他任何东西
+  /*
+      除了 props & listeners & slot，抽象组件不需要任何数据了
+      ① 将 data 对象清空
+      ② data.slot 属性重新加回来
+      ③ props 和 listeners 属性在哪加回来的呢？new VNode() 过程中？
+   */
+  // 3. 抽象组件
   if (isTrue(Ctor.options.abstract)) {
     // abstract components do not keep anything
     // other than props & listeners & slot
@@ -5943,12 +6118,13 @@ function createComponent (Ctor, data, context, children, tag) {
   }
 
   // merge component management hooks onto the placeholder node
-  // 合并 data 和 hooksToMerge 的钩子
+  // 将对象 data.hook 的 "init", "prepatch", "insert", "destroy" 四个属性进行更新
   mergeHooks(data);
 
   // return a placeholder vnode
   // 节点标签
   var name = Ctor.options.name || tag;
+  // 4. 一般组件，新建 vnode
   var vnode = new VNode(
     ("vue-component-" + (Ctor.cid) + (name ? ("-" + name) : '')),
     data, undefined, undefined, undefined, context,
@@ -5958,7 +6134,7 @@ function createComponent (Ctor, data, context, children, tag) {
   return vnode
 }
 
-// 创建组件实例
+// 创建与 vnode 对应的组件实例
 function createComponentInstanceForVnode (
   vnode, // we know it's MountedComponentVNode but flow doesn't
   parent, // activeInstance in lifecycle state
@@ -5966,6 +6142,7 @@ function createComponentInstanceForVnode (
   refElm
 ) {
   var vnodeComponentOptions = vnode.componentOptions;
+  // ① 修正选项对象
   var options = {
     _isComponent: true,
     parent: parent,
@@ -5977,27 +6154,77 @@ function createComponentInstanceForVnode (
     _parentElm: parentElm || null,
     _refElm: refElm || null
   };
+  /*
+      1. 插槽
+      假定 my-component 组件有如下模板：
+      <div>
+        <h2>我是子组件的标题</h2>
+        <slot>
+          只有在没有要分发的内容时才会显示。
+        </slot>
+      </div>
+
+      父组件模板：
+      <div>
+        <h1>我是父组件的标题</h1>
+        <my-component>
+          <p>这是一些初始内容</p>
+          <p>这是更多的初始内容</p>
+        </my-component>
+      </div>
+
+      渲染结果：
+      <div>
+        <h1>我是父组件的标题</h1>
+        <div>
+          <h2>我是子组件的标题</h2>
+          <p>这是一些初始内容</p>
+          <p>这是更多的初始内容</p>
+        </div>
+      </div>
+
+      2. 内联模板。如果子组件有 inline-template 特性，子组件将把它的内容当作子组件自身的模板，而不是把它当作分发内容。
+      <my-component inline-template>
+        <div>
+          <p>这些将作为组件自身的模板。</p>
+          <p>而非父组件透传进来的内容。</p>
+        </div>
+      </my-component>
+
+      插槽和内联模板一对比就会发现：
+      ① 对于插槽，<my-component> 里的内容是父组件的内容
+      ② 对于内联模板，<my-component inline-template> 里的内容属于子组件
+   */
   // check inline-template render functions
   var inlineTemplate = vnode.data.inlineTemplate;
+  // 对于内联组件，组件的内容都是固定的，可以直接确定 render 和 staticRenderFns
   if (isDef(inlineTemplate)) {
     options.render = inlineTemplate.render;
     options.staticRenderFns = inlineTemplate.staticRenderFns;
   }
+
   // 根据以上 options 选项，返回实例。这里的 Ctor 指的是“构造函数”
   // vnodeComponentOptions.Ctor 应该是 Vue.extend() 产生的组件构造函数
   // new vnodeComponentOptions.Ctor(options) 为组件实例
+  // ② 根据选项对象创建组件实例
   return new vnodeComponentOptions.Ctor(options)
 }
 
-// 合并 data 和 hooksToMerge 的钩子
+// 将对象 data.hook 的 "init", "prepatch", "insert", "destroy" 四个属性进行更新
 function mergeHooks (data) {
   if (!data.hook) {
     data.hook = {};
   }
   /*
-    var hooksToMerge = Object.keys(componentVNodeHooks);
-    -> ["init", "prepatch", "insert", "destroy"]
-  */
+      hooksToMerge = Object.keys(componentVNodeHooks)
+      -> hooksToMerge = ["init", "prepatch", "insert", "destroy"]
+      
+      以 key = "prepatch" 为例：
+      fromParent = data.hook["prepatch"]
+      ours = componentVNodeHooks["prepatch"]
+      
+      mergeHook(ours, fromParent) 表示合并两个钩子方法
+   */
   for (var i = 0; i < hooksToMerge.length; i++) {
     var key = hooksToMerge[i];
     var fromParent = data.hook[key];
@@ -6009,6 +6236,7 @@ function mergeHooks (data) {
         ① data.hook["init"] 存在，那么新的 data.hook["init"] 重置为旧的 data.hook["init"] 和 componentVNodeHooks["init"] 合并后的函数
         ② data.hook["init"] 不存在，那么新的 data.hook["init"] 就是 componentVNodeHooks["init"]
     */
+   // 更新 data.hook[key]
     data.hook[key] = fromParent ? mergeHook$1(ours, fromParent) : ours;
   }
 }
@@ -6023,20 +6251,65 @@ function mergeHook$1 (one, two) {
 
 // transform component v-model info (value and callback) into
 // prop and event handler respectively.
-// 将组件的 v-model 信息转换成 prop 和 event
+/*
+    将组件的自定义 v-model 信息（value 和 callback）转成 prop 和 event
+    实际调用时：transformModel(Ctor.options, data)
+
+    默认情况下 v-model 指令绑定的是表单元素的 value 属性，监听的是 input 事件。
+    在定义组件实例的时候，我们可以自定义绑定的 prop 和监听的事件，例如：
+    new Vue({
+      ...
+      model : {
+        prop : 'myProp';
+        event : 'click';
+      }
+      ...
+    })
+    这样 v-model 指令绑定的时候 'myProp'，监听的是 'click' 事件
+ */
 function transformModel (options, data) {
-  // 默认的 prop 是 value
+  /*
+    组件选项对象的 model 属性是个 json 对象，也就是说我们定义组件实例时可以传入这种形式的 model
+    declare type ComponentOptions = {
+      ...
+      // 自定义组件 v-model 绑定的 prop 和 event（默认情况下是 value 和 input）
+      model?: {
+        prop?: string;
+        event?: string;
+      };
+      ...
+    };
+   */
   var prop = (options.model && options.model.prop) || 'value';
-  // 默认的 event 是 input 事件
   var event = (options.model && options.model.event) || 'input';
   
-  // data.props 如果不存在，将其初始化为空对象，然后将 data.props[prop] 置为 data.model.value
+  /*
+    ① genComponentModel ( el, value, modifiers) 方法对元素的 v-model 属性解析生成
+      el.model = {
+        value: ("(" + value + ")"),
+        expression: ("\"" + value + "\""),
+        callback: ("function (" + baseValueExpression + ") {" + assignment + "}")
+      };
+    ② genData$2 (el, state) 方法将其挂载到 data 上
+      if (el.model) {
+        data += "model:{value:" + (el.model.value) + ",callback:" + (el.model.callback) + ",expression:" + (el.model.expression) + "},";
+      }
+      也就是：
+      data.model : { 
+          value : el.model.value, 
+          callback : el.model.callback, 
+          expression : el.model.expression
+      }
+   */
+
+  // ① 加入 data.props 对象中
   (data.props || (data.props = {}))[prop] = data.model.value;
 
-  // data.on 如果不存在，将其初始化为空对象
+  // ② 加入 data.on 对象中
   var on = data.on || (data.on = {});
   // 如果当前事件已经绑定过回调函数，那就回调函数数组合并
   if (isDef(on[event])) {
+    // on[event] 应该是个数组，数组合并
     on[event] = [data.model.callback].concat(on[event]);
   } else {
     on[event] = data.model.callback;
@@ -6071,29 +6344,62 @@ function createElement (context, tag, data, children, normalizationType, alwaysN
   return _createElement(context, tag, data, children, normalizationType)
 }
 
+/*
+  该函数的作用是生成 vnode，分为以下几类：
+  ① data && data.__ob__ 存在，return createEmptyVNode()
+  ② !tag 即 tag 不存在时，return createEmptyVNode()
+  ③ tag 是 html/svg 内置标签名，return vnode = new VNode(config.parsePlatformTagName(tag), data, children, undefined, undefined, context);
+  ④ tag 是组件标签名（字符串），return vnode = createComponent(resolveAsset(context.$options, 'components', tag), data, context, children, tag);
+  ⑤ tag 是其他字符串，return vnode = new VNode(tag, data, children, undefined, undefined, context);
+  ⑥ tag 是构造函数名，return vnode = createComponent(tag, data, context, children);
+ 
+  可以看出，除了直接调用 new VNode() 生成 vnode，就是用 createComponent() 和 createEmptyVNode() 来生成 vnode 
+ */
 // 返回一个 vnode。如 _createElement(vm, 'a', {attr:{'href':'#'}}, [vnode...], 2)
 function _createElement (context, tag, data, children, normalizationType) {
-  // 避免使用被观察的 data 对象作为虚拟节点的 data
+  // ① 对 data 进行检查。避免使用被 observed 的 data 对象作为 vnode data
   if (isDef(data) && isDef((data).__ob__)) {
     "development" !== 'production' && warn(
       "Avoid using observed data object as vnode data: " + (JSON.stringify(data)) + "\n" +
       'Always create fresh vnode data objects in each render!',
       context
     );
-    // 创建一个空的 vNode（注释）
+    // 返回空的 vnode
     return createEmptyVNode()
   }
-  // object syntax in v-bind
-  // 如果有 data.is 属性，用该属性作为真正的标签名
+  
+  /*
+      var vm = new Vue({
+        el: '#example',
+        data: {
+          currentView: 'home'
+        },
+        components: {
+          home: { ... },
+          posts: { ...  },
+          archive: { ... }
+        }
+      })
+      <component v-bind:is="currentView">
+        <!-- 组件在 vm.currentview 变化时改变！ -->
+      </component>
+
+      对 vm.currentView 进行修改就可以在同一个挂载点动态切换多个组件了
+   */
+
+  // ② 对 data.is 进行检查
   if (isDef(data) && isDef(data.is)) {
     tag = data.is;
   }
+
+  // ③ 对 tag 进行检查
   if (!tag) {
     // in case of component :is set to falsy value
     // 所以得注意 :is 被设置为一个假值的情况
     return createEmptyVNode()
   }
-  // warn against non-primitive key
+  
+  // ④ 对 data.key 进行检查
   if ("development" !== 'production' && isDef(data) && isDef(data.key) && !isPrimitive(data.key)) {
     // key 值必须为字符串或数值等基本数据类型
     warn(
@@ -6104,6 +6410,12 @@ function _createElement (context, tag, data, children, normalizationType) {
   }
 
 
+  // ⑤ 对 children 进行检查和修正
+  /*
+      若 children 是数组，并且 children[0] 是函数，那么：
+      1. 将这个函数作为默认的 scoped slot
+      2. 将 children 数组清空
+   */
   // support single function children as default scoped slot
   // children 为数组，并且该数组的第一个元素是函数
   if (Array.isArray(children) && typeof children[0] === 'function') {
@@ -6114,7 +6426,7 @@ function _createElement (context, tag, data, children, normalizationType) {
   }
 
 
-  // ALWAYS_NORMALIZE 为 2
+  // 对 children 数组进行修正，修正后 children 还是数组
   if (normalizationType === ALWAYS_NORMALIZE) {
     // 标准化处理，返回一个数组
     children = normalizeChildren(children);
@@ -6124,33 +6436,47 @@ function _createElement (context, tag, data, children, normalizationType) {
     children = simpleNormalizeChildren(children);
   }
 
+  // ⑥ 根据参数，生成 vnode
   var vnode, ns;
+
+  // 1. tag 是字符串
   if (typeof tag === 'string') {
     var Ctor;
     // 命名空间
     ns = config.getTagNamespace(tag);
-    // 若 tag 为 div、span 等保留标签，直接用这个标签名创建虚拟节点就好了
+
+    // a. tag 是 html/svg 内置标签名
     if (config.isReservedTag(tag)) {
       // platform built-in elements
+      /*
+        identity = function (_) { return _; };
+        config.parsePlatformTagName = identity;
+        也就是说，直接用这个内置标签名
+     */
       vnode = new VNode(config.parsePlatformTagName(tag), data, children, undefined, undefined, context);
+    // b. tag 是组件标签名，根据标签名找到组件构造函数，然后创建组件
     } else if (isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
       // component
       vnode = createComponent(Ctor, data, context, children, tag);
+    // c. 其他未知标签名
     } else {
       // unknown or unlisted namespaced elements
       // check at runtime because it may get assigned a namespace when its
       // parent normalizes children
       vnode = new VNode(tag, data, children, undefined, undefined, context);
     }
+  // 2. tag 为其他类型
   } else {
     // direct component options / constructor
     vnode = createComponent(tag, data, context, children);
   }
 
+  // 如果有 vnode 就返回 vnode 
   if (isDef(vnode)) {
-    // vnode.ns = ns
+    // // 标记命名空间 vnode.ns = ns
     if (ns) { applyNS(vnode, ns); }
     return vnode
+  // 否则返回空 vnode
   } else {
     return createEmptyVNode()
   }
@@ -6486,6 +6812,7 @@ function renderMixin (Vue) {
     if (vm._isMounted) {
       // clone slot nodes on re-renders
       for (var key in vm.$slots) {
+        // vnode 是不能共用的，所以需要用 cloneVNodes 方法重新生成
         vm.$slots[key] = cloneVNodes(vm.$slots[key]);
       }
     }
@@ -8912,21 +9239,21 @@ function createPatchFunction (backend) {
         
         // 父元素存在
         if (isDef(parentElm$1)) {
-		  /*
-			至此，dom 结构为：
-			<body>
-				<div id="app">
-					{{message}}
-				</div>
-				<div id="app">
-					Hello Vue!
-				</div>
-			</body>
-			所以，我们需要移除模板：
-			<div id="app">
-				{{message}}
-			</div>
-		  */
+    		  /*
+        			至此，dom 结构为：
+        			<body>
+        				<div id="app">
+        					{{message}}
+        				</div>
+        				<div id="app">
+        					Hello Vue!
+        				</div>
+        			</body>
+        			所以，我们需要移除模板：
+        			<div id="app">
+        				{{message}}
+        			</div>
+    		  */
           // 移除模板。
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
         // 父元素不存在，那就调用销毁钩子

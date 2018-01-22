@@ -55,7 +55,7 @@ import {
      injections: (2.3.0+) 如果使用了 inject 选项，则该对象包含了应当被注入的属性。
  */
 
-
+// 创建函数式组件，返回值为 vnode
 export function createFunctionalComponent (
   Ctor: Class<Component>,
   propsData: ?Object,
@@ -90,19 +90,54 @@ export function createFunctionalComponent (
       render: function (createElement, context) {
         // ...
       }
-      
    */
   const _context = Object.create(context)
+  /*
+      h 是一个函数，该函数的作用是返回一个 vnode
+      h(a, b, c, d)
+      -> createElement(_context, a, b, c, d, true)
+
+      SIMPLE_NORMALIZE = 1; 简单标准化
+      ALWAYS_NORMALIZE = 2; 正常标准化
+
+      createElement 最后一个参数为 true 表示对 children(c) 强制采用”正常标准化”处理
+   */
   const h = (a, b, c, d) => createElement(_context, a, b, c, d, true)
+  /*
+      函数式组件在声明的时候，render 函数有两个参数：
+      // 为了弥补缺少的实例，提供第二个参数作为上下文
+      render: function (createElement, context) {
+        // ...
+      }
+   */
   const vnode = Ctor.options.render.call(null, h, {
     data,
     props,
     children,
     parent: context,
     listeners: data.on || {},
+    /*
+        resolveInject() 返回一个 json 对象，键名为 inject 中【数组索引 | 属性名】，键值为 provide【属性名】中属性值
+        例如：
+        {
+          'foo' : 'bar'
+        }
+     */
     injections: resolveInject(Ctor.options.inject, context),
+    /*
+        slots 是一个函数，执行结果是一个 json 对象，每个子属性是由 dom 元素组成的数组
+        slots()
+        -> resolveSlots(children, context)
+        -> {
+          default : [...],
+          name1 : [...],
+          name2 : [...],
+          ...
+        }
+     */
     slots: () => resolveSlots(children, context)
   })
+  // 给 vnode 添加属性
   if (vnode instanceof VNode) {
     vnode.functionalContext = context
     vnode.functionalOptions = Ctor.options
