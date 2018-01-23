@@ -8163,13 +8163,17 @@ var emptyNode = new VNode('', {}, []);
 
 var hooks = ['create', 'activate', 'update', 'remove', 'destroy'];
 
-// 判断是否为相同节点
+// 判断是否为相同 vnode
 function sameVnode (a, b) {
   return (
     /*
         运算符的优先级： === 高于 && 高于 ||
-        这里：a.key === b.key && (condition1) || (condition2)
-        相当于：(a.key === b.key && (condition1)) || (condition2)
+        这里：a.key === b.key && ((condition1) || (condition2))
+        
+        ① 两个 vnode 的 key 值必须一样
+        ② 以下两个条件必须满足其一：
+           a. 普通组件的 tag、isComment、data 状态、inputType 类型等一样
+           b. 异步组件占位符的 asyncFactory、asyncFactory.error 状态等一样
      */
     a.key === b.key && (
       (
@@ -8189,18 +8193,30 @@ function sameVnode (a, b) {
 
 // Some browsers do not support dynamically changing type for <input>
 // so they need to be treated as different nodes
-// 有些浏览器不支持动态改变 input 标签的 type。所以，它们需要被当作不同的节点。
+/*
+    有些浏览器不支持动态改变 <input> 标签的 type 类型。所以它们需要被当做不同的节点。
+    下面的方法判断两个 <input> 标签的 type 类型是否一致。
+ */
 function sameInputType (a, b) {
-  // tag 不为 input，默认为 true
+  // ① 如果第一个参数不是 input 标签，那么直接返回 true
   if (a.tag !== 'input') { return true }
   var i;
   var typeA = isDef(i = a.data) && isDef(i = i.attrs) && i.type;
   var typeB = isDef(i = b.data) && isDef(i = i.attrs) && i.type;
-  // input 标签的 type 相同则返回 true
+  // ② 若 a.data.attrs.type === b.data.attrs.type，那么返回 true
   return typeA === typeB
 }
 
-// 返回一个映射表
+/*
+  将 children 中每个 children[i] 的 i 和 children[i].key 对应起来
+  返回值 map 结构大致为：
+  {
+    key0 : idx0,
+    key1 : idx1,
+    key2 : idx2,
+    ...
+  }
+ */
 function createKeyToOldIdx (children, beginIdx, endIdx) {
   var i, key;
   var map = {};
@@ -8208,15 +8224,6 @@ function createKeyToOldIdx (children, beginIdx, endIdx) {
     key = children[i].key;
     if (isDef(key)) { map[key] = i; }
   }
-  /*
-    map 结构大致为：
-    {
-        key0 : idx0,
-        key1 : idx1,
-        key2 : idx2,
-        ...
-    }
-  */
   return map
 }
 
@@ -9128,9 +9135,9 @@ function createPatchFunction (backend) {
 
   // createPatchFunction 函数最终返回的就是这个打补丁函数
   return function patch (oldVnode, vnode, hydrating, removeOnly, parentElm, refElm) {
-    // 如果 vnode 不存在，直接在这里返回（如果 oldVnode 存在，那就销毁 oldVnode 吧）
+    // 1. 如果 vnode 不存在，直接在这里返回（如果 oldVnode 存在，那就销毁 oldVnode 吧）
     if (isUndef(vnode)) {
-      // 触发销毁钩子
+      // 触发所有的 destroy 钩子函数
       if (isDef(oldVnode)) { invokeDestroyHook(oldVnode); }
       return
     }
@@ -9138,43 +9145,60 @@ function createPatchFunction (backend) {
     var isInitialPatch = false;
     var insertedVnodeQueue = [];
 
-    // oldVnode 不存在，说明新的节点，那就创建新的节点（初始化）
+    // 2. oldVnode 不存在，说明新的节点，那就创建新的节点（初始化）
     if (isUndef(oldVnode)) {
       // empty mount (likely as component), create new root element
       isInitialPatch = true;
-      // 创建元素（间接调用原生 api）
+      /*
+         
+
+       */
       createElm(vnode, insertedVnodeQueue, parentElm, refElm);
-    // vnode、oldVnode 都存在，那就打补丁吧（更新）
+    // 3. vnode、oldVnode 都存在，那就打补丁吧（更新）
     } else {
-      // 如果 oldVnode.nodeType 存在，那就说明它是真实 dom 节点
+      /*
+          如果 oldVnode.nodeType 存在，那就说明它是真实 dom 节点
+          也就是说这里的参数 oldVnode 是真实的 dom 元素，而不是 VNode 实例
+       */
       var isRealElement = isDef(oldVnode.nodeType);
                                 
-      // 如果不是真实节点
+     
+      /*
+          sameVnode(oldVnode, vnode)
+          判断 oldVnode 和 vnode 是否可以视作“同一棵树”，从而进行一对一的更新
+
+          注意一下 sameVnode(oldVnode, vnode) 和 patchVnode() 方法
+          它们俩一直是成对出现，由此可以看出：
+          patchVnode() 方法执行的前提是 sameVnode(oldVnode, vnode) 为 true
+       */
+       // ① 如果不是真实节点，并且 sameVnode(oldVnode, vnode) 为 true
       if (!isRealElement && sameVnode(oldVnode, vnode)) {
         // patch existing root node，打补丁，进行 update 操作
         patchVnode(oldVnode, vnode, insertedVnodeQueue, removeOnly);
+      // ② 其他
       } else {
-        // 真实节点
+        // 【重要】oldVnode 是真实的 dom 元素
         if (isRealElement) {
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
           // a successful hydration.
           /*
             SSR_ATTR = 'data-server-rendered'，ssr 应该是 server side render 的简称
-            如果是服务器端渲染，就需要进行“注水”了
+            这里强制将 hydrating 置为 true
           */
           if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
             oldVnode.removeAttribute(SSR_ATTR);
             hydrating = true;
           }
+
           // 需要“注水”
           if (isTrue(hydrating)) {
-            // “注水”成功
+            // a. “注水”成功
             if (hydrate(oldVnode, vnode, insertedVnodeQueue)) {
               // insert 钩子
               invokeInsertHook(vnode, insertedVnodeQueue, true);
               return oldVnode
-            // “注水”失败
+            // b. “注水”失败
             } else {
               /*
                 客户端渲染的虚拟 dom 树和服务端渲染的不匹配。这很有可能是不正确的 html 标记引起的。
@@ -9263,7 +9287,10 @@ function createPatchFunction (backend) {
       }
     }
     
-    // 触发 insert 钩子
+    /*
+        ① isInitialPatch 为 true 表示初次渲染，不要急着执行每个根节点的 insert 钩子函数，等到它们真正插入文档之后再执行
+        ② isInitialPatch 为 false 表示非初次渲染，可以直接执行 insert 钩子函数了
+     */
     invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch);
     return vnode.elm
   }

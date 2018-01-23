@@ -36,7 +36,7 @@ const componentVNodeHooks = {
     parentElm: ?Node,
     refElm: ?Node
   ): ?boolean {
-    // ① 若该 vnode 没有对应的组件实例，那就创建一个新的
+    // ① 若该 vnode 没有对应的组件实例，那就创建一个新的，渲染该组件
     if (!vnode.componentInstance || vnode.componentInstance._isDestroyed) {
       const child = vnode.componentInstance = createComponentInstanceForVnode(
         vnode,

@@ -40,7 +40,7 @@ export default {
 
 /*
     ① 参数 isRemoval 为 true，删除引用
-    ② 否则，添加引用
+    ② 否则，添加引用，这样就可以通过 vnode.context.$refs[vnode.data.ref] 找到 vnode.componentInstance 这个组件实例了
  */
 export function registerRef (vnode: VNodeWithData, isRemoval: ?boolean) {
   const key = vnode.data.ref
