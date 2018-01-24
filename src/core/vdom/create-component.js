@@ -56,6 +56,12 @@ const componentVNodeHooks = {
           b. 参数为空/undefined，在文档之外渲染，随后再挂载
           var component = new MyComponent().$mount()
           document.getElementById('app').appendChild(component.$el)
+
+          在这里，”注水” hydrating 为 true 表示是在 hydrate 中调用该 init 方法
+          hydrate (elm, vnode, insertedVnodeQueue)
+          -> vnode.data.hook.init(vnode, true)
+          -> vnode.componentInstance.$mount(elm, true)
+          如此，实例 vnode.componentInstance 就会挂载到元素 elm 上
        */
       child.$mount(hydrating ? vnode.elm : undefined, hydrating)
     // ② vnode 有对应的组件实例，那就更新这个组件（这里的 vnode.data.keepAlive 是个布尔值，true）

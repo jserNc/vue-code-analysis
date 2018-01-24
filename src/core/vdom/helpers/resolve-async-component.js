@@ -32,6 +32,12 @@ export function createAsyncPlaceholder (
   children: ?Array<VNode>,
   tag: ?string
 ): VNode {
+  /*
+      为什么说 vnode.isComment 和 vnode.asyncFactory 同时满足才能判定为异步组件占位符
+
+      node = createEmptyVNode() 根据 createEmptyVNode 函数的定义有：
+      -> node.isComment = true;
+   */
   const node = createEmptyVNode()
   node.asyncFactory = factory
   /*

@@ -9034,7 +9034,7 @@ function createPatchFunction (backend) {
       return true
     }
     {
-       // elm 和 vnode 类型不匹配（同一个标签，或都是注释，或都是文本），直接返回 false
+      // elm 和 vnode 类型不匹配（同一个标签，或都是注释，或都是文本），直接返回 false
       if (!assertNodeMatch(elm, vnode)) {
         return false
       }
@@ -9134,6 +9134,15 @@ function createPatchFunction (backend) {
   }
 
   // createPatchFunction 函数最终返回的就是这个打补丁函数
+  /*
+      其中：
+      ① oldVnode 可能是 VNode 实例，也可能是 dom 元素
+      ② 新的 VNode 实例
+      ③ hydrating 为 true 才执行 hydrate(oldVnode, vnode, insertedVnodeQueue) 函数“注水”，这里的 oldVnode 就是 dom 元素
+      ④ removeOnly 该参数只用于 <transition-group> 中，用来确保被移除的元素在 leaving transitions 中保持相对正确的位置
+      ⑤ parentElm 为 dom 元素，它将作为虚拟 vnode 生成的 dom 元素的父元素
+      ⑥ refElm 作为 vnode 生成的 dom 元素插入父元素 parentElm 时的参考节点（插入 refElm 元素之前）
+   */
   return function patch (oldVnode, vnode, hydrating, removeOnly, parentElm, refElm) {
     // 1. 如果 vnode 不存在，直接在这里返回（如果 oldVnode 存在，那就销毁 oldVnode 吧）
     if (isUndef(vnode)) {
@@ -9149,10 +9158,7 @@ function createPatchFunction (backend) {
     if (isUndef(oldVnode)) {
       // empty mount (likely as component), create new root element
       isInitialPatch = true;
-      /*
-         
-
-       */
+      // 根据 vnode 新的生成 dom 元素
       createElm(vnode, insertedVnodeQueue, parentElm, refElm);
     // 3. vnode、oldVnode 都存在，那就打补丁吧（更新）
     } else {
@@ -9177,7 +9183,7 @@ function createPatchFunction (backend) {
         patchVnode(oldVnode, vnode, insertedVnodeQueue, removeOnly);
       // ② 其他
       } else {
-        // 【重要】oldVnode 是真实的 dom 元素
+        // ②-1【重要】oldVnode 是真实的 dom 元素，"注水"后返回
         if (isRealElement) {
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
@@ -9195,10 +9201,10 @@ function createPatchFunction (backend) {
           if (isTrue(hydrating)) {
             // a. “注水”成功
             if (hydrate(oldVnode, vnode, insertedVnodeQueue)) {
-              // insert 钩子
+              // 第三个参数 isInitialPatch 为 true 表示初次渲染，不要急着执行每个根节点的 insert 钩子函数，等到它们真正插入文档之后再执行
               invokeInsertHook(vnode, insertedVnodeQueue, true);
               return oldVnode
-            // b. “注水”失败
+            // b. “注水”失败，发出警告
             } else {
               /*
                 客户端渲染的虚拟 dom 树和服务端渲染的不匹配。这很有可能是不正确的 html 标记引起的。
@@ -9215,28 +9221,38 @@ function createPatchFunction (backend) {
           }
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
-          // 不是服务端渲染或“注水”失败，那就清空当前节点
+
+          // 不在服务端渲染或“注水”失败，那就以 elm 元素创建一个空的 vnode 实例
           oldVnode = emptyNodeAt(oldVnode);
         }
 
         // replacing existing element
         var oldElm = oldVnode.elm;
         var parentElm$1 = nodeOps.parentNode(oldElm);
+
+        // ②-2 重新生成 dom 元素，替换原来的元素 oldVnode.elm
         createElm(
           vnode,
           insertedVnodeQueue,
           // extremely rare edge case: do not insert if old element is in a
           // leaving transition. Only happens when combining transition +
           // keep-alive + HOCs. (#4590)
+          /*
+              ① oldElm._leaveCb 为 true，表示动画离开
+                 那么父元素为 null，不会插入到文档中（insert 函数中规定插入的条件是父元素必须存在）
+              ② 否则，父元素还是原来的 nodeOps.parentNode(oldElm)
+           */
           oldElm._leaveCb ? null : parentElm$1,
+          // 参考节点就是其后的兄弟节点，也就是说新生成的节点会插入到参考节点之前
           nodeOps.nextSibling(oldElm)
         );
 
+        // vnode.parent 应该是父占位符
         if (isDef(vnode.parent)) {
           // component root element replaced.
           // update parent placeholder node element, recursively
           var ancestor = vnode.parent;
-          // 每个祖先节点 ancestor 的 elm 属性都指向 vnode.elm
+          // 每个祖先占位节点 ancestor.elm 属性都指向 vnode.elm
           while (ancestor) {
             ancestor.elm = vnode.elm;
             ancestor = ancestor.parent;
@@ -9264,7 +9280,7 @@ function createPatchFunction (backend) {
         // 父元素存在
         if (isDef(parentElm$1)) {
     		  /*
-        			至此，dom 结构为：
+        			例如，dom 结构为：
         			<body>
         				<div id="app">
         					{{message}}
@@ -9277,8 +9293,9 @@ function createPatchFunction (backend) {
         			<div id="app">
         				{{message}}
         			</div>
+              这样只是一个形象表述，事实不是这样的
     		  */
-          // 移除模板。
+          // 移除旧的元素
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
         // 父元素不存在，那就调用销毁钩子
         } else if (isDef(oldVnode.tag)) {
@@ -9292,6 +9309,7 @@ function createPatchFunction (backend) {
         ② isInitialPatch 为 false 表示非初次渲染，可以直接执行 insert 钩子函数了
      */
     invokeInsertHook(vnode, insertedVnodeQueue, isInitialPatch);
+    // 最终返回生成的新的 dom 元素 
     return vnode.elm
   }
 }

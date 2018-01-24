@@ -298,17 +298,43 @@ export function createPatchFunction (backend) {
   }
 
   let inPre = 0
+
+  // 根据 vnode 新的生成 dom 元素
   function createElm (vnode, insertedVnodeQueue, parentElm, refElm, nested) {
     vnode.isRootInsert = !nested // for transition enter check
+
+    /*
+        ① 只有 vnode.data && vnode.componentInstance 都存在，才会返回 true
+        ② createComponent 函数生成 dom 元素，但是暂时不挂载
+     */ 
+     */
     if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
       return
     }
 
+
+    // 为什么不直接定义 const { data, children, tag } = vnode
     const data = vnode.data
     const children = vnode.children
     const tag = vnode.tag
+
+    // 1. 生成元素
     if (isDef(tag)) {
+
       if (process.env.NODE_ENV !== 'production') {
+        /*
+            v-pre 指令表示跳过这个元素和它的子元素的编译过程。可以用来显示原始 Mustache 标签，例如：
+            <span v-pre>{{ this will not be compiled }}</span>
+
+            ① processPre (el) 中：
+            if (getAndRemoveAttr(el, 'v-pre') != null) {
+                el.pre = true;
+            }
+            ② genData$2(el, state) 中：
+            if (el.pre) {
+                data += "pre:true,";
+            }
+         */
         if (data && data.pre) {
           inPre++
         }
@@ -318,6 +344,7 @@ export function createPatchFunction (backend) {
           !(config.ignoredElements.length && config.ignoredElements.indexOf(tag) > -1) &&
           config.isUnknownElement(tag)
         ) {
+          // 警告：未知类型的自定义元素 <tag> - 你有正确注册这个组件吗？对于递归组件，确保提供了 name 选项
           warn(
             'Unknown custom element: <' + tag + '> - did you ' +
             'register the component correctly? For recursive components, ' +
@@ -326,45 +353,90 @@ export function createPatchFunction (backend) {
           )
         }
       }
+
+
+      /*
+          namespaceMap = {
+            svg: 'http://www.w3.org/2000/svg',
+            math: 'http://www.w3.org/1998/Math/MathML'
+          }
+
+          ① vnode.ns 存在，调用原生 document.createElementNS(namespaceMap[vnode.ns], tag) 方法创建命名空间
+          ② 否则，调用原生 document.createElement(tag) 方法创建 dom 元素
+       */
       vnode.elm = vnode.ns
         ? nodeOps.createElementNS(vnode.ns, tag)
         : nodeOps.createElement(tag, vnode)
+
+      // 有可能的话将 vnode.elm 的 ancestor.context.$options._scopeId 属性值设为空字符串 ''
       setScope(vnode)
 
-      /* istanbul ignore if */
+
       if (__WEEX__) {
         // in Weex, the default insertion order is parent-first.
         // List items can be optimized to use children-first insertion
         // with append="tree".
+        
+        /*
+            在 Weex 中，默认的插入顺序是，父元素 -> 子元素
+            若存在，append="tree"，可以将顺序改为为：子元素 -> 父元素
+
+            下面的代码执行流程是：
+            1. appendAsTree === false（默认顺序）
+               插入父元素 -> 插入子元素
+            2. appendAsTree === true（优化顺序）
+               插入子元素 -> 插入父元素
+         */
         const appendAsTree = isDef(data) && isTrue(data.appendAsTree)
         if (!appendAsTree) {
+          /* 插入父元素 */
           if (isDef(data)) {
             invokeCreateHooks(vnode, insertedVnodeQueue)
           }
           insert(parentElm, vnode.elm, refElm)
         }
+
+        /* 插入子元素 */
         createChildren(vnode, children, insertedVnodeQueue)
+
         if (appendAsTree) {
+          /* 插入父元素 */
           if (isDef(data)) {
             invokeCreateHooks(vnode, insertedVnodeQueue)
           }
           insert(parentElm, vnode.elm, refElm)
         }
+      /*
+          不在 Weex 中，采用的顺序为：插入子元素 -> 插入父元素
+          a. 一组子元素插入到 vnode.elm 这个父元素中
+          b. vnode.elm 插入到父元素 parentElm 中
+       */
       } else {
+        // 生成一组子元素，分别插入到 vnode.elm 这个元素中
         createChildren(vnode, children, insertedVnodeQueue)
         if (isDef(data)) {
+          /*
+            ① 依次调用 cbs.create[i] 钩子函数来更新 vnode 的 attr、class、listeners 等等
+            ② 执行 vnode.data.hook.create(emptyNode, vnode)
+            ③ 将 vnode 加入队列到 insertedVnodeQueue 中
+         */
           invokeCreateHooks(vnode, insertedVnodeQueue)
         }
+        // 将 vnode.elm 插入到父元素 parentElm 中
         insert(parentElm, vnode.elm, refElm)
       }
 
       if (process.env.NODE_ENV !== 'production' && data && data.pre) {
         inPre--
       }
+    // 2. 生成注释
     } else if (isTrue(vnode.isComment)) {
+      // 原生方法 document.createComment(vnode.text) 创建注释元素
       vnode.elm = nodeOps.createComment(vnode.text)
       insert(parentElm, vnode.elm, refElm)
+    // 3. 生成文本
     } else {
+      // 调用原生 document.createTextNode(vnode.text) 方法创建文本元素
       vnode.elm = nodeOps.createTextNode(vnode.text)
       insert(parentElm, vnode.elm, refElm)
     }
@@ -377,6 +449,8 @@ export function createPatchFunction (backend) {
       ③ 依次调用 cbs.create[i] 钩子函数来更新 vnode 的 attr、class、listeners 等等
    
       再简单点说，该函数根据 vnode，创建 vnode.componentInstance 组件，并渲染，不挂载。
+      
+      只有 vnode.data && vnode.componentInstance 都存在，才会返回 true
    */
   function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     let i = vnode.data
@@ -395,13 +469,11 @@ export function createPatchFunction (backend) {
             var component = new MyComponent().$mount()
             document.getElementById('app').appendChild(component.$el)
             $mount() 函数参数为空/undefined，在文档之外渲染，随后再挂载
+            
+            -> vnode.data.hook.init(vnode, false, parentElm, refElm)
+            -> vnode.componentInstance.$mount(undefined, false)
 
-            vm.$mount(el,hydrating)
-            -> mountComponent(vm, el, hydrating)
-            -> vm.$el = el
-
-            这里生成了真实的 dom 元素 vnode.componentInstance.$el
-            initComponent(vnode, insertedVnodeQueue) 方法中会用的这个值
+            说明：这里只生成了真实的 dom 元素，但暂时不挂载
          */
         i(vnode, false /* hydrating */, parentElm, refElm)
       }
@@ -507,11 +579,18 @@ export function createPatchFunction (backend) {
     }
   }
 
+  // 生成一组 dom 元素（vnode 节点的子元素）
   function createChildren (vnode, children, insertedVnodeQueue) {
+    // ① 子元素是一组节点
     if (Array.isArray(children)) {
       for (let i = 0; i < children.length; ++i) {
+        /*
+            对比一下形参 createElm (vnode, insertedVnodeQueue, parentElm, refElm, nested)
+            vnode.elm 对应 parentElm
+         */ 
         createElm(children[i], insertedVnodeQueue, vnode.elm, null, true)
       }
+    // ② 子元素是文本
     } else if (isPrimitive(vnode.text)) {
       nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(vnode.text))
     }
@@ -625,13 +704,17 @@ export function createPatchFunction (backend) {
     }
   }
 
+  // 从父元素 parentElm 中删除一组子元素 vnodes（索引范围 startIdx-endIdx）
   function removeVnodes (parentElm, vnodes, startIdx, endIdx) {
     for (; startIdx <= endIdx; ++startIdx) {
       const ch = vnodes[startIdx]
       if (isDef(ch)) {
+        // ① 移除元素
         if (isDef(ch.tag)) {
           removeAndInvokeRemoveHook(ch)
+          // 触发所有的 destroy 钩子函数
           invokeDestroyHook(ch)
+        // ② 移除文本节点
         } else { // Text node
           removeNode(ch.elm)
         }
@@ -880,41 +963,73 @@ export function createPatchFunction (backend) {
   }
 
   let bailed = false
+
   // list of modules that can skip create hook during hydration because they
   // are already rendered on the client or has no need for initialization
+  // 以下模块在“注水”过程中可以跳过，不执行其 create 钩子函数。因为它们在客户端已经渲染，或者根本没有初始化的必要。
   const isRenderedModule = makeMap('attrs,style,class,staticClass,staticStyle,key')
 
   // Note: this is a browser-only function so we can assume elms are DOM nodes.
   // 这个函数只是在浏览器上执行，所以 elm 我们可以认为就是 dom 节点
   function hydrate (elm, vnode, insertedVnodeQueue) {
+    /*
+        看函数 
+        function isAsyncPlaceholder (node) {
+          return node.isComment && node.asyncFactory
+        }
+        可见，vnode.isComment 和 vnode.asyncFactory 需同时满足才能判定为异步组件占位符
+     */
+    // 1. 异步组件，就此返回 true，也算是“注水”成功
     if (isTrue(vnode.isComment) && isDef(vnode.asyncFactory)) {
       vnode.elm = elm
       vnode.isAsyncPlaceholder = true
       return true
     }
+
+    // 2. elm 和 vnode 类型不匹配，返回 false，“注水”失败
     if (process.env.NODE_ENV !== 'production') {
       if (!assertNodeMatch(elm, vnode)) {
         return false
       }
     }
+
+
+    // 把 vnode 和 elm 元素绑定起来
     vnode.elm = elm
+
     const { tag, data, children } = vnode
+
+
+    // 执行 vnode.data.hook.init(vnode,true) 生成组件实例，并渲染挂载
     if (isDef(data)) {
       if (isDef(i = data.hook) && isDef(i = i.init)) i(vnode, true /* hydrating */)
+      
+      // 3. 如果组件实例 vnode.componentInstance 存在，在此返回 true，“注水”成功
       if (isDef(i = vnode.componentInstance)) {
         // child component. it should have hydrated its own tree.
+        /*
+            ① 将 vnode 和 vnode 的所有子树的根 vnode 都会添加到数组 insertedVnodeQueue 中
+            ② 依次调用 cbs.create[i] 钩子函数来更新 vnode 的 attr、class、listeners 等等
+         */
         initComponent(vnode, insertedVnodeQueue)
         return true
       }
     }
+
+    // ① vnode.tag 存在，目标是元素节点
     if (isDef(tag)) {
       if (isDef(children)) {
         // empty element, allow client to pick up and populate children
+        // a. elm 元素没有子元素，那就添加子元素
         if (!elm.hasChildNodes()) {
           createChildren(vnode, children, insertedVnodeQueue)
+        // b. elm 有子元素
         } else {
           let childrenMatch = true
+
           let childNode = elm.firstChild
+
+          // 只要有一个子元素“注水”失败，那就标记 childrenMatch 为 false
           for (let i = 0; i < children.length; i++) {
             if (!childNode || !hydrate(childNode, children[i], insertedVnodeQueue)) {
               childrenMatch = false
@@ -922,9 +1037,17 @@ export function createPatchFunction (backend) {
             }
             childNode = childNode.nextSibling
           }
+
+
           // if childNode is not null, it means the actual childNodes list is
           // longer than the virtual children list.
+          /*
+              走到这里，childNode 还存在，那说明真实的 childNodes 列表比虚拟的 children 列表长
+              也就是说，elm.children 的长度大于 vnode.children 的长度
+           */
+          // 4. 至少有一个子元素“注水”失败，或者实际子元素的个数大于虚拟节点个数，这里返回，“注水”失败
           if (!childrenMatch || childNode) {
+            // 将 bailed 标记为 true（保释？）
             if (process.env.NODE_ENV !== 'production' &&
               typeof console !== 'undefined' &&
               !bailed
@@ -937,27 +1060,55 @@ export function createPatchFunction (backend) {
           }
         }
       }
+
       if (isDef(data)) {
         for (const key in data) {
+          /*
+                以下模块在“注水”过程中可以跳过，不执行其 create 钩子函数。因为它们在客户端已经渲染，或者根本没有初始化的必要。
+                isRenderedModule = makeMap('attrs,style,class,staticClass,staticStyle,key')
+           
+                也就是说，只要有一个 key 不是 'attrs,style,class,staticClass,staticStyle,key'
+                那就执行 invokeCreateHooks(vnode, insertedVnodeQueue)
+           */
           if (!isRenderedModule(key)) {
+            /*
+                ① 依次调用 cbs.create[i] 钩子函数来更新 attr、class、listeners 等等
+                ② 执行 vnode.data.hook.create(emptyNode, vnode)
+                ③ 将 vnode 加入队列到 insertedVnodeQueue 中
+             */
             invokeCreateHooks(vnode, insertedVnodeQueue)
             break
           }
         }
       }
+    // ② 否则，目标是文本节点
     } else if (elm.data !== vnode.text) {
       elm.data = vnode.text
     }
+
+    // 5. 走到这里了，“注水”成功
     return true
   }
 
+  // node 和 vnode 类型是否匹配，只有匹配上了，才可能用 vnode 对元素 node 进行“注水“
   function assertNodeMatch (node, vnode) {
     if (isDef(vnode.tag)) {
+      /*
+          createComponent 函数创建的一般组件的 tag 为：
+          "vue-component-" + (Ctor.cid) + (name ? ("-" + name) : '')
+
+          ① vnode.tag 是以 'vue-component' 开头
+          ② vnode.tag 和 node.tagName 是同一个标签名
+       */
       return (
         vnode.tag.indexOf('vue-component') === 0 ||
         vnode.tag.toLowerCase() === (node.tagName && node.tagName.toLowerCase())
       )
     } else {
+      /*
+          ① node.nodeType === 3 为 Text 类型，代表元素或属性中的文本内容
+          ② node.nodeType === 8 为 Comment 类型，代表注释
+       */
       return node.nodeType === (vnode.isComment ? 8 : 3)
     }
   }
