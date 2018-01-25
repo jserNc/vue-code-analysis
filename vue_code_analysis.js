@@ -6204,7 +6204,7 @@ function createComponentInstanceForVnode (
   }
 
   // 根据以上 options 选项，返回实例。这里的 Ctor 指的是“构造函数”
-  // vnodeComponentOptions.Ctor 应该是 Vue.extend() 产生的组件构造函数
+  // vnodeComponentOptions.Ctor 是 Vue.extend() 产生的组件构造函数
   // new vnodeComponentOptions.Ctor(options) 为组件实例
   // ② 根据选项对象创建组件实例
   return new vnodeComponentOptions.Ctor(options)
@@ -7461,38 +7461,41 @@ function getComponentName (opts) {
 
 // pattern 和 name 是否匹配
 function matches (pattern, name) {
-  // ① pattern 是数组，name 在数组中则返回 true
+  // 1. pattern 是字符串数组，name 是其中之一
   if (Array.isArray(pattern)) {
     return pattern.indexOf(name) > -1
-  // ② pattern 是逗号分隔的字符串，name 在这个字符串中则返回 true
+  // 2. pattern 是逗号分隔的字符串，按逗号分隔成数组后，name 是其中之一
   } else if (typeof pattern === 'string') {
     return pattern.split(',').indexOf(name) > -1
-  // ③ pattern 是正则，用 test 方法来检验 name
+  // 3. pattern 是正则表达式，name 通过匹配
   } else if (isRegExp(pattern)) {
     return pattern.test(name)
   }
-  /* istanbul ignore next */
+  // 4. 以上都没匹配成功，那就返回 false
   return false
 }
 
-// 裁剪 cache
+// 裁剪缓存
 function pruneCache (cache, current, filter) {
+  // 遍历 cache 里的所有 VNode 实例
   for (var key in cache) {
     var cachedNode = cache[key];
     if (cachedNode) {
+      // 组件名
       var name = getComponentName(cachedNode.componentOptions);
-      // 不能通过过滤器 filter 则销毁 cachedNode
       if (name && !filter(name)) {
+        // 1. 如果 cachedNode 对应的组件名不能通过过滤器，并且不是 current，那就销毁其对应的组件实例
         if (cachedNode !== current) {
           pruneCacheEntry(cachedNode);
         }
+        // 2. 如果只是 cachedNode 对应的组件名不能通过过滤器，删除该缓存
         cache[key] = null;
       }
     }
   }
 }
 
-// 销毁
+// 销毁组件
 function pruneCacheEntry (vnode) {
   if (vnode) {
     vnode.componentInstance.$destroy();
@@ -7507,8 +7510,8 @@ var KeepAlive = {
   
   props: {
     // patternTypes = [String, RegExp, Array]
-    include: patternTypes,
-    exclude: patternTypes
+    include: patternTypes, // matches(this.include, name)，只有匹配的组件会被缓存
+    exclude: patternTypes  // !matches(this.exclude, name)，任何匹配的组件都不会被缓存
   },
 
   created: function created () {
@@ -7526,12 +7529,21 @@ var KeepAlive = {
   },
 
   watch: {
-    // 包含，销毁不包含的
+    /*
+        include 属性变化时执行该函数，函数作用为：
+        遍历 this.cache 这个对象里的 vnode 实例，若某个 vnode 实例对应的组件实例（若该组件实例不是 this._vnode，则销毁该组件）的名字没通过 matches(val, name) 匹配，则将该 vnode 从 this.cache 中移除
+        
+        留下通过匹配的 
+    */
     include: function include (val) {
-      // 裁剪 this.cache
       pruneCache(this.cache, this._vnode, function (name) { return matches(val, name); });
     },
-    // 不包含，销毁包含的
+    /*
+        include 属性变化时执行该函数，函数作用为：
+        遍历 this.cache 这个对象里的 vnode 实例，若某个 vnode 实例对应的组件实例（若该组件实例不是 this._vnode，则销毁该组件）的名字通过了 matches(val, name) 匹配，则将该 vnode 从 this.cache 中移除
+        
+        留下没通过匹配的
+     */
     exclude: function exclude (val) {
       pruneCache(this.cache, this._vnode, function (name) { return !matches(val, name); });
     }
@@ -7539,12 +7551,16 @@ var KeepAlive = {
 
   // 返回 vnode
   render: function render () {
+    // ① 获取第一个子组件 vnode
     var vnode = getFirstComponentChild(this.$slots.default);
+    // ② 获取 vnode 对应的组件选项
     var componentOptions = vnode && vnode.componentOptions;
+    
     if (componentOptions) {
-      // check pattern
+      // ③ 获取对应的组件名
       var name = getComponentName(componentOptions);
-      // name 不存在于 this.include 中，或 name 存在于 this.exclude 中，返回 vnode
+
+      // ④ “不包含”，或“排除”，那就不缓存，直接在这里返回 vnode
       if (name && ((this.include && !matches(this.include, name)) || (this.exclude && matches(this.exclude, name)))) {
         return vnode
       }
@@ -7560,14 +7576,18 @@ var KeepAlive = {
         ? componentOptions.Ctor.cid + (componentOptions.tag ? ("::" + (componentOptions.tag)) : '')
         : vnode.key;
 
-
+      // a. 若已经缓存过该 vnode，那就获取缓存中的 vnode 对应的组件实例
       if (this.cache[key]) {
         vnode.componentInstance = this.cache[key].componentInstance;
+      // b. 若没有缓存过，那就缓存该 vnode
       } else {
         this.cache[key] = vnode;
       }
+      // 添加 keepAlive 属性
       vnode.data.keepAlive = true;
     }
+
+    // 最后返回 vnode
     return vnode
   }
 };

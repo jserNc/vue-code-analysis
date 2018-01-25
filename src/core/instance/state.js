@@ -421,10 +421,12 @@ function initWatch (vm: Component, watch: Object) {
   
   for (const key in watch) {
     const handler = watch[key]
+    // ① handler 是函数组成的数组
     if (Array.isArray(handler)) {
       for (let i = 0; i < handler.length; i++) {
         createWatcher(vm, key, handler[i])
       }
+    // ② handler 是函数
     } else {
       // key 值变化时触发 handler 函数
       createWatcher(vm, key, handler)
