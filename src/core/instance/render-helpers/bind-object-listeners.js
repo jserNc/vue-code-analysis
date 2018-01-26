@@ -17,6 +17,7 @@ export function bindObjectListeners (data: any, value: any): VNodeData {
       for (const key in value) {
         const existing = on[key]
         const ours = value[key]
+        // 新添加的事件回调函数放在前面，将来会先执行
         on[key] = existing ? [].concat(ours, existing) : ours
       }
     }

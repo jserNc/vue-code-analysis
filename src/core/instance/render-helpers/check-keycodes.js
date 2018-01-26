@@ -16,9 +16,13 @@ export function checkKeyCodes (
   key: string,
   builtInAlias: number | Array<number> | void
 ): boolean {
+  // keyCodes 优先获取 config.keyCodes[key]，找不到，才获取 builtInAlias
   const keyCodes = config.keyCodes[key] || builtInAlias
+
+  // ① keyCodes 是数组，eventKeyCode 是否为其中一个
   if (Array.isArray(keyCodes)) {
     return keyCodes.indexOf(eventKeyCode) === -1
+  // ② keyCodes 数字，eventKeyCode 是否和其相等
   } else {
     return keyCodes !== eventKeyCode
   }

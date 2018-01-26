@@ -492,7 +492,7 @@ export function createPatchFunction (backend) {
             ② 依次调用 cbs.create[i] 钩子函数来更新 vnode 的 attr、class、listeners 等等
          */
         initComponent(vnode, insertedVnodeQueue)
-        // 重新激活 vnode 这棵树
+        // 激活 <keep-alive> 内部的组件
         if (isTrue(isReactivated)) {
           reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
         }
@@ -547,7 +547,7 @@ export function createPatchFunction (backend) {
     }
   }
 
-  // 重新激活组件
+  // 激活 <keep-alive> 内部的组件
   function reactivateComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     let i
     // hack for #4339: a reactivated component with inner transition

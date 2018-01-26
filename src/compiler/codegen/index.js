@@ -9,6 +9,9 @@ type TransformFunction = (el: ASTElement, code: string) => string;
 type DataGenFunction = (el: ASTElement) => string;
 type DirectiveFunction = (el: ASTElement, dir: ASTDirective, warn: Function) => boolean;
 
+
+
+
 export class CodegenState {
   options: CompilerOptions;
   warn: Function;
@@ -365,6 +368,14 @@ function genForScopedSlot (
     '})'
 }
 
+
+/*
+    gen(c, state) 的大致结构为：
+    code = "_c('" + (el.tag) + "'" +  ("," + data)  + ("," + children) + ")"
+    
+    所以，最终返回值的结构大致为：
+    '[code1,code2],2' 或 `[code1,code2]`
+*/
 export function genChildren (
   el: ASTElement,
   state: CodegenState,
@@ -373,9 +384,13 @@ export function genChildren (
   altGenNode?: Function
 ): string | void {
   const children = el.children
+
+  // 前提：children 长度大于 0
   if (children.length) {
     const el: any = children[0]
+
     // optimize single v-for
+    // 1. 如果 v-for 循环的元素只有一个，那就优化一下：直接生成这个元素，并返回
     if (children.length === 1 &&
       el.for &&
       el.tag !== 'template' &&
@@ -383,13 +398,25 @@ export function genChildren (
     ) {
       return (altGenElement || genElement)(el, state)
     }
+
+    // 标准化类型， 0 | 1 | 2
     const normalizationType = checkSkip
       ? getNormalizationType(children, state.maybeComponent)
       : 0
+
     const gen = altGenNode || genNode
+
+    // 2. 遍历 children，对每个 child 执行 gen(child, state)
     return `[${children.map(c => gen(c, state)).join(',')}]${
       normalizationType ? `,${normalizationType}` : ''
     }`
+    /*
+        gen(c, state) 的大致结构为：
+        code = "_c('" + (el.tag) + "'" +  ("," + data)  + ("," + children) + ")"
+        
+        所以，最终返回值的结构大致为：
+        '[code1,code2],2' 或 `[code1,code2]`
+     */
   }
 }
 
@@ -397,38 +424,78 @@ export function genChildren (
 // 0: no normalization needed
 // 1: simple normalization needed (possible 1-level deep nested array)
 // 2: full normalization needed
+/*
+    normalizationType 表示子元素数组所需的规范类型：
+    0 : 不需要规范化
+    1 : 需要简单的规范化处理
+    2 : 全面的规范化处理
+
+    getNormalizationType() 的返回值为 0 | 1 | 2，确定以哪种形式来格式化 children
+*/
 function getNormalizationType (
+  /*
+      ASTNode = ASTElement | ASTText | ASTExpression，其中：
+      ASTElement 的 type 类型为 1
+      ASTText 的 type 类型为 3
+      ASTExpression 的 type 类型为 2
+   */                            
   children: Array<ASTNode>,
   maybeComponent: (el: ASTElement) => boolean
 ): number {
+  // 默认为 0
   let res = 0
+
   for (let i = 0; i < children.length; i++) {
     const el: ASTNode = children[i]
+    // ① 若 el 为文本或表达式，那就跳过这次循环，不决定 res 的值
     if (el.type !== 1) {
       continue
     }
+
+    /*
+        needsNormalization(el):
+        el 为 <template> 或 <slot> 或 v-for 属性存在，返回 true，即需要规范化
+
+        ② 若 el 元素需要规范化或某个 if 块需要规范化，直接确定 res = 2，结束循环
+     */
     if (needsNormalization(el) ||
         (el.ifConditions && el.ifConditions.some(c => needsNormalization(c.block)))) {
       res = 2
       break
     }
+
+    // ③ 若 el 为组件或某个 if 块为组件，那就暂时认定 res = 1，因为这里不终止循环，所以后面还可能修改 res 的值为 2
     if (maybeComponent(el) ||
         (el.ifConditions && el.ifConditions.some(c => maybeComponent(c.block)))) {
       res = 1
     }
   }
+
   return res
 }
 
+
+// el 为 <template> 或 <slot> 或 v-for 属性存在，即需要规范化
 function needsNormalization (el: ASTElement): boolean {
   return el.for !== undefined || el.tag === 'template' || el.tag === 'slot'
 }
 
+/*
+    生成节点有 3 种类型：
+    ASTNode = ASTElement | ASTText | ASTExpression，其中：
+    
+    ASTElement 的 type 类型为 1
+    ASTText 的 type 类型为 3
+    ASTExpression 的 type 类型为 2
+ */  
 function genNode (node: ASTNode, state: CodegenState): string {
+  // ① 生成元素
   if (node.type === 1) {
     return genElement(node, state)
+  // ② 生成注释
   } if (node.type === 3 && node.isComment) {
     return genComment(node)
+  // ③ 生成文本
   } else {
     return genText(node)
   }
@@ -475,18 +542,33 @@ function genComponent (
   })`
 }
 
+/*
+    生成 props 键值对字符串，形如：
+    '"propName1":propValue1,"propName2":propValue2,"propName3":propValue3...'
+ */
 function genProps (props: Array<{ name: string, value: string }>): string {
   let res = ''
   for (let i = 0; i < props.length; i++) {
     const prop = props[i]
     res += `"${prop.name}":${transformSpecialNewlines(prop.value)},`
   }
+  // 剔除最后一个逗号
   return res.slice(0, -1)
 }
 
 // #3895, #4268
+/*
+    替换掉 text 字符中的行分隔符、段分隔符（因为它们会被浏览器理解为换行，而在 Javascript 的字符串表达式中是不允许换行的，这会导致错误）
+    ① 'abc\u2028def'.replace(/\u2028/g, '\\u2028')
+     -> "abc\u2028def"
+
+    ② "abc\u2028def"
+    -> "abc def"
+ */
 function transformSpecialNewlines (text: string): string {
   return text
+    // 行分隔符
     .replace(/\u2028/g, '\\u2028')
+    // 段分隔符
     .replace(/\u2029/g, '\\u2029')
 }

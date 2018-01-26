@@ -1886,7 +1886,10 @@ function set (target, key, val) {
   if (Array.isArray(target) && isValidArrayIndex(key)) {
     // 数组长度变为 target.length, key 中的较大者
     target.length = Math.max(target.length, key);
-    // 在 key 位置删除 1 个元素，并新增 1 个元素 val，其实就是替换（设置）
+    /*
+        在 key 位置删除 1 个元素，并新增 1 个元素 val，其实就是替换（设置）
+        数组的 splice 方法已经被代理过，它会发出变化通知
+     */ 
     target.splice(key, 1, val);
     // 数组设置完值，就在这里返回
     return val
@@ -5974,7 +5977,7 @@ var componentVNodeHooks = {
         // on incorrect children. Instead we push them into a queue which will
         // be processed after the whole patch process ended.
         /*
-            在更新过程中，保持 alive 组件的子组件可能变化。如果直接的遍历组件树可能会在不正确的子节点上调用已经激活过的钩子。
+            在更新过程中，<keep-alive> 组件的子组件可能变化。如果直接的遍历组件树可能会在不正确的子节点上调用已经激活过的钩子。
             推荐的做法是：我们将它们加入到队列里，等这个 patch 过程结束后再执行队列。
         */
         queueActivatedComponent(componentInstance);
@@ -6591,13 +6594,20 @@ function resolveFilter (id) {
 /**
  * Runtime helper for checking keyCodes from config.
  */
-// Vue.prototype._k = checkKeyCodes;
-// 检查键值，eventKeyCode 和配置的键值不相同返回 true，例如 _k($event.keyCode,"right",39) 不是点击鼠标右键返回 true
+/*
+  Vue.prototype._k = checkKeyCodes;
+
+  该函数检查键值，eventKeyCode 和配置的键值不相同返回 true，例如：
+  _k($event.keyCode,"right",39) 不是点击鼠标右键返回 true
+ */
 function checkKeyCodes (eventKeyCode, key, builtInAlias) {
-  // builtInAlias 为内置别名
+  // keyCodes 优先获取 config.keyCodes[key]，找不到，才获取 builtInAlias
   var keyCodes = config.keyCodes[key] || builtInAlias;
+  
+  // ① keyCodes 是数组，eventKeyCode 是否为其中一个
   if (Array.isArray(keyCodes)) {
     return keyCodes.indexOf(eventKeyCode) === -1
+  // ② keyCodes 数字，eventKeyCode 是否和其相等
   } else {
     return keyCodes !== eventKeyCode
   }
@@ -8676,7 +8686,7 @@ function createPatchFunction (backend) {
     }
   }
 
-  // 激活组件
+  // 激活 <keep-alive> 内部的组件
   function reactivateComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     var i;
     // hack for #4339: a reactivated component with inner transition
@@ -10365,26 +10375,33 @@ function getAndRemoveAttr (el, name) {
 /**
  * Cross-platform code generation for component v-model
  */
- // 对于组件，给 el.model 对象赋值
+// 针对 v-model 生成 el.model 这个 json 对象
 function genComponentModel ( el, value, modifiers) {
   var ref = modifiers || {};
   var number = ref.number;
   var trim = ref.trim;
 
+  // $$v 是一个变量名，在该函数外定义的，$$v = number ? _n(valueBinding): valueBinding
   var baseValueExpression = '$$v';
   var valueExpression = baseValueExpression;
-  // 去掉左右两端空格
+
+  // ① 有 trim 修饰符，那就去掉 valueExpression 两端空格
   if (trim) {
     valueExpression =
       "(typeof " + baseValueExpression + " === 'string'" +
         "? " + baseValueExpression + ".trim()" +
         ": " + baseValueExpression + ")";
   }
-  // 转为数值
+  
+  // ② 有 number 修饰符，那就将 valueExpression 转为数值
   if (number) {
     valueExpression = "_n(" + valueExpression + ")";
   }
-  // 字符串形式的执行语句
+  
+  /*
+    1. 例如 value = 'varA', assignment = '123'，那么 assignment = 'varA = 123'
+    2. 例如 value = 'obj[a]', assignment = '123' 那么 assignment = '$set(obj, a, 123)'
+ */
   var assignment = genAssignmentCode(value, valueExpression);
 
   // 最终生成这个对象
@@ -10398,19 +10415,31 @@ function genComponentModel ( el, value, modifiers) {
 /**
  * Cross-platform codegen helper for generating v-model value assignment code.
  */
-// 返回一个字符串形式的执行语句，其实就是一个 set 操作
+/*
+    1. 例如 value = 'varA', assignment = '123' 返回 'varA = 123'
+    2. 例如 value = 'obj[a]', assignment = '123' 返回 '$set(obj, a, 123)'
+ */
 function genAssignmentCode (value, assignment) {
   /*
-    parseModel(value) 返回一个 json 对象
-    {
-      exp: expValue,
-      idx: idxValue
-    }
-  */
+      例如：
+      parseModel('test[idx]')
+      -> {
+          exp: "test", 
+          idx: "idx"
+      }
+   */
   var modelRs = parseModel(value);
+  // ① 普通的赋值，parseModel 函数走的是流程1 
   if (modelRs.idx === null) {
     return (value + "=" + assignment)
+  // ② 给对象/数组赋值，需要通知变化
   } else {
+    /*
+        set (target, key, val) 给 target 添加 key 属性（值为 val）。若该属性之前不存在，发出变化通知。
+        Vue.prototype.$set = set;
+
+        这里虽然没有用 vm.$set() 写法，但是最后它是以 with(this){$set()} 这种写法绑定到 vm 上的
+     */
     return ("$set(" + (modelRs.exp) + ", " + (modelRs.idx) + ", " + assignment + ")")
   }
 }
@@ -10436,7 +10465,29 @@ var index$1;
 var expressionPos;
 var expressionEndPos;
 
-// 返回一个 json 对象
+/*
+    解析字符串 val，返回 json 对象 
+    例如：
+    parseModel('test[idx]')
+    -> {
+        exp: "test", 
+        idx: "idx"
+    }
+
+    parseModel('test[test1[idx]]')
+    -> {
+        exp: "test", 
+        idx: "test1[idx]"
+    }
+
+    parseModel('test["a"][idx]')
+    -> {
+        exp: 'test["a"]', 
+        idx: "idx"
+    }
+    这个执行结果不应感到意外，因为每次遇到 [ 都会执行 parseBracket 方法
+    这个方法会重置 expressionPos 和 expressionEndPos 的值
+ */
 function parseModel (val) {
   str = val;
   len = str.length;
@@ -10445,8 +10496,9 @@ function parseModel (val) {
   /*
     lastIndexOf() 方法可返回一个指定的字符串值最后出现的位置
 
-    没有方括号，或方括号完整关闭，直接返回一个 json
+    若没有方括号，或方括号完整关闭，直接返回一个 json
   */
+  // 流程1：没做处理，直接返回 json，注意这里的 idx 为 null
   if (val.indexOf('[') < 0 || val.lastIndexOf(']') < len - 1) {
     return {
       exp: val,
@@ -10454,18 +10506,28 @@ function parseModel (val) {
     }
   }
 
+  // 流程2 ：遍历 val 字符串，最后返回计算过的 json
+
+  // 循环结束条件：整个 val 字符串遍历完
   while (!eof()) {
     chr = next();
-    // 遇到左引号，就向后走，直至关闭该引号
+    // 遇到引号就一直向前走，直到引号关闭
     if (isStringStart(chr)) {
       parseString(chr);
-    // '\x5B' -> "["，遇到左括号，就向后走，直至关闭该括号
+    // '\x5B' -> "["，遇到左括号，就一直向前走，直至关闭该括号
     } else if (chr === 0x5B) {
+      // 这个操作会给 expressionPos 和 expressionEndPos 赋值
       parseBracket(chr);
     }
   }
 
-  // expressionPos 是方括号开始的位置，expressionEndPos 是方括号结束的位置
+  /*
+      ① expressionPos 是方括号开始的位置，expressionEndPos 是方括号结束的位置
+      ② substring() 方法用于提取字符串中介于两个指定下标之间的字符
+
+      例如：'abc[0]':
+      exp 就是表达式 'abc'，idx 就是索引 '0'
+   */
   return {
     // [] 之前的内容
     exp: val.substring(0, expressionPos),
@@ -10477,39 +10539,51 @@ function parseModel (val) {
 /*
     charCodeAt() 方法可返回指定位置的字符的 Unicode 编码。这个返回值是 0 - 65535 之间的整数。
     charCodeAt() 与 charAt() 方法执行的操作相似，只不过前者返回的是位于指定位置的字符的编码，而后者返回的是字符子串。
+
+    'abc'.charCodeAt(1) -> 98
+    'abc'.charAt(1) -> 'b'
+
+    next 函数的作用是返回下一个字符的 Unicode 编码，index 加 1
 */
 function next () {
   return str.charCodeAt(++index$1)
 }
 
-// eof -> end of file ?
+// eof -> end of file，代表结束位置？
 function eof () {
   return index$1 >= len
 }
 
-// 字符串起始
+// 是否是字符串开始
 function isStringStart (chr) {
   // '\x22' -> "  '\x27' -> '
   return chr === 0x22 || chr === 0x27
 }
 
-// 解析括弧
+// 解析括弧，若遇到括弧开始符 [，那就一直往前走，直到括弧结束符 ]
 function parseBracket (chr) {
   var inBracket = 1;
+  // ① 括弧开始 [
   expressionPos = index$1;
-  // 没超过结束字符
+  // 循环结束条件为：字符串结束
   while (!eof()) {
     chr = next();
+    
+
     // 如果遇到引号（单引号或双引号），就一直向后走，直到引号关闭
     if (isStringStart(chr)) {
       parseString(chr);
+      // 引号结束，肯定就不是 [ 或 ] 了，本次循环后面就不执行了。这个小小的优化有心了。
       continue
     }
+
+
     // '\x5B' -> [
     if (chr === 0x5B) { inBracket++; }
     // '\x5B' -> ]
     if (chr === 0x5D) { inBracket--; }
-    // 方括号关闭
+
+    // ② 找到配对的结束括弧 ]
     if (inBracket === 0) {
       expressionEndPos = index$1;
       break
@@ -10517,11 +10591,13 @@ function parseBracket (chr) {
   }
 }
 
-// 解析字符串，从引号开始到引号结束
+// 解析引号，若遇到引号开始 " 或 '，那就一直往前走，直到引号结束 " 或 '
 function parseString (chr) {
+  // ① 单引号/双引号开始
   var stringQuote = chr;
   while (!eof()) {
     chr = next();
+    // ② 找到配对的单引号/双引号结束
     if (chr === stringQuote) {
       break
     }
@@ -14919,6 +14995,8 @@ var genStaticKeysCached = cached(genStaticKeys$1);
  * 2. Completely skip them in the patching process.
  */
  /*
+    AST - Abstract syntax tree，抽象语法树
+    
     优化器的目标：遍历模板的 AST 树，并检测出纯静态的子树（也就是从来不需要改变的 dom 块）
 
     一旦检测到了纯静态的子树，做如下处理：
@@ -15133,6 +15211,7 @@ function isDirectChildOfTemplateFor (node) {
        function (
 */
 var fnExpRE = /^\s*([\w$_]+|\([^)]*?\))\s*=>|^function\s*\(/;
+
 /*
     simplePathRE 匹配以下路径：
     ① abc
@@ -15141,6 +15220,9 @@ var fnExpRE = /^\s*([\w$_]+|\([^)]*?\))\s*=>|^function\s*\(/;
     ④ abc["def"]
     ⑤ abc[123]
     ⑥ abc[def]
+
+    观察这个正则，会发现闭合方括号没有转义，如 \[\d+]，这样写不是错误，因为有规定：
+    如果之前能找到与之对应的元字符开方括号 [，则 ] 作为元字符出现，否则，作为普通字符出现。
 */
 var simplePathRE = /^\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\['.*?']|\[".*?"]|\[\d+]|\[[A-Za-z_$][\w$]*])*\s*$/;
 
@@ -15165,44 +15247,28 @@ var genGuard = function (condition) { return ("if(" + condition + ")return null;
 
 // 修饰符对应的执行代码
 var modifierCode = {
-  // 阻止冒泡
-  stop: '$event.stopPropagation();',
-  // 阻止默认行为
-  prevent: '$event.preventDefault();',
+  stop: '$event.stopPropagation();',    // 阻止冒泡
+  prevent: '$event.preventDefault();',  // 阻止默认行为
   /*
     event.currentTarget：返回事件当前所在的节点，会随着事件捕获和事件冒泡改变。也就是事件监听函数中的 this。
     event.target：返回目标节点（最深层节点），固定的。正是这个属性使得事件代理成为可能。
   */
-  self: genGuard("$event.target !== $event.currentTarget"),
-
-  // "ctrl" 键是否被按下 "if(!$event.ctrlKey)return null;"
-  ctrl: genGuard("!$event.ctrlKey"), 
-
-  // "shift" 键是否被按下 "if(!$event.shiftKey)return null;"
-  shift: genGuard("!$event.shiftKey"),
-
-  // "alt" 键是否被按下 "if(!$event.altKey)return null;"
-  alt: genGuard("!$event.altKey"),
-
-  // "meta" 键是否被按下 "if(!$event.metaKey)return null;"
-  meta: genGuard("!$event.metaKey"),
-
-  // 鼠标左键 "if('button' in $event && $event.button !== 0)return null;"
-  left: genGuard("'button' in $event && $event.button !== 0"),
-
-  // 鼠标中键 "if('button' in $event && $event.button !== 1)return null;"
-  middle: genGuard("'button' in $event && $event.button !== 1"),
-
-  // 鼠标右键 "if('button' in $event && $event.button !== 2)return null;"
-  right: genGuard("'button' in $event && $event.button !== 2")
+  self: genGuard(`$event.target !== $event.currentTarget`), // 事件绑定的元素和事件源不一样
+  ctrl: genGuard(`!$event.ctrlKey`),    // 按下了 ctrl 键
+  shift: genGuard(`!$event.shiftKey`),  // 按下了 shift 键
+  alt: genGuard(`!$event.altKey`),      // 按下了 alt 键
+  meta: genGuard(`!$event.metaKey`),    // 按下了 meta 键
+  left: genGuard(`'button' in $event && $event.button !== 0`),   // 按下了鼠标左键
+  middle: genGuard(`'button' in $event && $event.button !== 1`), // 按下了鼠标中键
+  right: genGuard(`'button' in $event && $event.button !== 2`)   // 按下了鼠标右键
 };
 
 /*
     返回结果大概为：
     'on:{
-        'name1' : "function($event){ some code}",
-        'name2' : "function($event){ some code}",
-        'name3' : "function($event){ some code}"
+        'name1' : "function($event){ some code }",
+        'name2' : "function($event){ some code }",
+        'name3' : "function($event){ some code }"
         ...
     }'
 */
@@ -15223,102 +15289,106 @@ function genHandlers (events, isNative, warn) {
     }
     res += "\"" + name + "\":" + (genHandler(name, handler)) + ",";
   }
-  // 'abc'.slice(0,-1) -> 'ab'（去除最后一个逗号，然后闭合 {}）
+  // 例如 '{abc,'.slice(0,-1) + '}' -> '{abc}'（去除最后一个逗号，然后闭合 {}）
   return res.slice(0, -1) + '}'
 }
 
-// 返回一个事件处理函数的字符串形式
+/*
+    该函数返回一个事件处理函数的字符串形式
+    ① handler 不是数组，那么返回值为一个完整的函数，如：
+       return `function($event){${code}${handlerCode}}`
+    ② handler 是数组，那么返回值是是 ① 中多个返回值拼接成的数组，如：
+       return `[function($event){${code}${handlerCode}},function($event){${code}${handlerCode}},function($event){${code}${handlerCode}}]`
+ */
 function genHandler (name, handler) {
-  // 没有指定 handler，那就返回空函数
+  // 1. 直接返回空方法
   if (!handler) {
     return 'function(){}'
   }
 
-  // handler 是数组，递归调用 genHandler 函数
+  // 2. handler 是一组 ASTElementHandler，递归调用本方法
   if (Array.isArray(handler)) {
     return ("[" + (handler.map(function (handler) { return genHandler(name, handler); }).join(',')) + "]")
   }
 
-  /*
-    (1) simplePathRE 匹配以下路径：
-    ① abc
-    ② abc.def
-    ③ abc['def']
-    ④ abc["def"]
-    ⑤ abc[123]
-    ⑥ abc[def]
+  // 3. 一般流程
 
-    (2) fnExpRE 匹配两种函数声明方式：
-    ① 箭头函数
-       (a) =>
-       a => 
-    ② 普通函数 
-       function (
- */
-  // handler.value 是函数名，例如 abc['def'] 就是指某个函数
+  // ① handler.value 是路径名，指向一个函数，如 abc['def']
   var isMethodPath = simplePathRE.test(handler.value);
-  // handler.value 是函数声明，例如 'function(arg){someCode}'
+  // ② handler.value 是函数表达式，如 'function(arg){someCode}'
   var isFunctionExpression = fnExpRE.test(handler.value);
 
-  // ① 没有修饰符
+  // a. 没有修饰符
   if (!handler.modifiers) {
+    /*
+        ① isMethodPath || isFunctionExpression 为 true 表示 handler.value 是完整的函数
+        ② 否则，handler.value 只是行内执行语句，将其封装成完整函数
+     */
     return isMethodPath || isFunctionExpression
-      // handler.value 是完整的函数
-      ? handler.value
-      // 行内语句
+      ? handler.value // handler.value 是完整的函数
       : ("function($event){" + (handler.value) + "}") // inline statement
-  // ② 有修饰符 modifiers
+  // b. 有修饰符
   } else {
     var code = '';
     var genModifierCode = '';
     var keys = [];
+
     // key 为 stop、prevent、self、ctrl...
     for (var key in handler.modifiers) {
+      // ① stop、prevent、self 等修饰符有自己对应的 if 语句
       if (modifierCode[key]) {
-        /*
-            例如：
-         var modifierCode = {
-             stop: '$event.stopPropagation();',
-             prevent: '$event.preventDefault();',
-             self: genGuard("$event.target !== $event.currentTarget"),
-             ...
-         };
-
-         其中：
-         ① stop 阻止冒泡，prevent 阻止默认行为
-         ② event.currentTarget：返回事件当前所在的节点，会随着事件捕获和事件冒泡改变。也就是事件监听函数中的 this。
-            event.target：返回目标节点（最深层节点），固定的。正是这个属性使得事件代理成为可能。
-        */
         genModifierCode += modifierCode[key];
-        // keyCodes 为一个 json 对象，即键名和键值的映射表
+        // 既存在 genModifierCode 中又存在于 keyCodes 中只有 'left'/'right' 这两个了
         if (keyCodes[key]) {
           keys.push(key);
         }
+      // ② 多个键值条件合并成一个 if 语句
       } else {
         keys.push(key);
       }
     }
 
+    /*
+        根据一组键名（键值），生成一个 if 语句，如：
+        genKeyFilter(['up','enter'])
+        -> "if(!('button' in $event)&&_k($event.keyCode,"up",38)&&_k($event.keyCode,"enter",13))return null;"
+        
+        没有点击鼠标 && 点击的键盘按键按键不是 'up' && 点击的键盘按键不是 'enter'，那就返回 null
+    */
     if (keys.length) {
-      /*
-        genKeyFilter(['left','right'])
-        -> "if(!('button' in $event)&&_k($event.keyCode,"left",37)&&_k($event.keyCode,"right",39))return null;"
-
-        如果事件源不是指定的按键（keys），就返回 null（什么也不做）
-      */
       code += genKeyFilter(keys);
     }
+    
     // Make sure modifiers like prevent and stop get executed after key filtering
+    /*
+        根据一组键名，生成多个 if 语句，如：
+        genModifierCode = 
+        `if($event.target !== $event.currentTarget)return null;
+        if(!$event.shiftKey)return null;
+        if(!$event.altKey)return null;
+        $event.stopPropagation();
+        $event.preventDefault();
+        `
+     */
     if (genModifierCode) {
       code += genModifierCode;
     }
+
+
     /*
-        ① isMethodPath 为 true（handler.value 是函数名）
-           如 handler.value = abc['def']（函数名），那么 handlerCode 为 abc['def']($event)
-        ② isFunctionExpression 为 true（handler.value 是函数声明）
-           如 handler.value = function(a){return a}，那么 handlerCode 为 (function(a){return a})($event)
-        ③ 以上都不是，那么 handlerCode 为 handler.value
-    */
+        ① isMethodPath 为 true，handler.value 是路径名，指向一个函数，如 "abc['def']"
+        ② isFunctionExpression 为 true，handler.value 是函数表达式，如 'function(arg){someCode}'
+     
+        于是：
+        ① isMethodPath 为真，直接给函数传实参，如：
+           handlerCode = "abc['def'](($event))"
+        ② isFunctionExpression 为真，需要把函数声明用括号包起来，形式立即执行函数，如：
+           handlerCode = '(function(arg){someCode})($event)'
+        ③ 其他，handler.value 可认为是行内可执行语句，如：
+           handlerCode = $event.stopPropagation();
+
+        总之，handlerCode 是可执行语句
+     */
     var handlerCode = isMethodPath
       ? handler.value + '($event)'
       : isFunctionExpression
@@ -15327,52 +15397,59 @@ function genHandler (name, handler) {
 
     // 返回事件处理函数的字符串形式
     /*
-      例如，对于 <div @click.self.ctrl='clickFunc'> 则 click 事件返回值为：
-      "function($event){if(!('button' in $event)&&_k($event.keyCode,"ctrl"))return null;if($event.target !== $event.currentTarget)return null;clickFunc($event)}"
-      格式化后：
-      "function($event) {
-        if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
-        if ($event.target !== $event.currentTarget) return null;
-        clickFunc($event)
-      }"
+        ① code 是一堆 if 语句，只要有一个不满足就返回 null
+        ② handlerCode 是可以执行语句，是真正的函数体
+
+        例如，对于 <div @click.self.ctrl='clickFunc'> 则 click 事件返回值为：
+        "function($event){if(!('button' in $event)&&_k($event.keyCode,"ctrl"))return null;if($event.target !== $event.currentTarget)return null;clickFunc($event)}"
+        格式化后：
+        "function($event) {
+          if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
+          if ($event.target !== $event.currentTarget) return null;
+          clickFunc($event)
+        }"
      */
     return ("function($event){" + code + handlerCode + "}")
   }
 }
 
+
+
 /*
-genKeyFilter(['left','right'])
--> "if(!('button' in $event)&&_k($event.keyCode,"left",37)&&_k($event.keyCode,"right",39))return null;"
+  根据一组键名（键值），生成一个 if 语句，如：
+  genKeyFilter(['up','enter'])
+  -> "if(!('button' in $event)&&_k($event.keyCode,"up",38)&&_k($event.keyCode,"enter",13))return null;"
+  
+  没有点击鼠标 && 点击的键盘按键按键不是 'up' && 点击的键盘按键不是 'enter'，那就返回 null
 */
 function genKeyFilter (keys) {
   return ("if(!('button' in $event)&&" + (keys.map(genFilterCode).join('&&')) + ")return null;")
 }
 
 /*
-genFilterCode('left') -> "_k($event.keyCode,"left",37)"
-genFilterCode(37) -> "$event.keyCode!==37"
-*/
+    根据键名（键值），生成 if 判断的条件，例如：
+    ① genFilterCode(10) -> "$event.keyCode!==10"  点击的按键键值不是 10
+    ② genFilterCode('up') -> "_k($event.keyCode,"up",38)" 点击的按键别名不是 up
+    ③ genFilterCode('hi') -> "_k($event.keyCode,"hi")   点击的按键别名不是 hi
+ */
 function genFilterCode (key) {
   var keyVal = parseInt(key, 10);
-  // key 是数值
+  // 1. 如 key = '10'
   if (keyVal) {
     return ("$event.keyCode!==" + keyVal)
   }
-  /*
-    var keyCodes = {
-      esc: 27,
-      tab: 9,
-      enter: 13,
-      space: 32,
-      up: 38,
-      left: 37,
-      right: 39,
-      down: 40,
-      'delete': [8, 46]
-    };
-  */
+
+
+  // 2. 如 key = 'up'
   var alias = keyCodes[key];
-  // key 是键名
+  /*
+  Vue.prototype._k = checkKeyCodes;
+
+  checkKeyCodes($event.keyCode,"right",39) 
+  将 config.keyCodes[key] || 39 这个值和当前点击下的键值 $event.keyCode 对比
+  ① 相等，返回 false
+  ② 不相等，返回 true
+ */
   return ("_k($event.keyCode," + (JSON.stringify(key)) + (alias ? ',' + JSON.stringify(alias) : '') + ")")
 }
 
@@ -15382,11 +15459,21 @@ function on (el, dir) {
   if ("development" !== 'production' && dir.modifiers) {
     warn("v-on without argument does not support modifiers.");
   }
+  /*
+    Vue.prototype._g = bindObjectListeners;
+    该函数作用是将 v-on="object" 转换成 VNode 的 data，简单的说：
+    v-on 指令的值 object 对象就是参数 value，然后根据 value 对象的值对 data.on 进行修正，最后返回 data 对象
+ */
   el.wrapListeners = function (code) { return ("_g(" + code + "," + (dir.value) + ")"); };
 }
 
 // 给 el 添加 wrapData 属性，_b 函数
 function bind$1 (el, dir) {
+  /*
+    Vue.prototype._b = bindObjectProps;
+    该函数作用是将 v-bind="object" 转换成 VNode 的 data，简单的说：
+    v-bind 指令的值 object 对象就是参数 value，根据这个 value 对象的值对 data 对象进行修正，最后返回 data 对象     
+ */
   el.wrapData = function (code) {
     return ("_b(" + code + ",'" + (el.tag) + "'," + (dir.value) + "," + (dir.modifiers && dir.modifiers.prop ? 'true' : 'false') + (dir.modifiers && dir.modifiers.sync ? ',true' : '') + ")")
   };
@@ -16147,7 +16234,7 @@ function genComponent (componentName, el, state) {
   return ("_c(" + componentName + "," + (genData$2(el, state)) + (children ? ("," + children) : '') + ")")
 }
 
-// 返回值："propName1:propValue1,propName2:propValue2,propName3:propValue3..."
+// 返回值：'"propName1":propValue1,"propName2":propValue2,"propName3":propValue3...'
 function genProps (props) {
   var res = '';
   for (var i = 0; i < props.length; i++) {
@@ -16159,7 +16246,14 @@ function genProps (props) {
 }
 
 // #3895, #4268
-// 这个编码为 2028 的字符为行分隔符，会被浏览器理解为换行，而在 Javascript 的字符串表达式中是不允许换行的，从而导致错误。
+/*
+    替换掉 text 字符中的行分隔符、段分隔符（因为它们会被浏览器理解为换行，而在 Javascript 的字符串表达式中是不允许换行的，这会导致错误）
+    ① 'abc\u2028def'.replace(/\u2028/g, '\\u2028')
+     -> "abc\u2028def"
+
+    ② "abc\u2028def"
+    -> "abc def"
+ */
 function transformSpecialNewlines (text) {
   return text
     // 行分隔符

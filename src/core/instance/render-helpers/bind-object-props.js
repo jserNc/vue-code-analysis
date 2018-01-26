@@ -12,7 +12,13 @@ import {
 /**
  * Runtime helper for merging v-bind="object" into a VNode's data.
  */
-// Vue.prototype._b = bindObjectProps;
+/*
+    Vue.prototype._b = bindObjectProps;
+    该函数作用是将 v-bind="object" 转换成 VNode 的 data
+
+    简单的说：
+    v-bind 指令的值 object 对象就是参数 value，根据这个 value 对象的值对 data 对象进行修正，最后返回 data 对象 
+ */
 export function bindObjectProps (
   data: any,
   tag: string,
@@ -47,7 +53,7 @@ export function bindObjectProps (
       let hash
       // 遍历 value 的属性
       for (const key in value) {
-        // ① key 是 'class'、'style'、'key','ref','slot','is'，hash 取 data
+        // ① key 是 'class'、'style'、'key','ref','slot','is' 其中之一，hash 取 data
         if (key === 'class' || key === 'style' || isReservedAttribute(key)) {
           hash = data
         // ② key 是其他值，hash 取 data.domProps/data.attrs
