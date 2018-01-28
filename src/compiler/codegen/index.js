@@ -516,6 +516,8 @@ function genSlot (el: ASTElement, state: CodegenState): string {
   const slotName = el.slotName || '"default"'
   const children = genChildren(el, state)
   let res = `_t(${slotName}${children ? `,${children}` : ''}`
+
+  
   const attrs = el.attrs && `{${el.attrs.map(a => `${camelize(a.name)}:${a.value}`).join(',')}}`
   const bind = el.attrsMap['v-bind']
   if ((attrs || bind) && !children) {
@@ -536,6 +538,24 @@ function genComponent (
   el: ASTElement,
   state: CodegenState
 ): string {
+  /*
+    ① genChildren(el, state, true) 返回值的结构大致为：
+    '[code1,code2],2' 或 `[code1,code2]`
+
+    ② genData$2(el, state) 返回值为这种形式：
+    data: {
+        staticClass:"view two",
+        attrs:{"name":"a"},
+        key : ...,
+        attrs : {},
+        ...
+    }
+
+    所以该函数返回值形如：
+    `_c(tag, {data}, [children], 2)`
+
+    其中 vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); };
+  */
   const children = el.inlineTemplate ? null : genChildren(el, state, true)
   return `_c(${componentName},${genData(el, state)}${
     children ? `,${children}` : ''
