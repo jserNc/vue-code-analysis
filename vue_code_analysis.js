@@ -6512,20 +6512,20 @@ function applyNS (vnode, ns) {
 // Vue.prototype._l = renderList 渲染 v-for 列表，返回数组 ret，该数组元素是 render 函数执行结果
 function renderList (val,render) {
   var ret, i, l, keys, key;
-  // val 是数组或 val 是字符串，例如 v-for="(value, key) in items"
+  // ① val 是数组或字符串，例如 v-for="(value, key) in items" 中的 items
   if (Array.isArray(val) || typeof val === 'string') {
     ret = new Array(val.length);
     for (i = 0, l = val.length; i < l; i++) {
       ret[i] = render(val[i], i);
     }
-  // val 是数值，例如 v-for="item in 5"
+  // ② val 是数值，例如 v-for="item in 5" 中的 5
   } else if (typeof val === 'number') {
     ret = new Array(val);
     for (i = 0; i < val; i++) {
 	  // i + 1 为 1 2 3 4 5
       ret[i] = render(i + 1, i);
     }
-  // val 是对象
+  // ③ val 是对象
   } else if (isObject(val)) {
     keys = Object.keys(val);
     ret = new Array(keys.length);
@@ -14996,7 +14996,7 @@ var genStaticKeysCached = cached(genStaticKeys$1);
  */
  /*
     AST - Abstract syntax tree，抽象语法树
-    
+
     优化器的目标：遍历模板的 AST 树，并检测出纯静态的子树（也就是从来不需要改变的 dom 块）
 
     一旦检测到了纯静态的子树，做如下处理：
@@ -15557,7 +15557,7 @@ function generate (ast,options) {
     </div>
 
     得到的 render 为:
-    with(this) {
+    `with(this) {
         return _c('div', {
             attrs: {
                 "id": "app"
@@ -15571,7 +15571,7 @@ function generate (ast,options) {
                 }
             }
         }, [_v("\n" + _s(_f("filter")(computedValue)) + "\n")])])
-    }
+    }`
 	*/
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
@@ -15679,7 +15679,7 @@ function genOnce (el, state) {
   }
 }
 
-// v-if，实际调用的时候好像没只用到 el 和 state 等两个参数
+// v-if
 function genIf (el, state, altGen, altEmpty) {
   // 标记执行过 genIf，避免递归
   el.ifProcessed = true; // avoid recursion
@@ -15736,11 +15736,11 @@ function genIfConditions (conditions, state, altGen, altEmpty) {
 // v-for
 function genFor (el, state, altGen, altHelper) {
   /*
-	v-for = "(value, key) in items"
-	数据源 el.for = 'items'
-	数据项 el.alias = 'value'
-	数据子项 el.iterator1 = "value"
-	数据子项 el.iterator2 = ""
+    	v-for = "(value, key) in items"
+    	数据源 el.for = 'items'
+    	数据项 el.alias = 'value'
+    	数据子项 el.iterator1 = "key"
+    	数据子项 el.iterator2 = ""
   */
   var exp = el.for;
   var alias = el.alias;
@@ -15765,14 +15765,13 @@ function genFor (el, state, altGen, altHelper) {
   // 标识执行过 genFor 函数，避免递归调用
   el.forProcessed = true; // avoid recursion
   /*
-	例如：
-	<div id="app">
-		<a href="#" v-for="(value, key) in items">{{val}}</a>
-	</div>
-	这里递归调用 genElement 得到：
-	"_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])})"
-	最终返回："_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
-	最外层的 div 包 a 标签，a 标签又包含文本
+    	例如：
+      <div id="app">
+        <a href="#" v-for="(value, key) in items">{{val}}</a>
+      </div>
+      最外层的 div 包 a 标签，a 标签又包含文本：
+      ① v-for 返回："_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])})"
+      ② 整个 div 返回："_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
   */
   return (altHelper || '_l') + "((" + exp + ")," +
     "function(" + alias + iterator1 + iterator2 + "){" +
@@ -16028,16 +16027,27 @@ function genDirectives (el, state) {
 }
 
 /*
-    返回值：
-    "inlineTemplate:{
-        render:function(){" + (inlineRenderFns.render) + "},
-        staticRenderFns:[" + (inlineRenderFns.staticRenderFns.map(function (code) { return ("function(){" + code + "}"); }).join(',')) + "]
-    }"
-*/
+    生成内联模板，返回值形如：
+    `inlineTemplate:{
+        render:function(){someCode},
+        staticRenderFns:[function(){${code}}, function(){${code}}...]
+    }`
+ */
 function genInlineTemplate (el, state) {
   var ast = el.children[0];
 
-  // 行内模板组件只能有一个子元素
+  /*
+      如果子组件有 inline-template 特性，组件将把它的内容当作它的模板，而不是把它当作分发内容。
+      例如：
+      <my-component inline-template>
+        <div>
+          <p>这些将作为组件自身的模板。</p>
+          <p>而非父组件透传进来的内容。</p>
+        </div>
+      </my-component>
+   */
+  
+  // 内联模板组件只能有一个子元素
   if ("development" !== 'production' && (el.children.length > 1 || ast.type !== 1)) {
     state.warn('Inline-template components must have exactly one child element.');
   }
@@ -16056,9 +16066,19 @@ function genInlineTemplate (el, state) {
 }
 
 /*
-    返回值：
-    "scopedSlots:_u([...])"
-*/
+    生成作用域插槽，返回值形如：
+    `scopedSlots : _u([
+        {
+            key:key1,
+            fn:function(){}
+        },
+        {
+            key:key2,
+            fn:function(){}
+        }
+        ...
+    ])`
+ */
 function genScopedSlots (slots, state) {
   return ("scopedSlots:_u([" + (Object.keys(slots).map(function (key) {
       return genScopedSlot(key, slots[key], state)
@@ -16069,11 +16089,15 @@ function genScopedSlots (slots, state) {
     ① v-for 中，返回：
     "_l( exp ,function(){ ...})"
 
-    ② 其他情况，返回：
+    ② 一般情况，返回：
     "{
         key:" + key + ",
-        fn:function(){...}
-      }"
+        fn:function(){
+          el.tag === 'template'
+            ? genChildren(el, state) || 'void 0'
+            : genElement(el, state))
+        }
+    }"
 
 */
 function genScopedSlot (key, el, state) {
@@ -16426,7 +16450,7 @@ function createCompileToFunctionFn (compile) {
           /*
             您正在使用独立版本的 Vue.js。当前环境的“内容安全政策”禁止不安全的 eval。
             模板编译器在这样的环境里是不能生效的。可以考虑解除“内容安全政策”以支持不安全的 eval。
-            或者将您的目标预编译进渲染函数也是可以的。
+            或者将您的模板预编译进渲染函数也是可以的。
           */
           warn(
             'It seems you are using the standalone build of Vue.js in an ' +
@@ -16452,14 +16476,14 @@ function createCompileToFunctionFn (compile) {
     // 第 1 步：编译
     var compiled = compile(template, options);
     /*
-         compiled 结构:
-         {
-            ast: ast,
-            render: code.render,
-            staticRenderFns: code.staticRenderFns
-            errors: [...],
-            tips: [...]
-          }
+       compiled 结构:
+       {
+          ast: ast,
+          render: code.render,
+          staticRenderFns: code.staticRenderFns
+          errors: [...],
+          tips: [...]
+       }
      */
 
     // check compilation errors/tips
@@ -16523,11 +16547,11 @@ function createCompilerCreator (baseCompile) {
     var baseOptions = {
       expectHTML: true,
       modules: modules$1,                    // class、style 模块
-      directives: directives$1,                // model、text、html 指令
+      directives: directives$1,              // model、text、html 指令
       isPreTag: isPreTag,                    // 是否为 pre 标签
       isUnaryTag: isUnaryTag,                // 是否为自闭合标签
       mustUseProp: mustUseProp,
-      canBeLeftOpenTag: canBeLeftOpenTag,   // 可以省略闭合标签
+      canBeLeftOpenTag: canBeLeftOpenTag,    // 可以省略闭合标签
       isReservedTag: isReservedTag,
       getTagNamespace: getTagNamespace,
       staticKeys: genStaticKeys(modules$1)

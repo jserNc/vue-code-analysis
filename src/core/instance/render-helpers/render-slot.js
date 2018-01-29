@@ -38,7 +38,13 @@ import { extend, warn } from 'core/util/index'
 /**
  * Runtime helper for rendering <slot>
  */
-// Vue.prototype._t = renderSlot;
+/*
+    Vue.prototype._t = renderSlot;
+    
+    ① 第二个参数 fallback （对应这里的 children）的意义为：
+    若父组件有给插槽传入内容那就以父组件的内容为准，否则就取插槽的默认内容（也就是 fallback 这个数组）
+    ② 作用域插槽，参数 props, bindObject 才起作用，静态插槽不需要这俩参数
+ */ 
 export function renderSlot (
   name: string,
   fallback: ?Array<VNode>,
