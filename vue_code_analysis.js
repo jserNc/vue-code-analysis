@@ -980,7 +980,7 @@ var formatComponentName = (null); // work around flow check
   var repeat = function (str, n) {
     var res = '';
     while (n) {
-      // n 为基数
+      // n 为奇数
       if (n % 2 === 1) { res += str; }
       if (n > 1) { str += str; }
       n >>= 1;
@@ -10258,8 +10258,8 @@ function addHandler (el, name, value, modifiers, important, warn) {
     dom 新的规范规定，addEventListener() 的第三个参数可以是个对象值了，该对象可用的属性有三个：
     addEventListener(type, listener, {
         capture: false,   // 等价于以前的 useCapture 参数
-        passive: false,   // true 表明该监听器是一次性的
-        once: false       // true 表明不会调用 preventDefault 函数来阻止默认滑动行为
+        passive: false,   // true 表明不会调用 preventDefault 函数来阻止默认滑动行为
+        once: false       // true 表明该监听器是一次性的
     })
 
     当属性 passive 的值为 true 的时候，代表该监听器内部不会调用 preventDefault 函数来阻止默认滑动行为，
@@ -10271,18 +10271,17 @@ function addHandler (el, name, value, modifiers, important, warn) {
   // check capture modifier
   if (modifiers && modifiers.capture) {
     delete modifiers.capture;
-    // mark the event as captured 该事件为事件捕获模式
+    // 该事件为事件捕获模式
     name = '!' + name; 
   }
   if (modifiers && modifiers.once) {
     delete modifiers.once;
-    // mark the event as once 该事件只会触发一次
+    // 该事件只会触发一次
     name = '~' + name; 
   }
-  /* istanbul ignore if */
   if (modifiers && modifiers.passive) {
     delete modifiers.passive;
-    // mark the event as passive 该事件是顺从的
+    // 该事件是顺从的
     name = '&' + name; 
   }
 
@@ -10314,24 +10313,27 @@ function addHandler (el, name, value, modifiers, important, warn) {
 // 首先获取动态值，获取失败再获取静态值（第三个参数设为 false 表示取不到动态属性就也不取静态的（默认情况下会取静态的））
 function getBindingAttr (el, name, getStatic) {
   /*
-    ① 获取 el 元素的 :name 属性，并删除该属性
-    ② 若 ① 中获取的属性为假，就获取 v-bind:name 属性，然后删除该属性
-  */
+      以 <a v-bind:href="url">...</a> 为例：
+      ① dynamicValue = el.attrsMap[':href'] || el.attrsMap['v-bind:href']
+      ② 删除 el.attrsList 数组中 ':href' 或 'v-bind:href' 对应项
+   */
   var dynamicValue = getAndRemoveAttr(el, ':' + name) || getAndRemoveAttr(el, 'v-bind:' + name);
 
+  // 1. 动态值
   if (dynamicValue != null) {
-    // 例如：parseFilters("message | filterA | filterB") -> "_f("filterB")(_f("filterA")(message))"
+    // 解析为字符串，例如：parseFilters("message | filterA | filterB") -> "_f("filterB")(_f("filterA")(message))"
     return parseFilters(dynamicValue)
-  // 动态值获取失败，再获取静态值
+  // 2. 静态值
   } else if (getStatic !== false) {
     var staticValue = getAndRemoveAttr(el, name);
     if (staticValue != null) {
+      // 解析为字符串
       return JSON.stringify(staticValue)
     }
   }
 }
 
-// 删除一个 attr，并返回对应的值
+// 删除 el.attrsList 数组中 name 对应项，并返回 el.attrsMap[name]
 function getAndRemoveAttr (el, name) {
   var val;
   /*
@@ -10356,10 +10358,11 @@ function getAndRemoveAttr (el, name) {
         ...
     ]
   */
+  // ① 获取 el.attrsMap[name] 作为最终返回值
   if ((val = el.attrsMap[name]) != null) {
     var list = el.attrsList;
     for (var i = 0, l = list.length; i < l; i++) {
-        // 从 list 删除一项
+      // ② 删除 el.attrsList 中对应项
       if (list[i].name === name) {
         list.splice(i, 1);
         break
@@ -15003,7 +15006,7 @@ var genStaticKeysCached = cached(genStaticKeys$1);
     1. 把它们提升到常量里。这样我们就不必为每一个 re-render 创建一批新的节点了。
     2. 在打补丁的过程中跳过它们
 
-	其实就是给 root 添加 root.static、root.staticInFor、root.staticRoot 等属性，属性值为 true | false
+	  其实就是给 root 添加 root.static、root.staticInFor、root.staticRoot 等属性，属性值为 true | false
  */
 function optimize (root, options) {
   if (!root) { return }
@@ -15147,40 +15150,40 @@ function markStaticRoots (node, isInFor) {
   }
 }
 
-// 判断一个节点是否为静态节点
+// 判断节点 node 是否为静态节点
 function isStatic (node) {
-  // 表达式 {{...}}，非静态
+  // 1. 表达式 -> 非静态
   if (node.type === 2) { // expression
     return false
   }
-  // 文本，静态
+  
+  // 2. 文本 -> 静态
   if (node.type === 3) { // text
     return true
   }
+
+  // 3. 元素
+  /*
+      ① node.pre -> 静态
+      ② 以下条件同时满足才为静态
+        a. 没有动态的 v-bind
+        b. 没有 v-if/v-for/v-else
+        c. 不是 built-in 标签
+        d. 不是组件
+        e. 不是模板的直接子元素
+        f. node 的每一个属性都是静态的
+   */
   return !!(node.pre || (
-    // 没有动态的 bind
     !node.hasBindings && // no dynamic bindings
-    // 没有 v-if、v-for、v-else
     !node.if && !node.for && // not v-if or v-for or v-else
-    // 不是 slot、component
     !isBuiltInTag(node.tag) && // not a built-in
-    // 不是保留标签
     isPlatformReservedTag(node.tag) && // not a component
-    // 不是模板的直接子元素
     !isDirectChildOfTemplateFor(node) &&
-    // node 对象的每一个属性都是静态的
     Object.keys(node).every(isStaticKey)
-    /*
-        isStaticKey = function(){
-            // 这些属性都是静态属性
-            return makeMap('type,tag,attrsList,attrsMap,plain,parent,children,attrs' + "mod11,mod12,mod21,mod22,mod31,mod32")
-        }
-        作用是判断属性是否为以下静态属性
-    */
   ))
 }
 
-// 当一个元素为 template 标签（该标签的 for 属性为真）的直接子元素才返回 true
+// node 为 template 标签（并且有 v-for 属性）的直接子元素才返回 true
 function isDirectChildOfTemplateFor (node) {
   while (node.parent) {
     node = node.parent;
@@ -16306,7 +16309,7 @@ var unaryOperatorsRE = new RegExp('\\b' + (
 ).split(',').join('\\s*\\([^\\)]*\\)|\\b') + '\\s*\\([^\\)]*\\)');
 
 // check valid identifier for v-for
-// 为 v-for 检测有效的标识符，A-Za-z_$ 开头，后跟若干个 \w 或 $
+// v-for 中有效的标识符，A-Za-z_$ 开头，后跟若干个 \w 或 $
 var identRE = /[A-Za-z_$][\w$]*/;
 
 // strip strings in expressions
@@ -16333,19 +16336,27 @@ function detectErrors (ast) {
 
 // 检查节点
 function checkNode (node, errors) {
-  // element 元素
+  /*
+      ASTNode = ASTElement | ASTText | ASTExpression，其中：
+      ASTElement 的 type 类型为 1
+      ASTText 的 type 类型为 3
+      ASTExpression 的 type 类型为 2
+   */ 
+  
+  // 1. ASTElement 的 type 类型为 1
   if (node.type === 1) {
     for (var name in node.attrsMap) {
       // dirRE = /^v-|^@|^:/
       if (dirRE.test(name)) {
         var value = node.attrsMap[name];
         if (value) {
-          // v-for 列表
+          // ① 检查 v-for
           if (name === 'v-for') {
             checkFor(node, ("v-for=\"" + value + "\""), errors);
-          // onRE = /^@|^v-on:/ 事件
+          // ② 检查 v-on，其中 onRE = /^@|^v-on:/
           } else if (onRE.test(name)) {
             checkEvent(value, (name + "=\"" + value + "\""), errors);
+          // ③ 检查其他类型表达式
           } else {
             checkExpression(value, (name + "=\"" + value + "\""), errors);
           }
@@ -16358,7 +16369,7 @@ function checkNode (node, errors) {
         checkNode(node.children[i], errors);
       }
     }
-  // 表达式
+  // 2. ASTExpression 的 type 类型为 2
   } else if (node.type === 2) {
     checkExpression(node.expression, node.text, errors);
   }
@@ -16366,10 +16377,18 @@ function checkNode (node, errors) {
 
 // 检查事件
 function checkEvent (exp, text, errors) {
-  // 剔除 exp 中的字符串
+  // ① 剔除 exp 中的字符串
   var stipped = exp.replace(stripStringRE, '');
-  // unaryOperatorsRE 匹配 delete,typeof,void 等一元运算符
+  // ② 剩下的 exp 中匹配 delete,typeof,void 等一元运算符
   var keywordMatch = stipped.match(unaryOperatorsRE);
+  /*
+      'abcd'.match(/c/)
+      -> ["c", index: 2, input: "abcd"]
+
+      正则中没有全局标志 g，它将返回一个数组，其中存放了与它找到的匹配文本有关的信息。
+      该数组的第 0 个元素存放的是匹配文本，而其余的元素存放的是与正则表达式的子表达式匹配的文本。
+      除了这些常规的数组元素之外，返回的数组还含有两个对象属性。index 属性声明的是匹配文本的起始字符在 stringObject 中的位置，input 属性声明的是对 stringObject 的引用
+   */
   if (keywordMatch && stipped.charAt(keywordMatch.index - 1) !== '$') {
     // 一元运算符不能被用作属性/方法名
     errors.push(
@@ -16377,11 +16396,19 @@ function checkEvent (exp, text, errors) {
       "\"" + (keywordMatch[0]) + "\" in expression " + (text.trim())
     );
   }
+  // 执行表达式 exp，若出现错误，将该错误加入数组 errors
   checkExpression(exp, text, errors);
 }
 
 // 检查 v-for
 function checkFor (node, text, errors) {
+  /*
+      v-for = "(value, key) in items"
+      数据源 el.for = 'items'
+      数据项 el.alias = 'value'
+      数据子项 el.iterator1 = "key"
+      数据子项 el.iterator2 = ""
+  */
   checkExpression(node.for || '', text, errors);
   checkIdentifier(node.alias, 'v-for alias', text, errors);
   checkIdentifier(node.iterator1, 'v-for iterator', text, errors);
@@ -16408,13 +16435,13 @@ function checkExpression (exp, text, errors) {
         ② 检测是否有 do if for let 等关键词
     */
     var keywordMatch = exp.replace(stripStringRE, '').match(prohibitedKeywordRE);
-    // 属性名中不能使用 JavaScript 关键词
+    // 错误类型1：关键词作为属性名
     if (keywordMatch) {
       errors.push(
         "avoid using JavaScript keyword as property name: " +
         "\"" + (keywordMatch[0]) + "\" in expression " + (text.trim())
       );
-    // 表达式错误
+    // 错误类型2：无效的表达式
     } else {
       errors.push(("invalid expression: " + (text.trim())));
     }
