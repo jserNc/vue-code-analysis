@@ -13,42 +13,64 @@ import { makeMap, no } from 'shared/util'
 import { isNonPhrasingTag } from 'web/compiler/util'
 
 // Regular Expressions for parsing tags and attributes
+
+// 匹配属性名
 const singleAttrIdentifier = /([^\s"'<>/=]+)/
+// 匹配 =
 const singleAttrAssign = /(?:=)/
+// 匹配属性值
 const singleAttrValues = [
-  // attr value double quotes
+  // 双引号包起来的属性值
   /"([^"]*)"+/.source,
-  // attr value, single quotes
+  // 单引号包起来的属性值
   /'([^']*)'+/.source,
-  // attr value, no quotes
+  // 属性值，没引号
   /([^\s"'=<>`]+)/.source
 ]
+
+// 匹配属性表达式，比如 class = "red"
 const attribute = new RegExp(
-  '^\\s*' + singleAttrIdentifier.source +
-  '(?:\\s*(' + singleAttrAssign.source + ')' +
-  '\\s*(?:' + singleAttrValues.join('|') + '))?'
+  '^\\s*' + singleAttrIdentifier.source +         // 属性名
+  '(?:\\s*(' + singleAttrAssign.source + ')' +    // =
+  '\\s*(?:' + singleAttrValues.join('|') + '))?'  // 属性值
 )
 
 // could use https://www.w3.org/TR/1999/REC-xml-names-19990114/#NT-QName
 // but for Vue templates we can enforce a simple charset
 const ncname = '[a-zA-Z_][\\w\\-\\.]*'
 const qnameCapture = '((?:' + ncname + '\\:)?' + ncname + ')'
+// 开始标签开头
 const startTagOpen = new RegExp('^<' + qnameCapture)
+// 开始标签结尾
 const startTagClose = /^\s*(\/?)>/
+// 结束标签
 const endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
+// 文档类型
 const doctype = /^<!DOCTYPE [^>]+>/i
+// 注释
 const comment = /^<!--/
+// 条件注释
 const conditionalComment = /^<!\[/
+
 
 let IS_REGEX_CAPTURING_BROKEN = false
 'x'.replace(/x(.)?/g, function (m, g) {
+  /*
+      一般情况下，是不会捕获这个分组的，也就是说 g 为 undefined
+      但是，某些浏览器会捕获这个分组，g 为空字符串 ''
+
+      若 g === ''，我们认为这是不正常的
+      于是，标记 IS_REGEX_CAPTURING_BROKEN 为 true
+   */
   IS_REGEX_CAPTURING_BROKEN = g === ''
 })
 
 // Special Elements (can contain anything)
+// 纯文本元素（不能包含其他元素）
 export const isPlainTextElement = makeMap('script,style,textarea', true)
 const reCache = {}
 
+// 解码时候会用到这个映射表
 const decodingMap = {
   '&lt;': '<',
   '&gt;': '>',
@@ -56,18 +78,51 @@ const decodingMap = {
   '&amp;': '&',
   '&#10;': '\n'
 }
+
+// 匹配 < > " & 四者之一
 const encodedAttr = /&(?:lt|gt|quot|amp);/g
+// 匹配 < > " & \n 五者之一
 const encodedAttrWithNewLines = /&(?:lt|gt|quot|amp|#10);/g
 
 // #5992
+// 匹配 pre、textarea 标签（这俩标签本身不会忽略换行，只是配合下面的 shouldIgnoreFirstNewline 函数才起这么个函数名，不要误会）
 const isIgnoreNewlineTag = makeMap('pre,textarea', true)
+// pre、textarea 标签，并且 html 首字符是换行符，那就忽略这个换行
 const shouldIgnoreFirstNewline = (tag, html) => tag && isIgnoreNewlineTag(tag) && html[0] === '\n'
 
+// 字符实体解码，如 decodeAttr('&lt;') -> '<'
 function decodeAttr (value, shouldDecodeNewlines) {
   const re = shouldDecodeNewlines ? encodedAttrWithNewLines : encodedAttr
   return value.replace(re, match => decodingMap[match])
 }
 
+/*
+    简化一下 parseHTML 函数：
+    function parseHTML (html, options) {
+        while (html) {
+          ...
+        }
+        parseEndTag()
+        function advance (n) {...}
+        function parseStartTag () {...}
+        function handleStartTag (match) {...}
+        function parseEndTag (tagName, start, end) {...}
+    }
+    
+    实际调用时：
+    parseHTML(template, {
+        warn: warn$2,             // 报警函数
+        expectHTML: expectHTML,   // 是否为 html，布尔值
+        isUnaryTag: isUnaryTag,   // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+        canBeLeftOpenTag: canBeLeftOpenTag,   // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
+        shouldDecodeNewlines: shouldDecodeNewlines, // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
+        shouldKeepComment: comments, // 是否保留注释
+        start: function start (tag, attrs, unary) {...}, // 解析开始标签时调用的钩子函数
+        end: function end () {...},  // 解析结束标签时调用的钩子函数
+        chars: function chars (text) {...},    // 添加 Attr/Text 子节点
+        comment: function comment (text) {...} // 添加注释节点
+    });
+ */
 export function parseHTML (html, options) {
   const stack = []
   const expectHTML = options.expectHTML
@@ -227,6 +282,9 @@ export function parseHTML (html, options) {
     const unarySlash = match.unarySlash
 
     if (expectHTML) {
+      /*
+          isNonPhrasingTag = makeMap('address,article,aside,base,blockquote,body,caption,col,colgroup,dd,details,dialog,div,dl,dt,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,head,header,hgroup,hr,html,legend,li,menuitem,meta,optgroup,option,param,rp,rt,source,style,summary,tbody,td,tfoot,th,thead,title,tr,track');
+       */
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
         parseEndTag(lastTag)
       }

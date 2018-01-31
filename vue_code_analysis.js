@@ -10023,33 +10023,31 @@ var validDivisionCharRE = /[\w).+\-_$\]]/;
 
 
 /*
-解析过滤器，例如：
-parseFilters("message | filterA('arg1', arg2)")
--> "_f("filterA")(message,'arg1', arg2)"
+    解析过滤器，例如：
+    parseFilters("message | filterA('arg1', arg2)")
+    -> "_f("filterA")(message,'arg1', arg2)"
 
-parseFilters("message | filterA | filterB")
--> "_f("filterB")(_f("filterA")(message))"
+    parseFilters("message | filterA | filterB")
+    -> "_f("filterB")(_f("filterA")(message))"
  */
 function parseFilters (exp) {
-  var inSingle = false;
-  var inDouble = false;
-  var inTemplateString = false;
-  var inRegex = false;
-  // 花括号
-  var curly = 0;
-  // 方括号
-  var square = 0;
-  // 括号
-  var paren = 0;
-  var lastFilterIndex = 0;
-  var c, prev, i, expression, filters;
+  var inSingle = false            // '单引号'
+  var inDouble = false            // "双引号"
+  var inTemplateString = false    // `模板字符串`
+  var inRegex = false             // /正则表达式/
+  var curly = 0                   // {花括号}
+  var square = 0                  // [方括号]
+  var paren = 0                   // (括号)
+  var lastFilterIndex = 0
+  var c, prev, i, expression, filters
+
 
   for (i = 0; i < exp.length; i++) {
     // 上一个字符
     prev = c;
     /*
-    charCodeAt() 方法可返回指定位置的字符的 Unicode 编码。这个返回值是 0 - 65535 之间的整数。
-    charCodeAt() 与 charAt() 方法执行的操作相似，只不过前者返回的是位于指定位置的字符的编码，而后者返回的是字符子串。
+        charCodeAt() 方法可返回指定位置的字符的 Unicode 编码。这个返回值是 0 - 65535 之间的整数。
+        charCodeAt() 与 charAt() 方法执行的操作相似，只不过前者返回的是位于指定位置的字符的编码，而后者返回的是字符子串。
      */
     c = exp.charCodeAt(i);
 
@@ -10154,9 +10152,9 @@ function parseFilters (exp) {
     for (i = 0; i < filters.length; i++) {
       /*
         对于 parseFilters("message | filterA | filterB")
-        i = 0, expression -> message
-        i = 1, expression -> _f("filterA")(message)
-        i = 2, expression -> _f("filterB")(_f("filterA")(message))
+
+        i = 0, expression -> _f("filterA")(message)
+        i = 1, expression -> _f("filterB")(_f("filterA")(message))
        */
       expression = wrapFilter(expression, filters[i]);
     }
@@ -13265,35 +13263,51 @@ var regexEscapeRE = /[-.*+?^${}()|[\]\/\\]/g;
 // 创建正则表达式
 var buildRegex = cached(function (delimiters) {
   /*
-    对于 stringObject.replace(regexp|substr,replacement)，replacement 中的 $ 有特殊含义：
+      对于 stringObject.replace(regexp|substr,replacement)，replacement 中的 $ 有特殊含义：
 
-    $$ // 插入一个 "$"
-    $& // 插入与 regexp 匹配的子串
-    $` // 插入当前匹配的子串左边的内容
-    $' // 插入当前匹配的子串右边的内容
-    $1、$2、...、$99 // 与 regexp 中的第 1 到第 99 个子表达式相匹配的文本
+      $$    插入一个 "$"
+      $&    插入与 regexp 匹配的子串
+      $`    插入当前匹配的子串左边的内容
+      $'    插入当前匹配的子串右边的内容
+      $1、$2、...、$99   与 regexp 中的第 1 到第 99 个子表达式相匹配的文本
 
-    所以 '\\$&' 表示在原字符串开头加上 \，例如：
-    "Enjoy javascript".replace(re, "\\$&")
-    -> "\Enjoy javascript"
+      所以 '\\$&' 表示在原字符串开头加上 \，例如：
+      "Enjoy javascript".replace(/(\w+)\s(\w+)/, "\\$&")
+      -> "\Enjoy javascript"
 
-    所以这个方法的作用是将 - . * + ? ^ $ { } ( ) [ ] / \ 等字符前加一个 \，然后拼接锦字符串，再生成正则表达式
+      所以这个方法的作用是将 - . * + ? ^ $ { } ( ) [ ] / \ 等字符前加一个 \，然后拼接锦字符串，再生成正则表达式
 
-    例如 buildRegex(['{{','}}']) -> /\{\{((?:.|\n)+?)\}\}/g
-   */
+      例如 buildRegex(['{{','}}']) -> /\{\{((?:.|\n)+?)\}\}/g
+  */
   var open = delimiters[0].replace(regexEscapeRE, '\\$&');
   var close = delimiters[1].replace(regexEscapeRE, '\\$&');
   return new RegExp(open + '((?:.|\\n)+?)' + close, 'g')
 });
 
-// 模板字符串转为浏览器可以解析的字符串。text 可分为 3 个部分，{{ 之前的，{{}} 中间包裹的，}} 之后的，函数分别将三者抽离出来，push 进 tokens，最后用 + 连接并返回一个字符串
+/*
+    该函数将模板字符串转为浏览器可以解析的字符串。
+
+    text 可分为 3 个部分，{{ 之前的，{{}} 中间包裹的，}} 之后的。
+    函数分别将三者抽离出来，push 进 tokens，最后用 + 连接并返回一个字符串
+ 
+    例如：
+    parseText('abc{{msg | fn}}efg')
+    -> 'abc' + '_s(_f("fn")(msg))' + 'efg'
+
+    总之，该函数将模板字符串转为浏览器可以识别的常规字符串
+ */
 function parseText (text, delimiters) {
-  // 匹配文本的正则
+  /*
+      根据分界符生成正则，例如 delimiters = ['{{','}}']
+      buildRegex(delimiters) -> /\{\{((?:.|\n)+?)\}\}/g
+   */ 
   var tagRE = delimiters ? buildRegex(delimiters) : defaultTagRE;
-  // 匹配失败，就此返回
+  
+  // 若不是模板字符串，就此返回
   if (!tagRE.test(text)) {
     return
   }
+
   var tokens = [];
   var lastIndex = tagRE.lastIndex = 0;
   var match, index;
@@ -13320,25 +13334,31 @@ function parseText (text, delimiters) {
   while ((match = tagRE.exec(text))) {
     index = match.index;
     // push text token
-    // text 中未被 tagRE 匹配的部分，例如 '{{ message1 }}abc{{ message2 }}efg' 中的 'abc'
+    // ① text 中被 tagRE 本次匹配到的子串左边的内容，例如 'aaa{{ message1 }}abc{{ message2 }}efg' 中的 'aaa'、'abc'
     if (index > lastIndex) {
       tokens.push(JSON.stringify(text.slice(lastIndex, index)));
     }
     // tag token
     /*
-        例如：
+        将分界符内的文本经过 parseFilters 函数处理，例如：
         parseFilters("message | filterA | filterB")
         -> "_f("filterB")(_f("filterA")(message))"
      */
     var exp = parseFilters(match[1].trim());
+    /*
+        Vue.prototype._s = toString
+        ② text 中被 tagRE 本次匹配到的子串
+     */ 
     tokens.push(("_s(" + exp + ")"));
-    // 移动游标
+    // 移动游标（移到本次匹配结束的位置）
     lastIndex = index + match[0].length;
   }
-  // text 中剩余部分，例如 '{{ message1 }}abc{{ message2 }}efg' 中的 'efg'
+
+  // ③ text 中被 tagRE 本次匹配到的子串右边的内容，例如 '{{ message1 }}abc{{ message2 }}efg' 中的 'efg'
   if (lastIndex < text.length) {
     tokens.push(JSON.stringify(text.slice(lastIndex)));
   }
+
   // 最终用 '+' 连接数组元素，其实就是连接成一个字符串，例如 'abc' + '_s(message2)' + 'efg'
   return tokens.join('+')
 }
@@ -13555,10 +13575,11 @@ var he = {
 
 // Regular Expressions for parsing tags and attributes，解析 tag 和 attribute 的正则表达式
 
-// 匹配不是以下字符 空白字符 " ' <> / = 1次或多次
+// 匹配属性名（不是空白字符 " ' <> / = 1次或多次）
 var singleAttrIdentifier = /([^\s"'<>/=]+)/;
 // 匹配 =
 var singleAttrAssign = /(?:=)/;
+// 匹配属性值
 var singleAttrValues = [
   // attr value double quotes，双引号
   /"([^"]*)"+/.source,
@@ -13567,6 +13588,7 @@ var singleAttrValues = [
   // attr value, no quotes，没引号
   /([^\s"'=<>`]+)/.source
 ];
+
 // 匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
 var attribute = new RegExp(
   // 属性名
@@ -13599,12 +13621,18 @@ var conditionalComment = /^<!\[/;
 var IS_REGEX_CAPTURING_BROKEN = false;
 
 'x'.replace(/x(.)?/g, function (m, g) {
-  // 例如在 Chrome 浏览器下，是不会捕获这个分组的，也就是说 g 为 undefined
+  /*
+      一般情况下，是不会捕获这个分组的，也就是说 g 为 undefined
+      但是，某些浏览器会捕获这个分组，g 为空字符串 ''
+
+      若 g === ''，我们认为这是不正常的
+      于是，标记 IS_REGEX_CAPTURING_BROKEN 为 true
+   */
   IS_REGEX_CAPTURING_BROKEN = g === '';
 });
 
 // Special Elements (can contain anything)
-// 纯文本元素
+// 纯文本元素（不能包含其他元素）
 var isPlainTextElement = makeMap('script,style,textarea', true);
 var reCache = {};
 
