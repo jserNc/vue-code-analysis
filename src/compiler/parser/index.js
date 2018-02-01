@@ -1,5 +1,11 @@
 /* @flow */
 
+/*
+    /build/config.js 中配置了：
+    he: './entity-decoder'
+
+    所以这里的 he 是模块名
+ */
 import he from 'he'
 import { parseHTML } from './html-parser'
 import { parseText } from './text-parser'
@@ -19,14 +25,21 @@ import {
   pluckModuleFunction
 } from '../helpers'
 
-export const onRE = /^@|^v-on:/
-export const dirRE = /^v-|^@|^:/
-export const forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/
+export const onRE = /^@|^v-on:/     // 事件绑定指令
+export const dirRE = /^v-|^@|^:/    // 一般指令
+export const forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/  // in 或 of
+/*
+   (( group #1 ),( group #2 ),( group #3 ))
+   
+   group #1 : (\{[^}]*\}|[^,]*)  { 非} 0次或多次 } 或 非, 0次或多次
+   group #2 : ([^,]*)            非, 0次或多次
+   group #3 : (?:,([^,]*))       , 后跟 0次或多次非 ,
+*/
 export const forIteratorRE = /\((\{[^}]*\}|[^,]*),([^,]*)(?:,([^,]*))?\)/
 
-const argRE = /:(.*)$/
-const bindRE = /^:|^v-bind:/
-const modifierRE = /\.[^.]+/g
+const argRE = /:(.*)$/         // 匹配指令参数
+const bindRE = /^:|^v-bind:/   // 匹配 v-bind 指令
+const modifierRE = /\.[^.]+/g  // 匹配指令修饰符
 
 const decodeHTMLCached = cached(he.decode)
 
@@ -43,6 +56,7 @@ let platformGetTagNamespace
 /**
  * Convert HTML string to AST.
  */
+// 将模板 template 解析为 ast（抽象语法树）
 export function parse (
   template: string,
   options: CompilerOptions
@@ -284,6 +298,7 @@ export function parse (
       })
     }
   })
+
   return root
 }
 

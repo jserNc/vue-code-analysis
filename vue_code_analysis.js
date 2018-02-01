@@ -13581,27 +13581,21 @@ var singleAttrIdentifier = /([^\s"'<>/=]+)/;
 var singleAttrAssign = /(?:=)/;
 // 匹配属性值
 var singleAttrValues = [
-  // attr value double quotes，双引号
-  /"([^"]*)"+/.source,
-  // attr value, single quotes，单引号
-  /'([^']*)'+/.source,
-  // attr value, no quotes，没引号
-  /([^\s"'=<>`]+)/.source
+  /"([^"]*)"+/.source,     // 双引号包起来的属性值
+  /'([^']*)'+/.source,     // 单引号包起来的属性值
+  /([^\s"'=<>`]+)/.source  // 属性值，没引号
 ];
 
-// 匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+// 匹配属性的正则表达式，比如 class = "red" /^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
 var attribute = new RegExp(
-  // 属性名
-  '^\\s*' + singleAttrIdentifier.source +
-  // 等于号
-  '(?:\\s*(' + singleAttrAssign.source + ')' +
-  // 属性值
-  '\\s*(?:' + singleAttrValues.join('|') + '))?'
+  '^\\s*' + singleAttrIdentifier.source +        // 属性名
+  '(?:\\s*(' + singleAttrAssign.source + ')' +   // =
+  '\\s*(?:' + singleAttrValues.join('|') + '))?' // 属性值
 );
 
 // could use https://www.w3.org/TR/1999/REC-xml-names-19990114/#NT-QName
 // but for Vue templates we can enforce a simple charset
-// 字母或下划线后跟若干个 word/-/.
+// 标签名
 var ncname = '[a-zA-Z_][\\w\\-\\.]*';
 var qnameCapture = '((?:' + ncname + '\\:)?' + ncname + ')';
 // 开始标签开头
@@ -13650,53 +13644,60 @@ var encodedAttr = /&(?:lt|gt|quot|amp);/g;
 var encodedAttrWithNewLines = /&(?:lt|gt|quot|amp|#10);/g;
 
 // #5992
-// pre、textarea 标签会忽略换行
+// 匹配 pre、textarea 标签（这俩标签本身不会忽略换行，只是配合下面的 shouldIgnoreFirstNewline 函数才起这么个函数名，不要误会）
 var isIgnoreNewlineTag = makeMap('pre,textarea', true);
-
-// pre、textarea 标签，并且 html 首字符是换行符，那就忽略这个换行
+// tag 是 pre、textarea 标签，并且 html 首字符是换行符（后面会忽略这个换行）
 var shouldIgnoreFirstNewline = function (tag, html) { return tag && isIgnoreNewlineTag(tag) && html[0] === '\n'; };
 
-// 字符实体解码，如 '&lt;' -> '<'
+// 字符实体解码，如 decodeAttr('&lt;') -> '<'
 function decodeAttr (value, shouldDecodeNewlines) {
   var re = shouldDecodeNewlines ? encodedAttrWithNewLines : encodedAttr;
   return value.replace(re, function (match) { return decodingMap[match]; })
 }
 
 /*
-  例如：
-  parseHTML(template, {
-    warn: warn$2, // 报警函数
-    expectHTML: options.expectHTML, // 是否为 html，布尔值
-    isUnaryTag: options.isUnaryTag, // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
-    canBeLeftOpenTag: options.canBeLeftOpenTag, // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
-    shouldDecodeNewlines: options.shouldDecodeNewlines, // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
-    shouldKeepComment: options.comments, // 是否保留注释
-    start: function start (tag, attrs, unary) {...}, // 解析开始标签时调用的钩子函数
-    end: function end () {...}, // 解析结束标签时调用的钩子函数
-    chars: function chars (text) {...}, // 添加 Attr/Text 子节点
-    comment: function comment (text) {...} // 添加注释节点
-  });
+    简化一下 parseHTML 函数：
+    function parseHTML (html, options) {
+        while (html) {
+          ...
+        }
+        parseEndTag()
+        function advance (n) {...}
+        function parseStartTag () {...}
+        function handleStartTag (match) {...}
+        function parseEndTag (tagName, start, end) {...}
+    }
+    
+    实际调用时：
+    parseHTML(template, {
+        warn: warn$2,             // 报警函数
+        expectHTML: expectHTML,   // 是否为 html，布尔值
+        isUnaryTag: isUnaryTag,   // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+        canBeLeftOpenTag: canBeLeftOpenTag,   // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
+        shouldDecodeNewlines: shouldDecodeNewlines, // 如果属性值中有换行符，ie 会将换行符替换为转义字符，这就涉及到是否将这个转义字符解码的问题
+        shouldKeepComment: comments, // 是否保留注释
+        start: function start (tag, attrs, unary) {...}, // 解析开始标签时调用的钩子函数
+        end: function end () {...},  // 解析结束标签时调用的钩子函数
+        chars: function chars (text) {...},    // 添加 Attr/Text 子节点
+        comment: function comment (text) {...} // 添加注释节点
+    });
  */
-// 解析 html
 function parseHTML (html, options) {
   var stack = [];
-  var expectHTML = options.expectHTML;
-  // 是否为自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
-  var isUnaryTag$$1 = options.isUnaryTag || no;
-  // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'
-  var canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;
+  var expectHTML = options.expectHTML;  // true
+  var isUnaryTag$$1 = options.isUnaryTag || no;  // 判断是否为单标签（不需要闭合标签，如 input）
+  var canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;  // 判断是否为自动闭合标签（如 li）
   var index = 0;
   var last, lastTag;
 
-  // 在解析过程中，html 长度会逐渐变短
+  // 在循环过程中，html 长度会逐渐变短
   while (html) {
     last = html;
 
-    // Make sure we're not in a plaintext content element like script/style
-    // lastTag 不存在或 lastTag 不是 script,style,textarea 等纯文本元素
+    // 1. lastTag 不存在 || lastTag 不是 script,style,textarea 等纯文本元素
     if (!lastTag || !isPlainTextElement(lastTag)) {
 
-      // lastTag 是 pre、textarea 标签，并且 html 首字符是换行符
+      // lastTag 是 pre、textarea 标签，并且 html 首字符是换行符（那就忽略这个换行）
       if (shouldIgnoreFirstNewline(lastTag, html)) {
         // 前进 1 位，也就是忽略这个换行符
         advance(1);
@@ -13705,25 +13706,32 @@ function parseHTML (html, options) {
       /*
         '<' 在字符串 html 中首次出现的位置
 
-        textEnd 表示文本的结束位置。举个例子：
-        '<p>efg>' 文本为 ''，文本结束位置 textEnd 等于 0
-        'abc<p>efg</p>' 文本为 'abc '，文本结束位置 textEnd 等于 3
+        textEnd 表示元素之前的文本的结束位置。举个例子：
+        '<p>efg</p>' 文本为 ''，文本结束位置 textEnd 等于 0
+        'abc<p>efg</p>' 文本为 'abc'，文本结束位置 textEnd 等于 3
       */
       var textEnd = html.indexOf('<');
 
-      // ① 解析标签
-      // 第一个字符就是 '<'
+      // (1) 解析元素（第一个字符就是 <）
       if (textEnd === 0) {
 
-        // 注释 comment = /^<!--/
+        /*
+            ① 注释 comment = /^<!--/
+            注意这里的 ^，也就是说此时 html 必须以 <!-- 开头才能匹配到
+         */
         if (comment.test(html)) {
+          /*
+              indexOf() 方法可返回某个指定的字符串值在字符串中首次出现的位置。
+              例如：'abcdabcd'.indexOf('b') -> 1
+           */ 
           var commentEnd = html.indexOf('-->');
 
           if (commentEnd >= 0) {
             // 保留注释
             if (options.shouldKeepComment) {
               /*
-                // 把注释节点内容取出来，后面会生成相应的 vnode。如：
+                html.substring(4, commentEnd) 作用是把注释内容取出来。如：
+                
                 '<!--this id comment-->'.substring(4, '<!--this id comment-->'.indexOf('-->'))
                 -> 'this id comment'
               */
@@ -13735,8 +13743,7 @@ function parseHTML (html, options) {
           }
         }
 
-        // http://en.wikipedia.org/wiki/Conditional_comment#Downlevel-revealed_conditional_comment
-        // 条件注释 conditionalComment = /^<!\[/
+        // ② 条件注释。其中 conditionalComment = /^<!\[/
         if (conditionalComment.test(html)) {
           var conditionalEnd = html.indexOf(']>');
           
@@ -13747,7 +13754,7 @@ function parseHTML (html, options) {
           }
         }
 
-        // 文档类型 doctype = /^<!DOCTYPE [^>]+>/i
+        // ③ 文档类型。其中 doctype = /^<!DOCTYPE [^>]+>/i
         var doctypeMatch = html.match(doctype);
         if (doctypeMatch) {
           // 跳过整个 doctype
@@ -13755,51 +13762,76 @@ function parseHTML (html, options) {
           continue
         }
 
-        // 结束标签 endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
+        // ④ 结束标签。其中 endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
         var endTagMatch = html.match(endTag);
         if (endTagMatch) {
           var curIndex = index;
           // 跳过整个结束标签
           advance(endTagMatch[0].length);
-          // 解析结束标签 parseEndTag (tagName, start, end)，其中 endTagMatch[1] 是标签名
+          /*
+                解析结束标签 parseEndTag(tagName, start, end)
+                其中 endTagMatch[1] 就是标签名
+           */
           parseEndTag(endTagMatch[1], curIndex, index);
           continue
         }
 
-        // 开始标签，startTagMatch 为一个 json 对象
+        // ⑤ 开始标签。剩下的都是开始标签
         var startTagMatch = parseStartTag();
-        // parseStartTag() 很多情况下返回 undefined，若 startTagMatch 为真，说明开始标签解析成功了
+        /*
+            开始标签的解析稍微麻烦点（各种属性，标签的嵌套关系需要处理），就交给 parseStartTag 和 handleStartTag 这一对函数处理吧
+            a. 只要开始标签正常， parseStartTag() 都会返回一个 json 对象 startTagMatch
+            b. 执行 handleStartTag(startTagMatch)，调用 start 钩子函数
+         */
         if (startTagMatch) {
-          // 处理开始标签（提取属性），处理 startTagMatch 这个 json 对象
           handleStartTag(startTagMatch);
           continue
         }
       }
 
-      // ② 解析文本
+
       // 文本，void 0 === undefined -> true
       var text = (void 0), rest = (void 0), next = (void 0);
-      // 修正 textEnd，取出文本
+      // (2) 解析文本（第一个字符不是 < ）
       if (textEnd >= 0) {
-        
+        // html 中索引 textEnd 之后的片段
         rest = html.slice(textEnd);
         /*
-            例：'abc<p>efg>' 文本为 'abc '，文本结束位置 textEnd 等于 3
-            rest = 'abc<p>efg</p>'.slice(3) -> "<p>efg>"
+            ① 一般情况下，例如：html = 'abc<p>efg</p>' 中，textEnd 为 3，所以：
 
-            虽然 < 在 rest 中，但是同时满足以下条件，会将 rest 中两个 < 之间的部分当做文本，while 循环逐渐“侵蚀” rest（也就是逐渐扩大文本长度）：
-            ① rest 中没有结束标签，其中 endTag = new RegExp('^<\\/' + qnameCapture + '[^>]*>')
-            ② rest 中也没有合法的开始标签，其中 startTagOpen = new RegExp('^<' + qnameCapture)
-            ③ rest 中也没有注释
-            ④ rest 中也没有条件注释
+            剩余片段 rest = 'abc<p>efg</p>'.slice(3) -> "<p>efg</p>"
+            文本 text = 'abc<p>efg</p>'.substring(0, 3) -> 'abc'
 
-            例如：'abc<hhhhh<p>efg</p>'
-            最开始，rest 为 '<hhhhh<p>efg</p>'
-            然后，rets 为 '<p>efg</p>'
-        */
-        while (!endTag.test(rest) && !startTagOpen.test(rest) && !comment.test(rest) && !conditionalComment.test(rest)) {
+            ② 对于非一般情况，例如 html = 'abc<123456<p>efg</p>'，textEnd 仍为 3
+            但是，我们会认为 <123456 这段也是文本（两个 < 之间的部分），调整 textEnd 为 10
+
+            也就是说文本区间不能简单的理解为最开始的 0~textEnd
+
+            下面的循环的作用是不断检查剩余的 html 片段（rest）的内容是否为情况 ②，来修正 textEnd
+            循环结束后得到的 textEnd 才作为文本的结束位置
+         */
+        while (!endTag.test(rest) &&          // rest 不是以结束标签开头，例如 </div>
+               !startTagOpen.test(rest) &&    // rest 不是合法的开始标签开头，例如 <div>
+               !comment.test(rest) &&         // rest 不是注释开头
+               !conditionalComment.test(rest) // rest 不是条件注释开头
+        ) {
           // < in plain text, be forgiving and treat it as text
-          // str.indexOf(searchvalue,fromindex) 从位置 fromindex 开始，返回指定的字符串 searchvalue 在字符串 str 中首次出现的位置。
+          /*
+              例如 html = 'abc<123456<p>efg</p>'，textEnd 为 3
+              rest = '<123456<p>efg</p>'
+
+              首先，这个 rest 可以通过 while 循环条件吗？可以的！
+              a. rest 字符串开始明显不是 endTag、comment、conditionalComment
+              b. startTagOpen = new RegExp('^<' + qnameCapture)
+                 qnameCapture = '((?:' + ncname + '\\:)?' + ncname + ')'
+                 ncname = '[a-zA-Z_][\\w\\-\\.]*'
+                 到这里可以看到，标签名必须是字母或者下划线打头，所以 <123456 通不过 startTagOpen 匹配
+
+              然后，看看 indexOf 方法：
+              '<123456<p>efg</p>'.indexOf('<') -> 0
+              '<123456<p>efg</p>'.indexOf('<',1) -> 7
+              所以，next = 7，于是修正 textEnd 为 3 + 7 = 10
+           */
           next = rest.indexOf('<', 1);
           // 没找到下一个 '<'，就停止“侵蚀” rest
           if (next < 0) { break }
@@ -13814,113 +13846,156 @@ function parseHTML (html, options) {
         advance(textEnd);
       }
 
-      // html 中找不到 '<'，那就把整个 html 都当做文本
+      // (3) 整个 html 中都找不到 < ，那么就把整个 html 当做文本
       if (textEnd < 0) {
         text = html;
+        // html 置空，终止整个循环
         html = '';
       }
 
-      // 文本处理
+      // 调用 chars 钩子函数处理文本
       if (options.chars && text) {
         options.chars(text);
       }
-
-    // lastTag && isPlainTextElement(lastTag) 同时满足会走下面的 else 代码块，即 lastTag 是 script,style,textarea 三者之一
+    // 2. lastTag 是 script,style,textarea 等纯文本元素
     } else {
       var endTagLength = 0;
-      // 上一个标签名小写形式
+      // 上一个待闭合标签的小写形式
       var stackedTag = lastTag.toLowerCase();
       /*
-        reCache = {} 这个对象缓存正则表达式
+          reCache = {}，用来缓存正则表达式
 
-        以 lastTag = 'script' 为例：
-        reCache['script'] = /([\s\S]*?)(<\/script[^>]*>)/i
-        script 的结束标签
-      */
+          以 lastTag = 'script' 为例：
+          reCache['script'] = /([\s\S]*?)(<\/script[^>]*>)/i
+          匹配 'someCode</script>' 这种形式的内容
+       */
       var reStackedTag = reCache[stackedTag] || (reCache[stackedTag] = new RegExp('([\\s\\S]*?)(</' + stackedTag + '[^>]*>)', 'i'));
       
-      // 参数 all 表示 reStackedTag 匹配的所有内容，text 表示文本 ([\s\S]*?)，endTag 表示结束标签 (<\/script[^>]*>)
+      /*
+          ① 参数 all 表示 reStackedTag 匹配的所有内容，text 表示文本 ([\s\S]*?)，endTag 表示结束标签 (<\/script[^>]*>)
+          ② 函数返回值为 ''，说明 html 会去掉 reStackedTag 匹配出的内容
+       */
       var rest$1 = html.replace(reStackedTag, function (all, text, endTag) {
         // 结束标签的长度，如 '</script>'.length -> 9
         endTagLength = endTag.length;
+
         // 不是 script,style,textarea,noscript
         if (!isPlainTextElement(stackedTag) && stackedTag !== 'noscript') {
-          // 取出注释和条件注释里的文本
+          /*
+              替换 text 中注释和条件注释，例如：
+              ① '<!--comment text-->'.replace(/<!--([\s\S]*?)-->/g, '$1')
+                 -> "comment text"
+              ② '<![CDATA[conditionalComment text]]>'.replace(/<!\[CDATA\[([\s\S]*?)]]>/g, '$1')
+                 -> "conditionalComment text"
+           */
           text = text
             .replace(/<!--([\s\S]*?)-->/g, '$1')
             .replace(/<!\[CDATA\[([\s\S]*?)]]>/g, '$1');
         }
+
         // stackedTag 是 pre、textarea 标签，并且 text 首字符是换行符，那就忽略这个换行
         if (shouldIgnoreFirstNewline(stackedTag, text)) {
           text = text.slice(1);
         }
-        // 处理文本
+        // 调用 chars 钩子函数处理 text
         if (options.chars) {
           options.chars(text);
         }
+
+        // 注意这个返回值
         return ''
       });
 
+      // 既然 html 去掉了 reStackedTag 匹配出的内容，那就修正 index 和 html
       index += html.length - rest$1.length;
       html = rest$1;
       // 解析结束标签 parseEndTag (tagName, start, end)，其中 endTagMatch[1] 是标签名
       parseEndTag(stackedTag, index - endTagLength, index);
     }
 
-    // html 和处理之前是一样的值，一个字符都没减少,也就是说 html 中没有获取到任何有用的元素
+    // 若 html 和处理之前是一样的值，一个字符都没减少,也就是说 html 中没有获取到任何有用的元素
     if (html === last) {
+      // html 都当做文本处理
       options.chars && options.chars(html);
+      // 发出警告：错误格式的标签
       if ("development" !== 'production' && !stack.length && options.warn) {
-        // 错误格式的标签
         options.warn(("Mal-formatted tag at end of template: \"" + html + "\""));
       }
+      // 并终止循环
       break
     }
   }
 
-  // Clean up any remaining tags，关闭所有标签
+  // Clean up any remaining tags
+  // 没有实参，表示闭合 stack 中的所有标签
   parseEndTag();
 
-  // 前进 n 个字符（也就是说，有 n 个字符被忽略了）
+  /*
+      ① index 值加 n
+      ② html 丢掉前 n 个字符
+   */
   function advance (n) {
     index += n;
     /*
-        substring(start,stop) 提取字符串中介于两个指定下标之间的字符，如果省略 stop 参数，那么返回的子串会一直到字符串的结尾。
-        'abcdefgh'.substring(2) -> "cdefgh"
-    */
+        stringObject.substring(start,stop) 用于提取字符串中介于两个指定下标之间的字符
+        其中，stop 参数可选，如果省略该参数，那么返回的子串会一直到字符串的结尾
+        
+        如 'abcdefgh'.substring(2) -> "cdefgh"
+     */
     html = html.substring(n);
   }
 
-  // 解析开始标签，返回一个 json 对象 match
+  /*
+      解析开始标签，返回 json 对象 match ：
+      { 
+        tagName: start[1],   // 第一个分组匹配出标签名
+        attrs: [],           // 存放属性表达式正则的匹配结果
+        start: index         // 开始标签开始索引，对应 <div class="red"> 中 < 位置
+        unarySlash: '/'|''   // 标志是否为单标签
+        end：index           // 开始标签结束索引，对应 <div class="red"> 中 > 位置
+      }
+   */
   function parseStartTag () {
-    // 匹配开始标签 startTagOpen = new RegExp('^<' + qnameCapture)
+    // 开始标签开头 startTagOpen = new RegExp('^<' + qnameCapture)
     var start = html.match(startTagOpen);
     if (start) {
-      var match = {
-        // 标签名
-        tagName: start[1],
-        // 属性
-        attrs: [],
-        // 开始索引
-        start: index
+      var match = {       
+        tagName: start[1],  // 第一个分组匹配出标签名
+        attrs: [],          // 存放属性表达式正则的匹配结果
+        start: index        // 开始标签开始索引，对应 <div class="red"> 中 < 位置
       };
 
-      // 跳过开始标签
+      /*
+          正则 startTagOpen 不带全局标志 g，所以 start[0] 是匹配的整个子串
+          走过“开始标签开头”
+       */
       advance(start[0].length);
 
       var end, attr;
-      // 开始标签结尾 startTagClose = /^\s*(\/?)>/，把开始标签里的所有属性挑出来
+      /*
+          ① startTagClose = /^\s*(\/?)>/ 匹配“开始标签结尾”，注意有个 ^
+          也就是说 html 必须以空白开头，随后跟一个或零个/，再跟 >
+
+          所以，没到开始标签结束时，end = html.match(startTagClose) 一直返回 false
+          
+          ② attribute 匹配属性表达式，比如 class = "red"
+
+          所以，以下语句的作用是提取开始标签里所有的属性表达式
+       */
       while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
         // attr[0] 是整个属性表达式，attr[1] 是属性名，attr[2] 是 = ，attr[3] 是属性值
         advance(attr[0].length);
         // 把该属性各个部分存下来
         match.attrs.push(attr);
       }
-      // 到这里遇到了开始标签结尾，否则就返回 undefined（开始标签未闭合）
+
+      // 开始标签结束，end = html.match(startTagClose) 返回 true
       if (end) {
         // <input /> 等自闭合标签 end[1] 为 '/'，<div> 等标签 end[1] 空 ''
         match.unarySlash = end[1];
+        // 走过“开始标签结束”
         advance(end[0].length);
+        // 开始标签结束索引，对应 <div class="red"> 中 > 位置
         match.end = index;
         /*
            到这里，match 结构如下：
@@ -13937,42 +14012,78 @@ function parseHTML (html, options) {
     }
   }
 
-  // 处理开始标签，提取属性。处理 json 对象 match
+  /*
+      实参 match 结构为：
+      { 
+        tagName: start[1],   // 第一个分组匹配出标签名
+        attrs: [],           // 存放属性表达式正则的匹配结果
+        start: index         // 开始标签开始索引，对应 <div class="red"> 中 < 位置
+        unarySlash: '/'|''   // 标志是否为单标签
+        end：index           // 开始标签结束索引，对应 <div class="red"> 中 > 位置
+      }
+
+      该函数作用：
+      ① 往数组 stack 中压栈；
+      ② 调用 start 钩子函数
+   */
   function handleStartTag (match) {
     // 标签名
     var tagName = match.tagName;
     // <input /> 等自闭合标签 end[1] 为 '/'，<div> 等标签 end[1] 空 ''
     var unarySlash = match.unarySlash;
 
+    // expectHTML 默认就是 true
     if (expectHTML) {
-      // p 标签里的 h1、div、li 等标签段落元素
+      /*
+          isNonPhrasingTag = makeMap('address,article,aside,base,blockquote,body,caption,col,colgroup,dd,details,dialog,div,dl,dt,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,head,header,hgroup,hr,html,legend,li,menuitem,meta,optgroup,option,param,rp,rt,source,style,summary,tbody,td,tfoot,th,thead,title,tr,track');
+          
+          p 标签里不能是 address,article,aside... 等块级标签
+          所以，若 <p><address>  这种不合规范的，直接关闭 p 标签
+       */
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
         // 闭合 p 标签
         parseEndTag(lastTag);
       }
-      // 可以省略闭合标签 'colgroup,dd,dt,li,options,p,td,tfoot,th,thead,tr,source'。lastTag 为最近一个未闭合标签
+
+      // 若当前标签和上一个标签都是可以自动闭合的标签，比如 li，那就关闭当前标签
       if (canBeLeftOpenTag$$1(tagName) && lastTag === tagName) {
         // 闭合 tagName 标签
         parseEndTag(tagName);
       }
     }
 
-    // 自闭合标签 'area,base,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track,wbr'
+    // 标记当前 tagName 是否为单标签，比如 <input/>
     var unary = isUnaryTag$$1(tagName) || !!unarySlash;
 
     var l = match.attrs.length;
     var attrs = new Array(l);
-    // 属性提取
+
+    /* 
+        遍历属性表达式正则的匹配结果
+        给 attrs 数组添加数据：
+        attrs = [
+            { name : attrName,value : attrVal },
+            { name : attrName,value : attrVal }
+            ...
+        ]
+    */
     for (var i = 0; i < l; i++) {
       var args = match.attrs[i];
       // hackish work around FF bug https://bugzilla.mozilla.org/show_bug.cgi?id=369778
       /*
-        匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
-        IS_REGEX_CAPTURING_BROKEN 为 true，说明正则表达式捕获损坏了，意味着空字符串 "" 也可以匹配出内容，这是不对的
-        args[3] 匹配的是 ([^"]*) 非 "
-        args[4] 匹配的是 ([^']*) 非 '
-        args[5] 匹配的是 ([^\s"'=<>`]+) 非 "'=<>`
-        所以可能匹配出空字符串 ''，这是不需要的
+          匹配属性的正则表达式，/^\s*([^\s"'<>\/=]+)(?:\s*((?:=))\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+          其中 args[3|5|5] 分别对应以下几个分组：
+          singleAttrValues = [
+            /"([^"]*)"+/.source,      // 双引号包起来的属性值
+            /'([^']*)'+/.source,      // 单引号包起来的属性值
+            /([^\s"'=<>`]+)/.source   // 属性值，没引号
+          ]
+
+          IS_REGEX_CAPTURING_BROKEN 为 true，说明正则表达式捕获损坏了，意味着空字符串 "" 也可以匹配出内容，这是不对的
+          args[3] 匹配的是 ([^"]*) 非 "
+          args[4] 匹配的是 ([^']*) 非 '
+          args[5] 匹配的是 ([^\s"'=<>`]+) 非 "'=<>`以及空白
+          所以可能匹配出空字符串 ''，这是不需要的
       */
       // 修正 args
       if (IS_REGEX_CAPTURING_BROKEN && args[0].indexOf('""') === -1) {
@@ -13983,30 +14094,33 @@ function parseHTML (html, options) {
       // args[3]、args[4]、args[5] 是或的关系，属性值只可能是其中一种
       var value = args[3] || args[4] || args[5] || '';
       attrs[i] = {
+        // 属性名
         name: args[1],
-        // 将字符实体解码，如 '&amp;' -> '&'
+        // 属性值，其中 decodeAttr('&amp;') -> '&'
         value: decodeAttr(value,options.shouldDecodeNewlines)
       };
     }
 
     /*
-        于是，attrs 是这样一个数组：
-        [
-            {
-                name : name1,
-                value : value1
-            },
-            {
-                name : name2,
-                value : value2
-            },
+        若当前标签不是单标签，比如 div，那么压栈
+        所以，stack 的结构为：
+        stack = [
+            { 
+              tag: "DIV", 
+              lowerCasedTag : "div", 
+              attrs : [
+                  { name : attrName,value : attrVal },
+                  { name : attrName,value : attrVal }
+                  ...
+              ]
+            }
             ...
         ]
-    */
+     */
 
     // 不是单标签
     if (!unary) {
-      // 将当前标签入栈
+      // 将当前标签信息入栈
       stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
       // lastTag 为最近一个未闭合标签
       lastTag = tagName;
@@ -14019,56 +14133,80 @@ function parseHTML (html, options) {
     }
   }
 
-  // 解析结束标签
+  /*
+      该函数的作用为：
+      ① 大多数情况下，调用 end 钩子函数
+      ② br、p 等个别标签会调用 start 钩子函数
+   */
   function parseEndTag (tagName, start, end) {
     var pos, lowerCasedTagName;
 
-       // start/end 实参不存在时，都赋值为 index
+    // start/end 实参不存在时，都赋值为 index
     if (start == null) { start = index; }
     if (end == null) { end = index; }
 
-       // 取标签名的小写形式
+    // 取标签名的小写形式
     if (tagName) {
       lowerCasedTagName = tagName.toLowerCase();
     }
 
     // Find the closest opened tag of the same type
     if (tagName) {
-         // 在解析开始标签时 stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs });
+      /*
+          stack 是一个数组栈，结构为：
+          stack = [
+              { tag: "DIV", lowerCasedTag : "div", attrs : [{ name : attrName,value : attrVal },{ name : attrName,value : attrVal }...]},
+              { tag: "SPAN", lowerCasedTag : "span", attrs : [{ name : attrName,value : attrVal },{ name : attrName,value : attrVal }...]},
+              { tag: "a", lowerCasedTag : "a", attrs : [{ name : attrName,value : attrVal },{ name : attrName,value : attrVal }...]},
+              { tag: "img", lowerCasedTag : "img", attrs : [{ name : attrName,value : attrVal },{ name : attrName,value : attrVal }...]}
+          ]
+          从后往前找，找到最近的标签名为 lowerCasedTagName 的那一项
+          ① 如果找到了对应项，那么 pos 就是该项的索引
+      */
       for (pos = stack.length - 1; pos >= 0; pos--) {
-            // 因为之前用的 push 方法，所以这里从后向前匹配标签。前面的标签是祖先标签，后面的是后代标签，先闭合后代标签。
         if (stack[pos].lowerCasedTag === lowerCasedTagName) {
           break
         }
       }
+    // ② 没标签名，显然没有对应项，直接将 pos 置为 0
     } else {
       // If no tag name is provided, clean shop
       pos = 0;
     }
 
+    /*
+        1. 找到了对应项，关闭其后的所有标签
+           比如：对结构 <DIV><SPAN><a><img> 关闭 span 标签，即 parseEndTag('span')
+           那就需要关闭 span 标签后的所有标签，也就是说 span、a、img 标签都要关闭
+     */
     if (pos >= 0) {
       // Close all the open elements, up the stack
       for (var i = stack.length - 1; i >= pos; i--) {
+        /*
+             正常情况下应该是关闭 img 标签，而这里越级关闭 span 标签导致 a、img 标签异常关闭
+             所以，对 a、img 标签发出警告：tag a|img has no matching end tag.
+         */
         if ("development" !== 'production' && (i > pos || !tagName) && options.warn) {
           options.warn( ("tag <" + (stack[i].tag) + "> has no matching end tag.") );
         }
-            // 关闭当前标签的所有子标签
+
+        // 调用 end 钩子函数，关闭标签 stack[i].tag
         if (options.end) {
           options.end(stack[i].tag, start, end);
         }
       }
 
       // Remove the open elements from the stack
-         // 清理数组 stack 中已经关闭的标签
+      // 清理数组 stack 中已经关闭的标签
       stack.length = pos;
-         // 重置最近未关闭标签名
+      // 重置最一个近未关闭标签名
       lastTag = pos && stack[pos - 1].tag;
-       // br 标签
+    // 2. 若是 br 标签，它不存在结束，直接调用 start 钩子函数
     } else if (lowerCasedTagName === 'br') {
       if (options.start) {
         options.start(tagName, [], true, start, end);
       }
-       // p 标签
+    // 3. p 标签里有 address,article,aside... 等块级标签时，直接关闭，调用 start、end 钩子函数
     } else if (lowerCasedTagName === 'p') {
       if (options.start) {
         options.start(tagName, [], false, start, end);
@@ -14087,11 +14225,11 @@ var dirRE = /^v-|^@|^:/;
 // in 或 of
 var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;
 /*
- (( group #1 ),( group #2 ),( group #3 ))
- 
- group #1 : (\{[^}]*\}|[^,]*)  { 非} 0次或多次 } 或 非, 0次或多次
- group #2 : ([^,]*)            非, 0次或多次
- group #3 : (?:,([^,]*))       , 后跟 0次或多次非 ,
+   (( group #1 ),( group #2 ),( group #3 ))
+   
+   group #1 : (\{[^}]*\}|[^,]*)  { 非} 0次或多次 } 或 非, 0次或多次
+   group #2 : ([^,]*)            非, 0次或多次
+   group #3 : (?:,([^,]*))       , 后跟 0次或多次非 ,
 */
 var forIteratorRE = /\((\{[^}]*\}|[^,]*),([^,]*)(?:,([^,]*))?\)/;
 
