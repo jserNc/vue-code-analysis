@@ -3192,7 +3192,7 @@ function updateListeners (on, oldOn, add, remove$$1, vm) {
     } else if (isUndef(old)) {
       // 如果 cur.fns 为 undefined 或 null，那么，cur 重置为 cur 函数调用器
       if (isUndef(cur.fns)) {
-		    // 初始化。on[name] 保存的是调用器，由调用器触发函数 cur。
+        // 初始化。on[name] 保存的是调用器，由调用器触发函数 cur。
         cur = on[name] = createFnInvoker(cur);
       }
       // 事件绑定
@@ -4326,7 +4326,7 @@ function mountComponent (vm, el, hydrating) {
         var vnode = vm._render();
         vm._update(vnode, hydrating);
 
-	    其中，vm._render() 的作用就是生成虚拟节点 vnode
+      其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
     updateComponent = function () {
       // 根据新的 vnode 对 dom 进行更新
@@ -5280,7 +5280,7 @@ function initData (vm) {
    也就是 vm["_data"][key] 代理 vm[key]，也就是说访问 vm.message 其实是访问 vm._data.message，设置 vm.message 其实是设置 vm._data.message
   */
   data = vm._data = typeof data === 'function'
-	  // getData(data, vm) -> data.call(vm)
+    // getData(data, vm) -> data.call(vm)
     ? getData(data, vm)
     : data || {};
   /*
@@ -6338,10 +6338,10 @@ function createElement (context, tag, data, children, normalizationType, alwaysN
   }
   // alwaysNormalize === true，再次修正 normalizationType 为 2
   if (isTrue(alwaysNormalize)) {
-	/*
-		SIMPLE_NORMALIZE = 1;	简单标准化
-		ALWAYS_NORMALIZE = 2;	正常标准化
-	*/
+  /*
+    SIMPLE_NORMALIZE = 1; 简单标准化
+    ALWAYS_NORMALIZE = 2; 正常标准化
+  */
     normalizationType = ALWAYS_NORMALIZE;
   }
   return _createElement(context, tag, data, children, normalizationType)
@@ -6522,7 +6522,7 @@ function renderList (val,render) {
   } else if (typeof val === 'number') {
     ret = new Array(val);
     for (i = 0; i < val; i++) {
-	  // i + 1 为 1 2 3 4 5
+    // i + 1 为 1 2 3 4 5
       ret[i] = render(i + 1, i);
     }
   // ③ val 是对象
@@ -6776,7 +6776,7 @@ function initRender (vm) {
     参数顺序：tag, data, children, normalizationType, alwaysNormalize
 
     内部版本是被模板编译而成的渲染函数用的
-	createElement 最后参数为 false 表示是否进行正常标准化处理由参数 d 决定
+  createElement 最后参数为 false 表示是否进行正常标准化处理由参数 d 决定
   */
   vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); };
 
@@ -9592,22 +9592,22 @@ function createPatchFunction (backend) {
         
         // 父元素存在
         if (isDef(parentElm$1)) {
-    		  /*
-        			例如，dom 结构为：
-        			<body>
-        				<div id="app">
-        					{{message}}
-        				</div>
-        				<div id="app">
-        					Hello Vue!
-        				</div>
-        			</body>
-        			所以，我们需要移除模板：
-        			<div id="app">
-        				{{message}}
-        			</div>
+          /*
+              例如，dom 结构为：
+              <body>
+                <div id="app">
+                  {{message}}
+                </div>
+                <div id="app">
+                  Hello Vue!
+                </div>
+              </body>
+              所以，我们需要移除模板：
+              <div id="app">
+                {{message}}
+              </div>
               这样只是一个形象表述，事实不是这样的
-    		  */
+          */
           // 移除旧的元素
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
         // 父元素不存在，那就调用销毁钩子
@@ -10285,6 +10285,13 @@ function addHandler (el, name, value, modifiers, important, warn) {
 
   // 第②步: 获取 events
   var events;
+  /*
+      绑定一般的自定义事件：
+      <button-counter v-on:increment="incrementTotal"></button-counter>
+      
+      绑定原生事件，如 click，需要加 .native 修饰符：
+      <my-component v-on:click.native="doTheThing"></my-component>
+   */
   if (modifiers && modifiers.native) {
     delete modifiers.native;
     events = el.nativeEvents || (el.nativeEvents = {});
@@ -14218,12 +14225,10 @@ function parseHTML (html, options) {
   }
 }
 
-// 事件绑定
-var onRE = /^@|^v-on:/;
-// 指令
-var dirRE = /^v-|^@|^:/;
-// in 或 of
-var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;
+
+var onRE = /^@|^v-on:/;  // 事件绑定
+var dirRE = /^v-|^@|^:/; // 指令
+var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;  // in 或 of
 /*
    (( group #1 ),( group #2 ),( group #3 ))
    
@@ -14233,14 +14238,15 @@ var forAliasRE = /(.*?)\s+(?:in|of)\s+(.*)/;
 */
 var forIteratorRE = /\((\{[^}]*\}|[^,]*),([^,]*)(?:,([^,]*))?\)/;
 
-// 匹配参数
-var argRE = /:(.*)$/;
-// 匹配 bind
-var bindRE = /^:|^v-bind:/;
-// 匹配修饰符
-var modifierRE = /\.[^.]+/g;
 
-//  decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+var argRE = /:(.*)$/;        // 匹配参数
+var bindRE = /^:|^v-bind:/;  // 匹配 bind
+var modifierRE = /\.[^.]+/g; // 匹配修饰符
+
+/*
+    he.decode(html) 的作用是：
+    将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+ */
 var decodeHTMLCached = cached(he.decode);
 
 // configurable state
@@ -14762,10 +14768,10 @@ function processFor (el) {
     el.for = inMatch[2].trim();
     // 数据项 'item' 或 '(value, key)'
     var alias = inMatch[1].trim();
-	/*
-		对于 v-for="(value, key) in object" 这种形式，alias = '(value, key)'
-		于是：'(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
-	*/
+  /*
+    对于 v-for="(value, key) in object" 这种形式，alias = '(value, key)'
+    于是：'(value, key)'.match(forIteratorRE) -> ["(value, key)", "value", " key", undefined, index: 0, input: "(value, key)"]
+  */
     var iteratorMatch = alias.match(forIteratorRE);
     if (iteratorMatch) {
       // 数据值 "value"
@@ -14783,25 +14789,33 @@ function processFor (el) {
 }
 
 
-// v-if 属性
+/*
+    例如：
+    <h1 v-if="a">AAAAA</h1>
+    <h1 v-else-if="b">BBBBB<h1>
+    <h1 v-else>CCCCC</h1>
+ */
 function processIf (el) {
   var exp = getAndRemoveAttr(el, 'v-if');
-  // v-if 分支，el.if 为真
   if (exp) {
-	// 以 <div v-if="isShow" v-bind:style="styleObject"> 为例，exp = "isShow"
     el.if = exp;
-    // el.ifConditions.push(condition)
+    /*
+        ① el 为第一个 <h1> 元素
+        el.ifConditions = [
+            exp: 'ok',
+            block: el
+        ]
+     */
     addIfCondition(el, {
       exp: exp,
       block: el
     });
-  // v-else 分支，v.else 必定为真，v.elseif 得根据条件判断
   } else {
-    // v-else 
+    // ② 例如 el 为：<h1 v-else>CCCCC</h1>
     if (getAndRemoveAttr(el, 'v-else') != null) {
       el.else = true;
     }
-    // v-else-if
+    // ③ 例如 el 为：<h1 v-else-if="b">BBBBB<h1>
     var elseif = getAndRemoveAttr(el, 'v-else-if');
     if (elseif) {
       el.elseif = elseif;
@@ -14809,18 +14823,66 @@ function processIf (el) {
   }
 }
 
-// 处理 if 条件
+/*
+    看看这个函数实际怎么调用：
+    if (element.elseif || element.else) {
+      processIfConditions(element, currentParent);
+    }
+ */
 function processIfConditions (el, parent) {
-  // 在 parent.children 数组中从后往前找，找到第一个 element 节点
+  /*
+      ① 在数组 children 中从后向前找到第一个 ASTElement 节点
+      ② 在查找过程中遇到的 ASTText、ASTExpression 类型节点都丢掉
+   */
   var prev = findPrevElement(parent.children);
+  /*
+      例如：
+      <h1 v-if="a">AAAAA</h1>
+      hhhhhhhh
+      <h1 v-else-if="b">BBBBB<h1>
+      <h1 v-else>CCCCC<h1>
+
+      ① 若条件 v-else-if="b" 为真
+      prev 就是第一个 <h1> 元素
+      el 就是第二个 <h1> 元素
+
+      于是把 el 这个条件块合并到 prev 中：
+      prev.ifConditions = [
+          {
+            exp: 'a',
+            block: prev
+          },
+          {
+            exp: 'b',
+            block: el
+          }
+      ]
+
+      ② 若条件 v-else-if="b" 为假，那就走到第三个 <h1> 元素
+      prev 就是第一个 <h1> 元素
+      el 就是第三个 <h1> 元素
+
+      于是把 el 这个条件块合并到 prev 中：
+      prev.ifConditions = [
+          {
+            exp: 'a',
+            block: prev
+          },
+          {
+            exp: undefined,  // 注意这里应该是 undefined
+            block: el
+          }
+      ]
+
+      总之 v-else-if  和 v-else 只有一个能成立
+   */
   if (prev && prev.if) {
-    // prev.ifConditions.push({ exp: el.elseif,block: el })
     addIfCondition(prev, {
       exp: el.elseif,
       block: el
     });
+  // 否则，发出警告，v-else(-if) 找不到对应的 v-if
   } else {
-    // 如果只有 v-else/v-else-if ，而没有对应的 v-if，发出警告
     warn$2(
       "v-" + (el.elseif ? ('else-if="' + el.elseif + '"') : 'else') + " " +
       "used on element <" + (el.tag) + "> without corresponding v-if."
@@ -14828,28 +14890,39 @@ function processIfConditions (el, parent) {
   }
 }
 
-// 找到之前的元素，在 children 数组里从后往前找，返回第一个找到的 type === 1 的元素
+// 在数组 children 中从后向前找到第一个 ASTElement 节点
 function findPrevElement (children) {
   var i = children.length;
+  /*
+    生成节点有 3 种类型：
+    ASTNode = ASTElement | ASTText | ASTExpression，其中：
+    
+    ASTElement 的 type 类型为 1
+    ASTText 的 type 类型为 3
+    ASTExpression 的 type 类型为 2
+
+    从 children 后面向前遍历，找到第一个 ASTElement 节点。
+ */ 
   while (i--) {
-    // 当前 child 是 element 元素，返回
+    // ① 找到一个 ASTElement 节点就返回
     if (children[i].type === 1) {
       return children[i]
-    // 当前 child 不是 element 元素，跳过，重新找
+    // ② 遇到 ASTText、ASTExpression 类型就出栈
     } else {
-      // v-if 和 v-else(-if) 之间的文本会被忽略的
+      // ASTText、ASTExpression 类型都有 text 属性
       if ("development" !== 'production' && children[i].text !== ' ') {
         warn$2(
           "text \"" + (children[i].text.trim()) + "\" between v-if and v-else(-if) " +
           "will be ignored."
         );
       }
+      // 出栈
       children.pop();
     }
   }
 }
 
-// 添加 if 条件
+// 添加 if 块
 function addIfCondition (el, condition) {
   if (!el.ifConditions) {
     el.ifConditions = [];
@@ -14865,11 +14938,20 @@ function processOnce (el) {
   }
 }
 
-// slot 相关属性
+// 添加 el.slotName、el.slotTarget、el.slotScope
 function processSlot (el) {
-  // slot 标签
+  /*
+      例如 app-layout 组件，它的模板为：
+      <div class="container">
+        <header>
+          <slot name="header"></slot>
+        </header>
+      </div>
+   */
+  // ① 子组件模板中的 <slot> 元素
   if (el.tag === 'slot') {
     el.slotName = getBindingAttr(el, 'name');
+    // 警告：slot 元素不需要 key 属性
     if ("development" !== 'production' && el.key) {
       // <slot> 标签上的 key 不起作用
       warn$2(
@@ -14878,6 +14960,13 @@ function processSlot (el) {
         "Use the key on a wrapping element instead."
       );
     }
+  /*
+      例如父组件模板为：
+      <app-layout>
+        <h1 slot="header">这里可能是一个页面标题</h1>
+      </app-layout>
+   */
+  // ② 父组件模板中的 slot 属性
   } else {
     var slotTarget = getBindingAttr(el, 'slot');
     if (slotTarget) {
@@ -14885,13 +14974,20 @@ function processSlot (el) {
       el.slotTarget = slotTarget === '""' ? '"default"' : slotTarget;
     }
     /*
-      参考官网作用域插槽描述：
-      在父级中，具有特殊特性 slot-scope 的 <template> 元素必须存在，表示它是作用域插槽的模板。slot-scope 的值将被用作一个临时变量名，此变量接收从子组件传递过来的 prop 对象
-     
-      slot-scope 属性被解析成了 scope 属性吗？
-      经验证，2.4.0 版本（当前版本）应该是 scope 属性而不是 slot-scope 属性
+        参考官网作用域插槽描述：
+        在父级中，具有特殊特性 slot-scope 的 <template> 元素必须存在，表示它是作用域插槽的模板。slot-scope 的值将被用作一个临时变量名，此变量接收从子组件传递过来的 prop 对象
+       
+        经验证：
+        2.4.0 版本（当前版本）应该是 scope 属性而不是 slot-scope 属性
+        2.5.0+ 版本才改成 slot-scope 属性
 
-      2.5.0+ 版本才改成 slot-scope 属性
+        例如：
+        <child>
+          <template scope="props">
+            <span>hello from parent</span>
+            <span>{{ props.text }}</span>
+          </template>
+        </child>
      */
     if (el.tag === 'template') {
       el.slotScope = getAndRemoveAttr(el, 'scope');
@@ -14902,11 +14998,37 @@ function processSlot (el) {
 // 标记 el.component、el.inlineTemplate 
 function processComponent (el) {
   var binding;
-  // is 属性
+  /*
+      通过使用保留的 <component> 元素，并对其 is 特性进行动态绑定，你可以在同一个挂载点动态切换多个组件：
+      var vm = new Vue({
+        el: '#example',
+        data: {
+          currentView: 'home'
+        },
+        components: {
+          home: { ... },
+          posts: { ... },
+          archive: { ... }
+        }
+      })
+
+      <component v-bind:is="currentView">
+        <!-- 组件在 vm.currentview 变化时改变！-->
+      </component>
+   */
   if ((binding = getBindingAttr(el, 'is'))) {
     el.component = binding;
   }
-  // inline-template 属性
+  /*
+      内联模板：
+      如果子组件有 inline-template 特性，组件将把它的内容当作它的模板，而不是把它当作分发内容
+      <my-component inline-template>
+        <div>
+          <p>这些将作为组件自身的模板。</p>
+          <p>而非父组件透传进来的内容。</p>
+        </div>
+      </my-component>
+   */
   if (getAndRemoveAttr(el, 'inline-template') != null) {
     el.inlineTemplate = true;
   }
@@ -15172,7 +15294,7 @@ var genStaticKeysCached = cached(genStaticKeys$1);
     1. 把它们提升到常量里。这样我们就不必为每一个 re-render 创建一批新的节点了。
     2. 在打补丁的过程中跳过它们
 
-	  其实就是给 root 添加 root.static、root.staticInFor、root.staticRoot 等属性，属性值为 true | false
+    其实就是给 root 添加 root.static、root.staticInFor、root.staticRoot 等属性，属性值为 true | false
  */
 function optimize (root, options) {
   if (!root) { return }
@@ -15693,30 +15815,30 @@ function generate (ast,options) {
   // 将 ast 对象转为浏览器可以解析的字符串
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
-	/*
-		以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
-		with 语句的 this 是 vm，所以 _c 实际是 vm._c
-		
-		看看 with 的基本用法（严格模式下不能使用 with 语句）：
-		var qs = location.search.substring(1);
-		var hostName = location.hostname;
-		var url = location.href;
-		这几行代码都是访问 location 对象中的属性，如果使用 with 关键字的话，可以简化代码如下：
-		with (location){
-		  var qs = search.substring(1);
-		  var hostName = hostname;
-		  var url = href;
-		}
-		在这段代码中，使用了 with 语句关联了 location 对象，这就以为着在 with 代码块内部，每个变量首先被认为是一个局部变量，如果局部变量与 location 对象的某个属性同名，则这个局部变量会指向 location 对象属性。
-	
-		在 Vue.prototype._render 中：
-		vnode = render.call(vm._renderProxy, vm.$createElement);
-		而 vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）
-		所以:
-		"_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
-		其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
+  /*
+    以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
+    with 语句的 this 是 vm，所以 _c 实际是 vm._c
+    
+    看看 with 的基本用法（严格模式下不能使用 with 语句）：
+    var qs = location.search.substring(1);
+    var hostName = location.hostname;
+    var url = location.href;
+    这几行代码都是访问 location 对象中的属性，如果使用 with 关键字的话，可以简化代码如下：
+    with (location){
+      var qs = search.substring(1);
+      var hostName = hostname;
+      var url = href;
+    }
+    在这段代码中，使用了 with 语句关联了 location 对象，这就以为着在 with 代码块内部，每个变量首先被认为是一个局部变量，如果局部变量与 location 对象的某个属性同名，则这个局部变量会指向 location 对象属性。
+  
+    在 Vue.prototype._render 中：
+    vnode = render.call(vm._renderProxy, vm.$createElement);
+    而 vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）
+    所以:
+    "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
+    其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
 
-	  注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
+    注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
 
     对于模板：
     div id='app'>
@@ -15741,7 +15863,7 @@ function generate (ast,options) {
             }
         }, [_v("\n" + _s(_f("filter")(computedValue)) + "\n")])])
     }`
-	*/
+  */
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
   }
@@ -15905,11 +16027,11 @@ function genIfConditions (conditions, state, altGen, altEmpty) {
 // v-for
 function genFor (el, state, altGen, altHelper) {
   /*
-    	v-for = "(value, key) in items"
-    	数据源 el.for = 'items'
-    	数据项 el.alias = 'value'
-    	数据子项 el.iterator1 = "key"
-    	数据子项 el.iterator2 = ""
+      v-for = "(value, key) in items"
+      数据源 el.for = 'items'
+      数据项 el.alias = 'value'
+      数据子项 el.iterator1 = "key"
+      数据子项 el.iterator2 = ""
   */
   var exp = el.for;
   var alias = el.alias;
@@ -15934,7 +16056,7 @@ function genFor (el, state, altGen, altHelper) {
   // 标识执行过 genFor 函数，避免递归调用
   el.forProcessed = true; // avoid recursion
   /*
-    	例如：
+      例如：
       <div id="app">
         <a href="#" v-for="(value, key) in items">{{val}}</a>
       </div>
