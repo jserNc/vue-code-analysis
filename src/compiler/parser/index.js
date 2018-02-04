@@ -158,13 +158,95 @@ export function parse (
     canBeLeftOpenTag: options.canBeLeftOpenTag,
     shouldDecodeNewlines: options.shouldDecodeNewlines,
     shouldKeepComment: options.comments,
+    /*
+        生成 ASTElement 节点，其中：
+        declare type ASTElement = {
+          type: 1;
+          tag: string;
+          attrsList: Array<{ name: string; value: string }>;
+          attrsMap: { [key: string]: string | null };
+          parent: ASTElement | void;
+          children: Array<ASTNode>;
+
+          static?: boolean;
+          staticRoot?: boolean;
+          staticInFor?: boolean;
+          staticProcessed?: boolean;
+          hasBindings?: boolean;
+
+          text?: string;
+          attrs?: Array<{ name: string; value: string }>;
+          props?: Array<{ name: string; value: string }>;
+          plain?: boolean;
+          pre?: true;
+          ns?: string;
+
+          component?: string;
+          inlineTemplate?: true;
+          transitionMode?: string | null;
+          slotName?: ?string;
+          slotTarget?: ?string;
+          slotScope?: ?string;
+          scopedSlots?: { [name: string]: ASTElement };
+
+          ref?: string;
+          refInFor?: boolean;
+
+          if?: string;
+          ifProcessed?: boolean;
+          elseif?: string;
+          else?: true;
+          ifConditions?: ASTIfConditions;
+
+          for?: string;
+          forProcessed?: boolean;
+          key?: string;
+          alias?: string;
+          iterator1?: string;
+          iterator2?: string;
+
+          staticClass?: string;
+          classBinding?: string;
+          staticStyle?: string;
+          styleBinding?: string;
+          events?: ASTElementHandlers;
+          nativeEvents?: ASTElementHandlers;
+
+          transition?: string | true;
+          transitionOnAppear?: boolean;
+
+          model?: {
+            value: string;
+            callback: string;
+            expression: string;
+          };
+
+          directives?: Array<ASTDirective>;
+
+          forbidden?: true;
+          once?: true;
+          onceProcessed?: boolean;
+          wrapData?: (code: string) => string;
+          wrapListeners?: (code: string) => string;
+
+          // 2.4 ssr optimization
+          ssrOptimizability?: number;
+
+          // weex specific
+          appendAsTree?: boolean;
+        };
+     */
     start (tag, attrs, unary) {
       // check namespace.
       // inherit parent ns if there is one
+      // 获取命名空间
       const ns = (currentParent && currentParent.ns) || platformGetTagNamespace(tag)
 
       // handle IE svg bug
-      /* istanbul ignore if */
+      /*
+          guardIESVGBug(attrs) 相当于对原数组某些项做一下修正，并返回这些修正过的项
+          这里的意思是：在 ie 下，对 attrs 数组进行修正
+       */
       if (isIE && ns === 'svg') {
         attrs = guardIESVGBug(attrs)
       }
@@ -173,14 +255,20 @@ export function parse (
         type: 1,
         tag,
         attrsList: attrs,
-        attrsMap: makeAttrsMap(attrs),
+        attrsMap: makeAttrsMap(attrs), // 将数组类型的 attrs 转为 json
         parent: currentParent,
         children: []
       }
+
       if (ns) {
         element.ns = ns
       }
 
+      /*
+          对 style/script 等标签发出警告：
+          模板的作用仅仅是状态和 UI 之间的一个映射作用。
+          不要在其中放置一些有副作用的标签，比如 style/script 等，因为它们是不会被解析的。
+       */
       if (isForbiddenTag(element) && !isServerRendering()) {
         element.forbidden = true
         process.env.NODE_ENV !== 'production' && warn(
@@ -190,49 +278,94 @@ export function parse (
         )
       }
 
-      // apply pre-transforms
+      /*
+          preTransforms = [ module1.preTransformNode,  module2.preTransformNode,  module2.preTransformNode, ...];
+          依次调用各个模块的 preTransformNode 函数
+       */
       for (let i = 0; i < preTransforms.length; i++) {
         preTransforms[i](element, options)
       }
 
+
       if (!inVPre) {
+        // 如果 element 元素的 v-pre 属性存在，那么将 element.pre 标记为 true
         processPre(element)
         if (element.pre) {
-          inVPre = true
+          inVPre = true  // element 元素带 v-pre 属性
         }
       }
+
+      // 如果 element.tag 是 pre 标签，那就将 inPre 置为 true
       if (platformIsPreTag(element.tag)) {
-        inPre = true
+        inPre = true    // element 元素标签是 pre
       }
+
+      /*
+          ① element 元素带 v-pre 属性，直接把按照所有属性字面意思解析
+          processRawAttrs(element) 的作用是添加 el.attrs 属性
+          el.attrs : [
+              { name : name1, value : value1 },
+              { name : name2, value : value2 },
+              ...
+          ]
+       */
       if (inVPre) {
         processRawAttrs(element)
+      // ② 否则，就各个属性分别解析
       } else {
-        processFor(element)
-        processIf(element)
-        processOnce(element)
-        processKey(element)
+        processFor(element)   // 添加 element.for、element.alias、element.iterator1
+        processIf(element)    // 添加 element.if、element.else、element.elseif、element.ifConditions 等
+        processOnce(element)  // 添加 element.once
+        processKey(element)   // 添加 element.key
 
-        // determine whether this is a plain element after
-        // removing structural attributes
+        // determine whether this is a plain element after removing structural attributes
+        // 若 element 元素没有属性，那就认为它是“纯净”的
         element.plain = !element.key && !attrs.length
 
-        processRef(element)
-        processSlot(element)
-        processComponent(element)
+        processRef(element)   // 添加 element.ref、element.refInFor 等属性
+        processSlot(element)  // 添加 element.slotName、element.slotTarget、element.slotScope
+        processComponent(element)  // 添加 element.component、element.inlineTemplate
+        /*
+            transforms = [ module1.transformNode,  module2.transformNode,  module2.transformNode, ...];
+            依次调用各模块的 transformNode 方法
+         */
         for (let i = 0; i < transforms.length; i++) {
           transforms[i](element, options)
         }
+        /*
+          首先，取出 el.attrsList 数组，结构大概是：
+          [
+            { name : name1, value : value1 },
+            { name : name2, value : value2 }
+            ...
+          ]
+
+          然后，遍历 el.attrsList 数组，按每一项的 name 类型，分为两类：
+          1. name 为指令类型属性名
+             ① name 为 v-bind 类型指令，如 'v-bind:src'
+                根据修饰符的不同，该属性既可能是添加事件绑定 addHandler()，也是可能是添加 addProp()，也可能是添加 addAttr()
+             ② name 为 v-on 类型指令，如 'v-on:click'
+                调用 addHandler() 添加事件绑定
+             ③ name 为 一般指令，如 v-show、v-for
+                调用 addDirective() 添加指令
+          2. name 为一般类型属性名（字面量属性名）
+             直接调用 addAttr() 添加 attr
+       */
         processAttrs(element)
       }
 
+
+      // 检查根元素约束条件，发出警告
       function checkRootConstraints (el) {
         if (process.env.NODE_ENV !== 'production') {
+          // ① 不能将 slot/template 标签作为组件根元素，因为它可能包含多个节点
           if (el.tag === 'slot' || el.tag === 'template') {
             warnOnce(
               `Cannot use <${el.tag}> as component root element because it may ` +
               'contain multiple nodes.'
             )
           }
+          // ② 不能在状态组件根节点上使用 v-for，因为它会渲染多元素
           if (el.attrsMap.hasOwnProperty('v-for')) {
             warnOnce(
               'Cannot use v-for on stateful component root element because ' +
@@ -242,18 +375,46 @@ export function parse (
         }
       }
 
-      // tree management
+      // 组织 ast 树
+
+      // 1. 若 root 不存在，那么当前 element 就是 root 根节点
       if (!root) {
         root = element
         checkRootConstraints(root)
+      // 2. root 存在，element 是和 root 并列的同级元素
       } else if (!stack.length) {
+        /*
+          ① element 是和 root 配套的 if-else 结构，如：
+          <h1 v-if="a">AAAAA</h1>
+          <h1 v-else-if="b">BBBBB<h1>
+          <h1 v-else>CCCCC</h1>
+
+          root 是这里的第一个 <h1>，element 可能是第二/三个 <h1>
+       */
         // allow root elements with v-if, v-else-if and v-else
         if (root.if && (element.elseif || element.else)) {
           checkRootConstraints(element)
+          
+          /*
+            相当于：
+            root.ifConditions.push({
+              exp: element.elseif,
+              block: element
+            })
+          */
           addIfCondition(root, {
             exp: element.elseif,
             block: element
           })
+        /*
+          ② element 是和 root 并列的元素，如：
+          <h1>AAAAA</h1>
+          <h1>BBBBB<h1>
+
+          root 是这里的第一个 <h1>，element 是第二个 <h1>
+          这是不允许的，因为组件模板必须包含一个根元素。
+          如果非要多个元素，那就用上面的 if-else 结构
+       */
         } else if (process.env.NODE_ENV !== 'production') {
           warnOnce(
             `Component template should contain exactly one root element. ` +
@@ -262,50 +423,89 @@ export function parse (
           )
         }
       }
+
+      // element 为 style 或 script 标签时，可能有 element.forbidden = true
       if (currentParent && !element.forbidden) {
+        // ① v-elseif 或 v-else
         if (element.elseif || element.else) {
+          /*
+              实际相当于执行：
+              addIfCondition(prev, {
+                exp: element.elseif,
+                block: element
+              })
+              其中 prev 是和 element 配套的 v-if 元素
+           */
           processIfConditions(element, currentParent)
-        } else if (element.slotScope) { // scoped slot
+        // ② 作用域插槽
+        } else if (element.slotScope) {
+          /*
+              例如这里的 <template> 元素：
+              <child>
+                <template scope="props">
+                  <span>hello from parent</span>
+                  <span>{{ props.text }}</span>
+                </template>
+              </child>
+           */
           currentParent.plain = false
-          const name = element.slotTarget || '"default"'
-          ;(currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element
+          const name = element.slotTarget || '"default"';
+          (currentParent.scopedSlots || (currentParent.scopedSlots = {}))[name] = element
+        // ③ 普通子元素添加进 currentParent.children 数组
         } else {
           currentParent.children.push(element)
           element.parent = currentParent
         }
       }
+
+      // 不是单标签
       if (!unary) {
         currentParent = element
         stack.push(element)
       } else {
-        endPre(element)
+        endPre(element) // 将 inVPre 和 inPre 值置为 false
       }
-      // apply post-transforms
+      
+      /*
+          postTransforms = [ module1.postTransformNode,  module2.postTransformNode,  module2.postTransformNode, ...];
+          依次调用各模块的 postTransformNode 方法
+       */
       for (let i = 0; i < postTransforms.length; i++) {
         postTransforms[i](element, options)
       }
     },
 
+    // 简单的认为该函数作用是更新 currentParent
     end () {
-      // remove trailing whitespace
+      // ① 去除最后一个元素中最后的空白
       const element = stack[stack.length - 1]
       const lastNode = element.children[element.children.length - 1]
       if (lastNode && lastNode.type === 3 && lastNode.text === ' ' && !inPre) {
         element.children.pop()
       }
-      // pop stack
+
+      // ② 最后一个元素出栈，currentParent 为倒数第二个元素
       stack.length -= 1
       currentParent = stack[stack.length - 1]
-      endPre(element)
+      endPre(element) // 将 inVPre 和 inPre 值置为 false
     },
 
+    // 将该文本作为 ASTExpression|ASTText 节点加入 currentParent.children 数组
     chars (text: string) {
+      // 1. currentParent 不存在，发警告，然后直接返回
       if (!currentParent) {
         if (process.env.NODE_ENV !== 'production') {
+          /*
+              template 是原始模板字符串
+              text 是从该模板中提取的文本块
+              text === templat 说明整个模板都是文本
+           */
+          // ① 警告：组件模板需要有一个根元素，而不能仅仅是文本
           if (text === template) {
             warnOnce(
               'Component template requires a root element, rather than just text.'
             )
+          // ② 警告：根元素之外的文本会被忽略，如 'abc<div>efg</div>'，text 为 'abc'，这里会提示根元素 <p> 标签之外的 'abc' 会被忽略的
           } else if ((text = text.trim())) {
             warnOnce(
               `text "${text}" outside root element will be ignored.`
@@ -314,27 +514,46 @@ export function parse (
         }
         return
       }
+
+      
       // IE textarea placeholder bug
-      /* istanbul ignore if */
+      // 2. IE 下 `<textarea placeholder=${text}></textarea>` 直接返回
       if (isIE &&
         currentParent.tag === 'textarea' &&
         currentParent.attrsMap.placeholder === text
       ) {
         return
       }
+
+      // 3. currentParent 存在，那就将该文本作为 ASTExpression|ASTText 节点加入 currentParent.children 数组
+      
       const children = currentParent.children
+
+      // 对 text 进行转码修正
       text = inPre || text.trim()
+        /*
+            ① script 和 style 标签为文本标签，不需要解码，其他的标签需要解码
+            ② decodeHTMLCached(html) 将 html 赋值给一个 div 的 innerHTML，然后返回这个 div 的 textContent 属性
+        */
         ? isTextTag(currentParent) ? text : decodeHTMLCached(text)
         // only preserve whitespace if its not right after a starting tag
+        // 只有不是开始标签后（children.length > 0）的空白文本可以保留
         : preserveWhitespace && children.length ? ' ' : ''
+
+
       if (text) {
         let expression
+        /*
+            ① 如果不是 pre 标签内，并且 text 不为 ' '，那就将模板字符串 text 转为浏览器可以解析的字符串 expression
+            那就将该文本作为 ASTExpression 节点加入 currentParent.children 数组
+         */
         if (!inVPre && text !== ' ' && (expression = parseText(text, delimiters))) {
           children.push({
             type: 2,
             expression,
             text
           })
+        // ② 将该文本作为 ASTText 节点加入 currentParent.children 数组
         } else if (text !== ' ' || !children.length || children[children.length - 1].text !== ' ') {
           children.push({
             type: 3,
@@ -343,6 +562,18 @@ export function parse (
         }
       }
     },
+    /*
+        declare type ASTText = {
+          type: 3;
+          text: string;
+          static?: boolean;
+          isComment?: boolean;
+          // 2.4 ssr optimization
+          ssrOptimizability?: number;
+        };
+
+        将 ASTText 类型节点加入 currentParent.children 数组
+     */
     comment (text: string) {
       currentParent.children.push({
         type: 3,
@@ -370,8 +601,8 @@ function processPre (el) {
             value : value1
         },
         { 
-            name : name1,
-            value : value1
+            name : name2,
+            value : value2
         },
         ...
     ]
@@ -406,7 +637,7 @@ function processKey (el) {
   }
 }
 
-// 标记 el.ref、el.refInFor、el.iterator1 等属性
+// 标记 el.ref、el.refInFor 等属性
 function processRef (el) {
   const ref = getBindingAttr(el, 'ref')
   if (ref) {
@@ -477,6 +708,8 @@ function processFor (el) {
     <h1 v-if="a">AAAAA</h1>
     <h1 v-else-if="b">BBBBB<h1>
     <h1 v-else>CCCCC</h1>
+
+    添加 el.if、el.else、el.elseif、el.ifConditions 等
  */
 function processIf (el) {
   const exp = getAndRemoveAttr(el, 'v-if')
@@ -720,15 +953,27 @@ function processComponent (el) {
   }
 }
 
-function processAttrs (el) {
-  /*
-    el.attrsList 是一个数组，结构大概是：
+
+/*
+    首先，取出 el.attrsList 数组，结构大概是：
     [
       { name : name1, value : value1 },
       { name : name2, value : value2 }
       ...
     ]
-   */
+
+    然后，遍历 el.attrsList 数组，按每一项的 name 类型，分为两类：
+    1. name 为指令类型属性名
+       ① name 为 v-bind 类型指令，如 'v-bind:src'
+          根据修饰符的不同，该属性既可能是添加事件绑定 addHandler()，也是可能是添加 addProp()，也可能是添加 addAttr()
+       ② name 为 v-on 类型指令，如 'v-on:click'
+          调用 addHandler() 添加事件绑定
+       ③ name 为 一般指令，如 v-show、v-for
+          调用 addDirective() 添加指令
+    2. name 为一般类型属性名（字面量属性名）
+       直接调用 addAttr() 添加 attr
+ */
+function processAttrs (el) {
   const list = el.attrsList
   let i, l, name, rawName, value, modifiers, isProp
 
@@ -744,6 +989,7 @@ function processAttrs (el) {
       el.hasBindings = true
 
       /*
+          parseModifiers 函数解析修饰符，返回一个 json，键名是各修饰符，键值是 true
           例如：parseModifiers('v-on:click.capture')
           -> {
               click : true,
@@ -817,7 +1063,7 @@ function processAttrs (el) {
       } else if (onRE.test(name)) {
         name = name.replace(onRE, '')
         addHandler(el, name, value, modifiers, false, warn)
-      // ③ 一般指令，如 v-if、v-for
+      // ③ 一般指令，如 v-show、v-for
       } else {
         // 其中 dirRE = /^v-|^@|^:/
         name = name.replace(dirRE, '')
@@ -845,12 +1091,26 @@ function processAttrs (el) {
           checkForAliasModel(el, value)
         }
       }
-    // 2. name 为普通属性
+    // 2. name 为普通属性，也就是字面量属性
     } else {
-      // literal attribute
       if (process.env.NODE_ENV !== 'production') {
+        /*
+          parseText 函数将模板字符串转为浏览器可以解析的字符串。
+
+          text 可分为 3 个部分，{{ 之前的，{{}} 中间包裹的，}} 之后的。
+          函数分别将三者抽离出来，push 进 tokens，最后用 + 连接并返回一个字符串
+       
+          例如：
+          parseText('abc{{msg | fn}}efg')
+          -> 'abc' + '_s(_f("fn")(msg))' + 'efg'
+
+          总之，该函数将模板字符串转为浏览器可以识别的常规字符串
+
+          另外，当 value 里没有使用 id="{{ val }}" 这种插值写法时，parseText(value, delimiters) 返回值为 undefined
+       */
         const expression = parseText(value, delimiters)
         if (expression) {
+          // <div id="{{ val }}"> 这种插值写法不再支持了，推荐使用 <div :id="val">
           warn(
             `${name}="${value}": ` +
             'Interpolation inside attributes has been removed. ' +
@@ -859,6 +1119,7 @@ function processAttrs (el) {
           )
         }
       }
+      // (el.attrs || (el.attrs = [])).push({ name: name, value: JSON.stringify(value) });
       addAttr(el, name, JSON.stringify(value))
     }
   }
@@ -876,34 +1137,70 @@ function checkInFor (el: ASTElement): boolean {
   return false
 }
 
+// 解析修饰符，返回一个 json，键名是各修饰符，键值都是 true
 function parseModifiers (name: string): Object | void {
+  // 匹配修饰符 modifierRE = /\.[^.]+/g;
   const match = name.match(modifierRE)
   if (match) {
     const ret = {}
+    /*
+      ret : {
+        modifier1 : true,
+        modifier2 : true,
+        ...
+      }
+    */
     match.forEach(m => { ret[m.slice(1)] = true })
     return ret
   }
 }
 
+//  将数组转成一个 json 对象，键名是属性名，键值是属性值
 function makeAttrsMap (attrs: Array<Object>): Object {
   const map = {}
+  /*
+      遍历 attrs，attrs 结构如下：
+      attrs : [
+        {name: "id", value: app"},
+        {name: "class", value: "red"},
+        ...
+      ]
+   */ 
   for (let i = 0, l = attrs.length; i < l; i++) {
+    // 对于重复的属性，发出警告
     if (
       process.env.NODE_ENV !== 'production' &&
       map[attrs[i].name] && !isIE && !isEdge
     ) {
       warn('duplicate attribute: ' + attrs[i].name)
     }
+    // 逐项添加到 map 
     map[attrs[i].name] = attrs[i].value
   }
+
+  /*
+      返回的结构为：
+      map = {
+        id : "app",
+        class : "red",
+        ...
+      }
+   */
   return map
 }
 
 // for script (e.g. type="x/template") or style, do not decode content
+// script 和 style 标签认为是纯文本标签，不会对其内容解码
 function isTextTag (el): boolean {
   return el.tag === 'script' || el.tag === 'style'
 }
 
+/*
+    以下 3 种情况返回 true：
+    ① <style></style>
+    ② <script src=".js"></script>
+    ③ <script type="text/javascript" src=".js"></script>
+ */
 function isForbiddenTag (el): boolean {
   return (
     el.tag === 'style' ||
@@ -917,11 +1214,24 @@ function isForbiddenTag (el): boolean {
 const ieNSBug = /^xmlns:NS\d+/
 const ieNSPrefix = /^NS\d+:/
 
-/* istanbul ignore next */
+/*
+    原数组和返回结果都是数组，大致结构为：
+    [
+        {name: "id", value: app"},
+        {name: "class", value: "red"},
+        ...
+    ]
+    相当于对原数组某些项做一下修正，并返回这些修正过的项
+ */
 function guardIESVGBug (attrs) {
   const res = []
   for (let i = 0; i < attrs.length; i++) {
     const attr = attrs[i]
+    /*
+        如果 attr.name 没能通过正则 ieNSBug 匹配
+        ① 那就将 attr.name 中 ieNSPrefix 匹配出的部分替换为 ''
+        ② 将该项 attr 加入数组 res
+     */
     if (!ieNSBug.test(attr.name)) {
       attr.name = attr.name.replace(ieNSPrefix, '')
       res.push(attr)
@@ -930,10 +1240,21 @@ function guardIESVGBug (attrs) {
   return res
 }
 
+// 遍历 el 的祖先元素，对于 <li v-for="item in items" v-model="item"> 这种形式发出警告
 function checkForAliasModel (el, value) {
   let _el = el
   while (_el) {
     if (_el.for && _el.alias === value) {
+      /*
+          对于 v-for="item in items" 这种形式
+          el.alias = 'item'
+
+          例如： <li v-for="item in items" v-model="item">
+          这样把 v-model 直接绑定到 v-for 的 alias 来改变 items 数组是行不通的。
+
+          因为改变 alias 相当于改变一个函数的局部变量，这是不可以的。
+          推荐的做法是使用对象组成的数组，然后用 v-model 绑定对象的属性
+       */
       warn(
         `<${el.tag} v-model="${value}">: ` +
         `You are binding v-model directly to a v-for iteration alias. ` +

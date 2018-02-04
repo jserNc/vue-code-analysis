@@ -178,6 +178,8 @@ export function parseHTML (html, options) {
                 
                 '<!--this id comment-->'.substring(4, '<!--this id comment-->'.indexOf('-->'))
                 -> 'this id comment'
+
+                options.comment(text) 作用是将将 ASTText 类型节点加入 currentParent.children 数组
               */
               options.comment(html.substring(4, commentEnd))
             }
@@ -295,7 +297,7 @@ export function parseHTML (html, options) {
         html = ''
       }
 
-      // 调用 chars 钩子函数处理文本
+      // 调用 chars 钩子函数处理文本（将该文本作为 ASTExpression|ASTText 节点加入 currentParent.children 数组）
       if (options.chars && text) {
         options.chars(text)
       }
@@ -339,7 +341,7 @@ export function parseHTML (html, options) {
           text = text.slice(1)
         }
 
-        // 调用 chars 钩子函数处理 text
+        // 调用 chars 钩子函数处理 text（将该文本作为 ASTExpression|ASTText 节点加入 currentParent.children 数组）
         if (options.chars) {
           options.chars(text)
         }
@@ -358,7 +360,7 @@ export function parseHTML (html, options) {
 
     // 若 html 和处理之前是一样的值，一个字符都没减少,也就是说 html 中没有获取到任何有用的内容
     if (html === last) {
-      // html 都当做文本处理
+      // html 都当做文本处理（将该文本作为 ASTExpression|ASTText 节点加入 currentParent.children 数组）
       options.chars && options.chars(html)
       // 发出警告
       if (process.env.NODE_ENV !== 'production' && !stack.length && options.warn) {
