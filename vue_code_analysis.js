@@ -584,7 +584,7 @@ function genStaticKeys (modules) {
 function looseEqual (a, b) {
   var isObjectA = isObject(a);
   var isObjectB = isObject(b);
-  // a b 都是对象
+  // ① a、b 都是对象
   if (isObjectA && isObjectB) {
     try {
       return JSON.stringify(a) === JSON.stringify(b)
@@ -593,9 +593,10 @@ function looseEqual (a, b) {
       // 如果序列化出错，可能是循环引用，那就判断 a 和 b 是否严格相等
       return a === b
     }
-  // a b 都不是对象
+  // ② a、b 都不是对象
   } else if (!isObjectA && !isObjectB) {
     return String(a) === String(b)
+  // ③ 一个是对象，一个不是对象，直接返回 false
   } else {
     return false
   }
@@ -7786,12 +7787,13 @@ var isFalsyAttrValue = function (val) {
   return val == null || val === false
 };
 
-// 生成 class 给 vnode 用
+// 返回字符串形式的 class 值，如 'cls1 cls2 cls3 cls4 cls5 cls6'
 function genClassForVnode (vnode) {
   var data = vnode.data;
   var parentNode = vnode;
   var childNode = vnode;
-  // 从当前组件开始，逐级向子组件取 class
+  
+  // 1. 从当前组件开始，逐级拼接子组件的 class
   while (isDef(childNode.componentInstance)) {
     childNode = childNode.componentInstance._vnode;
     if (childNode.data) {
@@ -7799,17 +7801,26 @@ function genClassForVnode (vnode) {
       data = mergeClassData(childNode.data, data);
     }
   }
-  // 从当前组件开始，逐级向父组件取 class
+
+  // 2. 从当前组件开始，组件拼接祖先组件的 class
   while (isDef(parentNode = parentNode.parent)) {
     if (parentNode.data) {
       // 合并当前组件和父组件的 class
       data = mergeClassData(data, parentNode.data);
     }
   }
+
+  // 合并静态和动态 class 值，返回字符串形式的 class 值
   return renderClass(data.staticClass, data.class)
 }
 
-// 返回一个 json 对象，包含 staticClass 和 class 等两个属性
+/*
+    合并父子元素 class（静态和静态合并，动态和动态合并），返回一个 json 对象
+    {
+        staticClass : 'cls1 cls2...',
+        class : [child.class, parent.class]
+    }
+ */
 function mergeClassData (child, parent) {
   return {
     // 静态 class 由父组件和子组件的静态 class 拼接而成 
@@ -7820,47 +7831,73 @@ function mergeClassData (child, parent) {
   }
 }
 
-// 返回 class 
+/*
+    拼接静态、动态 class 值
+
+    例如:
+    静态 staticClass = 'cls1 cls2 cls3'
+    动态 dynamicClass = {
+        cls4 : 'val1',
+        cls5 : 'val2',
+        cls6 : 'val3'
+    }
+
+    拼接后：'cls1 cls2 cls3 cls4 cls5 cls6'
+ */
 function renderClass (
   staticClass,
   dynamicClass
 ) {
   if (isDef(staticClass) || isDef(dynamicClass)) {
-      // 拼接静态的和动态的 class
+    // 拼接静态的和动态的 class
     return concat(staticClass, stringifyClass(dynamicClass))
   }
-  /* istanbul ignore next */
+
   return ''
 }
 
-// 链接字符串 a 和 b，中间用空格分开
+// 连接字符串 a 和 b，中间用空格分开
 function concat (a, b) {
   return a ? b ? (a + ' ' + b) : a : (b || '')
 }
 
-// 从 value 中提取字符串形式的 class 值
+/*
+    将 value 转为字符串形式的 class 值，例如：
+
+    ① value 为数组
+    stringifyClass(['cls1','cls2','cls3']);
+    -> "cls1 cls2 cls3"
+
+    ② value 为对象
+    stringifyClass({
+        cls1 : 'val1',
+        cls2 : 'val2',
+        cls3 : 'val3'
+    });
+    -> "cls1 cls2 cls3"
+ */
 function stringifyClass (value) {
-  // 数组元素之间空格分开
+  // ① 数组元素之间空格分开
   if (Array.isArray(value)) {
     return stringifyArray(value)
   }
-  // 对象键名之间空格分开
+  // ② 对象键名之间空格分开
   if (isObject(value)) {
     return stringifyObject(value)
   }
-  // 字符串返回本身
+  // ③ 字符串返回本身
   if (typeof value === 'string') {
     return value
   }
-  /* istanbul ignore next */
-  // 以上都不满足，就返回空字符串
+
+  // ④ 以上都不满足，就返回空字符串
   return ''
 }
 
 /*
-数组转为字符串形式，元素之间用空格分开，例如：
-stringifyArray(['cls1','cls2','cls3']);
--> "cls1 cls2 cls3"
+    数组转为字符串形式，元素之间用空格分开，例如：
+    stringifyArray(['cls1','cls2','cls3']);
+    -> "cls1 cls2 cls3"
 */
 function stringifyArray (value) {
   var res = '';
@@ -7876,13 +7913,13 @@ function stringifyArray (value) {
 }
 
 /*
-对象转为字符串形式，注意只取出对象的键名，用空格分开，例如：
-stringifyObject({
-    cls1 : 'val1',
-    cls2 : 'val2',
-    cls3 : 'val3'
-});
--> "cls1 cls2 cls3"
+    对象转为字符串形式，注意只取出对象的键名，用空格分开，例如：
+    stringifyObject({
+        cls1 : 'val1',
+        cls2 : 'val2',
+        cls3 : 'val3'
+    });
+    -> "cls1 cls2 cls3"
 */ 
 function stringifyObject (value) {
   var res = '';
@@ -7919,7 +7956,7 @@ var isHTMLTag = makeMap(
 
 // this map is intentionally selective, only covering SVG elements that may
 // contain child elements.
-// svg 保留标签名，这里只是挑选了部分可能包含子元素的 svg 元素
+// svg 保留标签名。这里只是挑选了部分可能包含子元素的 svg 元素
 var isSVG = makeMap(
   'svg,animate,circle,clippath,cursor,defs,desc,ellipse,filter,font-face,' +
   'foreignObject,g,glyph,image,line,marker,mask,missing-glyph,path,pattern,' +
@@ -7930,7 +7967,7 @@ var isSVG = makeMap(
 // 是否为 pre 标签
 var isPreTag = function (tag) { return tag === 'pre'; };
 
-// 是否是保留标签
+// 是否为 html/svg 保留标签名
 var isReservedTag = function (tag) {
   return isHTMLTag(tag) || isSVG(tag)
 };
@@ -7951,33 +7988,48 @@ function getTagNamespace (tag) {
 // 存储未知组件名
 var unknownElementCache = Object.create(null);
 
-// 是否为未知组件名
+// 判断是否为未知元素标签名，返回值为布尔值
 function isUnknownElement (tag) {
-  /* istanbul ignore if */
-  // 只要不是浏览器环境，就返回 true
+
+  // 1. 不是浏览器环境，直接返回 true
   if (!inBrowser) {
     return true
   }
-  // 保留标签，返回 false
+  
+  // 2. 若 tag 为 html/svg 保留标签名，直接返回 false
   if (isReservedTag(tag)) {
     return false
   }
+
   tag = tag.toLowerCase();
-  /* istanbul ignore if */
-  // 如果有缓存的话，返回缓存结果
+  
+  // 3. 从缓存中取值
   if (unknownElementCache[tag] != null) {
     return unknownElementCache[tag]
   }
+
+  // 4. 计算 tag 是否为未知元素，并缓存结果
+
   var el = document.createElement(tag);
-  // tag 中包含 '-'，判断 el.constructor 是否为 window.HTMLUnknownElement 或 window.HTMLElement
+  // ① tag 中包含 - 那就通过构造函数来判断
   if (tag.indexOf('-') > -1) {
     // http://stackoverflow.com/a/28210364/1070244
     return (unknownElementCache[tag] = (
       el.constructor === window.HTMLUnknownElement ||
       el.constructor === window.HTMLElement
     ))
-  // 否则，判断 el.toString() 中是否包含字符串 HTMLUnknownElement
+  // ② 否则，用 /HTMLUnknownElement/ 匹配元素的字符串形式来判断
   } else {
+    /*
+        例如：
+        var div = document.createElement('div')
+        div.toString() -> "[object HTMLDivElement]"
+        div.constructor === HTMLDivElement -> true
+
+        var nc = document.createElement('nc')
+        nc.toString() -> "[object HTMLUnknownElement]"
+        nc.constructor === HTMLUnknownElement -> true
+     */
     return (unknownElementCache[tag] = /HTMLUnknownElement/.test(el.toString()))
   }
 }
@@ -7989,7 +8041,7 @@ function isUnknownElement (tag) {
  */
 // 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
 function query (el) {
-  // el 为字符串选择器
+  // ① el 为字符串，通过 document.querySelector 方法查找
   if (typeof el === 'string') {
     // 注意这里使用的是 querySelector，也就是返回查询到的第一个元素。一般情况下，我们应该传入一个 id 或确定的 dom 节点。
     var selected = document.querySelector(el);
@@ -8001,7 +8053,7 @@ function query (el) {
       return document.createElement('div')
     }
     return selected
-  // el 本身就是元素
+  // ② el 本身就是元素，直接返回 el
   } else {
     return el
   }
@@ -10618,11 +10670,33 @@ var warn$1;
 
 // in some cases, the event used has to be determined at runtime
 // so we used some reserved tokens during compile.
-// 在某些情况下，事件必须在运行时才能确定，所以在编译期间我们使用一些保留 token
+// 在某些情况下，事件名必须在运行时才能确定，所以在编译期间我们使用一些保留 token
 var RANGE_TOKEN = '__r';
 var CHECKBOX_RADIO_TOKEN = '__c';
 
-// 给表单元素 el 添加属性并监听属性 
+/*
+    一个指令对象可包括以下几个钩子函数，例如：
+
+    bind：只调用一次，指令第一次绑定到元素时调用。在这里可以进行一次性的初始化设置。
+    inserted：被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)。
+    update：所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新。
+    componentUpdated：指令所在组件的 VNode 及其子 VNode 全部更新后调用。
+    unbind：只调用一次，指令与元素解绑时调用。
+  
+    这里的 model 函数之后会被用做钩子函数
+
+    钩子函数参数分别如下：
+    node：指令所绑定的元素，可以用来直接操作 DOM 。
+    dir：一个对象，包含以下属性：
+        name：指令名，不包括 v- 前缀。
+        value：指令的绑定值，例如：v-my-directive="1 + 1" 中，绑定值为 2。
+        oldValue：指令绑定的前一个值，仅在 update 和 componentUpdated 钩子中可用。无论值是否改变都可用。
+        expression：字符串形式的指令表达式。例如 v-my-directive="1 + 1" 中，表达式为 "1 + 1"。
+        arg：传给指令的参数，可选。例如 v-my-directive:foo 中，参数为 "foo"。
+        modifiers：一个包含修饰符的对象。例如：v-my-directive.foo.bar 中，修饰符对象为 { foo: true, bar: true }。
+    vnode：Vue 编译生成的虚拟节点。
+    oldVnode：上一个虚拟节点，仅在 update 和 componentUpdated 钩子中可用。
+*/
 function model (el,dir,_warn) {
   warn$1 = _warn;
   var value = dir.value;
@@ -10706,6 +10780,13 @@ function genCheckboxModel (el,value,modifiers) {
   // :true-value 或 v-bind:true-value 的值
   var falseValueBinding = getBindingAttr(el, 'false-value') || 'false';
  
+  /*
+      简化一下 addProp 的第三个参数，value 值如下：
+      ① trueValueBinding === 'true'
+         Array.isArray( value ) ? _i(value , valueBinding) > -1 : value
+      ② trueValueBinding !== 'true' 
+         Array.isArray( value ) ? _i(value , valueBinding) > -1 : _q(value , trueValueBinding)
+  */
   // addProp (el, name, value) -> (el.props || (el.props = [])).push({ name: name, value: value })
   addProp(el, 'checked',
     "Array.isArray(" + value + ")" +
@@ -10715,13 +10796,6 @@ function genCheckboxModel (el,value,modifiers) {
           ? (":(" + value + ")")
           : (":_q(" + value + "," + trueValueBinding + ")")
       )
-      /*
-        简化一下 addProp 的第三个参数，value 值如下：
-        ① trueValueBinding === 'true'
-           Array.isArray( value ) ? _i(value , valueBinding) > -1 : value
-        ② trueValueBinding !== 'true' 
-           Array.isArray( value ) ? _i(value , valueBinding) > -1 : _q(value , trueValueBinding)
-      */
   );
   /*
     CHECKBOX_RADIO_TOKEN = '__c'
@@ -10739,8 +10813,10 @@ function genCheckboxModel (el,value,modifiers) {
         var $$v = number ? _n(valueBinding): valueBinding,
             $$i = _i($$a,$$v);
         
+        // ① $$v 不存在于数组 $$a 中，那就把它加入数组
         if($$c){
             $$i < 0 && (value = $$a.concat($$v))
+        // ② $$v 存在于数组 $$a 中，那就把它从数组中移除，例如 [1, 2, 3, 4, 5, 6].slice(0,3).concat([1, 2, 3, 4, 5, 6].slice(3+1)) -> [1, 2, 3, 5, 6]
         } else {
             $$i > -1 && (value = $$a.slice(0,$$i).concat($$a.slice($$i+1)))
         }
@@ -10803,7 +10879,10 @@ function genSelect (el,value,modifiers) {
 
   var assignment = '$event.target.multiple ? $$selectedVal : $$selectedVal[0]';
   var code = "var $$selectedVal = " + selectedVal + ";";
-  // genAssignmentCode 其实就是一个 set 操作，value = $event.target.multiple ? $$selectedVal : $$selectedVal[0]
+  /*
+      code 相当于：
+      `var $$selectedVal = [...];${value}=$event.target.multiple ? $$selectedVal : $$selectedVal[0]`
+   */
   code = code + " " + (genAssignmentCode(value, assignment));
   // el 的 change 事件发送会执行 code
   addHandler(el, 'change', code, null, true);
@@ -10813,12 +10892,33 @@ function genSelect (el,value,modifiers) {
 function genDefaultModel (el,value,modifiers) {
   var type = el.attrsMap.type;
   var ref = modifiers || {};
-  // 在默认情况下，v-model 在 input 事件中同步输入框的值与数据，有了修饰符 lazy，从而转变为在 change 事件中同步
+
+  /*
+      .lazy   取代 input，改为监听 change 事件
+      .number 输入字符串转为数字
+      .trim   去除首尾空格
+   */
   var lazy = ref.lazy;
-  // 如果想自动将用户的输入值转为 Number 类型 (如果原值的转换结果为 NaN 则返回原值)，可以添加一个修饰符 number 给 v-model 来处理输入值
   var number = ref.number;
-  // 如果要自动过滤用户输入的首尾空格，可以添加 trim 修饰符到 v-model 上过滤输入
   var trim = ref.trim;
+
+   /*
+        ① compositionstart 事件触发于一段文字的输入之前
+        el.addEventListener('compositionstart', onCompositionStart);
+        
+        function onCompositionStart (e) {
+          e.target.composing = true;
+        }
+
+        ② 当文本段落的组成完成或取消时, compositionend 事件将被激发。onCompositionEnd 函数会触发 input 事件
+        el.addEventListener('compositionend', onCompositionEnd);
+        
+        function onCompositionEnd (e) {
+          if (!e.target.composing) { return }
+          e.target.composing = false;
+          trigger(e.target, 'input');
+        }
+   */
   var needCompositionGuard = !lazy && type !== 'range';
 
   /*
@@ -10835,6 +10935,7 @@ function genDefaultModel (el,value,modifiers) {
       ? RANGE_TOKEN
       : 'input';
 
+  // 修正 valueExpression
   var valueExpression = '$event.target.value';
   if (trim) {
     valueExpression = "$event.target.value.trim()";
@@ -10842,19 +10943,21 @@ function genDefaultModel (el,value,modifiers) {
   if (number) {
     valueExpression = "_n(" + valueExpression + ")";
   }
-  // 赋值语句，code = "value = valueExpression"
+
+  // code = `value = ${valueExpression}`
   var code = genAssignmentCode(value, valueExpression);
 
-  // 如果 !lazy && type !== 'range'，多加个判断条件
+  // $event.target.composing 必须为 false 才会继续往下走
   if (needCompositionGuard) {
     code = "if($event.target.composing)return;" + code;
   }
+
   // 给 el 添加 value 属性
   addProp(el, 'value', ("(" + value + ")"));
   // 监听 el 的 event 事件
   addHandler(el, event, code, null, true);
 
-  // 监听失去焦点事件
+  // 失去焦点时要更新视图（去除空格、字符串转为数值等视图变化）
   if (trim || number) {
     addHandler(el, 'blur', '$forceUpdate()');
   }
@@ -11067,7 +11170,16 @@ var domProps = {
 };
 
 
-// 将一段 css 文本转为 json 对象形式的 css（就像写在样式表里一样）
+/*
+    将一段 css 文本转为 json 对象形式的 css（就像写在样式表里一样）
+    例如：
+    parseStyleText('color:red;font-size:14px;position:relative')
+    -> {
+      color: "red", 
+      font-size: "14px", 
+      position: "relative"
+    }
+ */
 var parseStyleText = cached(function (cssText) {
   var res = {};
   /*
@@ -11100,10 +11212,15 @@ var parseStyleText = cached(function (cssText) {
 // merge static and dynamic style data on the same vnode
 // 合并静态的和动态的 style 数据
 function normalizeStyleData (data) {
+  // ① 将 data.style 转为 json 对象形式
   var style = normalizeStyleBinding(data.style);
   // static style is pre-processed into an object during compilation
   // and is always a fresh object, so it's safe to merge into it
-  // 静态 style 在编译过程中会预处理到一个对象里，而这个对象总是一个新对象，所以把动态 style 合并到这个对象里是安全的
+  /*
+      静态 style 在编译过程中会预处理到一个对象里，而这个对象总是一个新对象，所以把动态 style 合并到这个对象里是安全的
+
+      ② 合并静态样式 data.staticStyle 和动态样式 style
+   */
   return data.staticStyle
     ? extend(data.staticStyle, style)
     : style
@@ -11112,6 +11229,7 @@ function normalizeStyleData (data) {
 // normalize possible array / string values into Object
 // 将数组/字符串形式的数据转成 json 对象形式
 function normalizeStyleBinding (bindingStyle) {
+  // ① 数组 -> json
   if (Array.isArray(bindingStyle)) {
     /*
         arr = [
@@ -11124,7 +11242,7 @@ function normalizeStyleBinding (bindingStyle) {
     */
     return toObject(bindingStyle)
   }
-  // 将 css 文本转为 json 对象形式的 css（就像写在样式表里一样）
+  // ② 字符串 -> json
   if (typeof bindingStyle === 'string') {
     return parseStyleText(bindingStyle)
   }
@@ -11140,6 +11258,7 @@ function getStyle (vnode, checkChild) {
   var res = {};
   var styleData;
 
+  // 1. 遍历子节点的样式
   if (checkChild) {
     var childNode = vnode;
     // 遍历子节点，将子节点的 styleData 都合并到 res 中
@@ -11151,18 +11270,20 @@ function getStyle (vnode, checkChild) {
     }
   }
 
-  // 当前组件 styleData，这样就可以覆盖子组件的样式
+  // 2. 当前节点的样式
   if ((styleData = normalizeStyleData(vnode.data))) {
     extend(res, styleData);
   }
 
-  // 遍历祖先组件，后面的覆盖前面的
+  // 3. 遍历祖先节点的样式
   var parentNode = vnode;
   while ((parentNode = parentNode.parent)) {
     if (parentNode.data && (styleData = normalizeStyleData(parentNode.data))) {
       extend(res, styleData);
     }
   }
+
+  // 返回 json 形式的样式数据
   return res
 }
 
@@ -12274,13 +12395,13 @@ if (isIE9) {
 }
 
 /*
-指令定义函数提供了几个钩子函数 (可选)：
+    指令定义函数提供了几个钩子函数 (可选)：
 
-bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
-inserted：被绑定元素插入父节点时调用 (父节点存在即可调用，不必存在于 document 中)。
-update：所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新 (详细的钩子函数参数见下)。
-componentUpdated：所在组件的 VNode 及其孩子的 VNode 全部更新时调用。
-unbind：只调用一次，指令与元素解绑时调用。
+    bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
+    inserted：被绑定元素插入父节点时调用 (父节点存在即可调用，不必存在于 document 中)。
+    update：所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新 (详细的钩子函数参数见下)。
+    componentUpdated：所在组件的 VNode 及其孩子的 VNode 全部更新时调用。
+    unbind：只调用一次，指令与元素解绑时调用。
 */
 // 这里其实就是定义 model 指令
 var model$1 = {
@@ -13244,10 +13365,9 @@ setTimeout(function () {
 */
 
 // check whether current browser encodes a char inside attribute values
-// 判断一个字符是否会转码，例如，属性中有换行符是，ie 会将这个换行符转成转义字符
+// 判断当前浏览器是否会对属性值转码，例如，属性值中有换行符是，ie 会将这个换行符转成转义字符
 function shouldDecode (content, encoded) {
   var div = document.createElement('div');
-  window.d = div;
   div.innerHTML = "<div a=\"" + content + "\"/>";
   return div.innerHTML.indexOf(encoded) > 0
 }

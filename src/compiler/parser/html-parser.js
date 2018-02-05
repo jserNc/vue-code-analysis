@@ -394,7 +394,7 @@ export function parseHTML (html, options) {
       解析开始标签，返回 json 对象 match ：
       { 
         tagName: start[1],   // 第一个分组匹配出标签名
-        attrs: [],           // 存放属性表达式正则的匹配结果
+        attrs: [...],        // 存放属性表达式正则的匹配结果
         start: index         // 开始标签开始索引，对应 <div class="red"> 中 < 位置
         unarySlash: '/'|''   // 标志是否为单标签
         end：index           // 开始标签结束索引，对应 <div class="red"> 中 > 位置

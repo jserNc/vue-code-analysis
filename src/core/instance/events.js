@@ -87,18 +87,21 @@ export function eventsMixin (Vue: Class<Component>) {
   // 解绑事件
   Vue.prototype.$off = function (event?: string | Array<string>, fn?: Function): Component {
     const vm: Component = this
-    // all，没有实参，清空所有事件
+    // 1. 没有实参，清空所有事件
     if (!arguments.length) {
       vm._events = Object.create(null)
       return vm
     }
-    // array of events，event 是一个数组，递归调用本方法，一个个解除
+    // 2. event 是一个数组，递归调用本方法，一个个解除
     if (Array.isArray(event)) {
       for (let i = 0, l = event.length; i < l; i++) {
         this.$off(event[i], fn)
       }
       return vm
     }
+
+    // 3. 解除一个事件
+
     // 事件 event 对应的监听函数数组
     const cbs = vm._events[event]
     if (!cbs) {

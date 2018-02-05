@@ -49,7 +49,7 @@ type Attribute = {
 /**
  * Parse a single-file component (*.vue) file into an SFC Descriptor Object.
  */
-// 将一个 .vue 文件转为一个 sfc 对象。（最终的 vue.js 没有这一部分）
+// 将一个 .vue 文件转为一个 sfc 对象。（最终生成的 vue.js 并没有这一部分）
 export function parseComponent (
   content: string,
   options?: Object = {}
@@ -84,7 +84,7 @@ export function parseComponent (
 	  attrs: {[attribute:string]: string};
 	};
   */
-  // 最后导出的 sfc 对象，分为 template、script、style 和自定义块四部分。其中 style 和自定义块允许多个，template 和 script 只允许一个
+  // 最后导出的 sfc 对象，分为 template、script、style 和自定义块四部分。其中 style 和自定义块允许多个，template 和 script 各允许一个
   const sfc: SFCDescriptor = {
     template: null,
     script: null,
@@ -116,7 +116,7 @@ export function parseComponent (
     		  ① callback 函数的第一个参数为上次调用 callback 的返回值，或者初始值 initialValue。callback 函数的第二个参数为当前被处理的元素
     		  ② initialValue 为第一次调用 callback 的第一个参数
 
-    		  attrs 由 [{name, value},{name, value},{name, value}...] 变为 {name1:value1,name2:value2,name3:value3,...}
+    		  attrs 由 [{name1, value1},{name2, value2},{name3, value3}...] 变为 {name1:value1,name2:value2,name3:value3,...}
     		*/
         attrs: attrs.reduce((cumulated, { name, value }) => {
           cumulated[name] = value || true
@@ -194,12 +194,13 @@ export function parseComponent (
     }
   }
 
-  // 标签结束时调用该函数，将标签内容存储到 sfc 对象上
+  // 标签结束时调用该函数，将标签内容存储到 sfc 对象上（其实就是给 currentBlock.content 赋值）
   function end (tag: string, start: number, end: number) {
 	  // depth === 1 说明有标签未关闭
     if (depth === 1 && currentBlock) {
       // <script>ssssssss</script> 结束标签 </script> 的开始的位置 < 就是 currentBlock 的结尾的位置
       currentBlock.end = start
+
 	    // 去除标签内的缩进，deindent 是作者专门为了去除缩进开发的模块
       let text = deindent(content.slice(currentBlock.start, currentBlock.end))
       // pad content so that linters and pre-processors can output correct
@@ -209,6 +210,7 @@ export function parseComponent (
         // text 前补上若干个换行符或空格
         text = padContent(currentBlock, options.pad) + text
       }
+
       currentBlock.content = text
       // currentBlock 其实已经保存在 sfc 的属性的引用上了，currentBlock 只是个临时变量（js 对象都是引用类型），所以这里释放 currentBlock 引用
       currentBlock = null
@@ -247,7 +249,7 @@ export function parseComponent (
       </style>
       
       deindent() 函数去除缩进的过程中会去掉空白。
-      <style> 和 .red 直接有 2 个空行，padContent() 函数的作用就是用空格、换行符等将这些空行补上
+      <style> 和 .red 之间有 2 个空行，padContent() 函数的作用就是用空格、换行符等将这些空行补上
      */
   }
 

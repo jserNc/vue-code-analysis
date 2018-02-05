@@ -2,6 +2,7 @@
 
 import { makeMap, cached } from 'shared/util'
 
+// 保留属性名
 const isAttr = makeMap(
   'accept,accept-charset,accesskey,action,align,alt,async,autocomplete,' +
   'autofocus,autoplay,autosave,bgcolor,border,buffered,challenge,charset,' +
@@ -18,7 +19,7 @@ const isAttr = makeMap(
   'target,title,type,usemap,value,width,wrap'
 )
 
-/* istanbul ignore next */
+// 可渲染的属性，除了保留属性，还包括 'data-' 或 'aria-' 开头的属性名
 const isRenderableAttr = (name: string): boolean => {
   return (
     isAttr(name) ||
@@ -28,6 +29,7 @@ const isRenderableAttr = (name: string): boolean => {
 }
 export { isRenderableAttr }
 
+// “props - attr” 映射表
 export const propsToAttrMap = {
   acceptCharset: 'accept-charset',
   className: 'class',
@@ -35,6 +37,7 @@ export const propsToAttrMap = {
   httpEquiv: 'http-equiv'
 }
 
+// “字符 - 实体” 映射表
 const ESC = {
   '<': '&lt;',
   '>': '&gt;',
@@ -42,12 +45,15 @@ const ESC = {
   '&': '&amp;'
 }
 
+// 将字符串 s 中的 < > " & 等四个字符转为实体
 export function escape (s: string) {
   return s.replace(/[<>"&]/g, escapeChar)
 }
 
+// cachedEscape 就是 escape 方法，只不过 cachedEscape 会将计算结果缓存
 export const cachedEscape = cached(escape)
 
+// 将 < > " & 等四个字符转为实体，其他的字符返回自身
 function escapeChar (a) {
   return ESC[a] || a
 }
