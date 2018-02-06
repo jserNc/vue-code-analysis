@@ -11401,31 +11401,29 @@ var style = {
 };
 
 /*
-说一说 classList 属性：
+ 说一说 classList 属性：
 
  ① 传统方法
-    在操作类名的时候，需要通过className属性添加、删除和替换类名。如下面例子：
+    在操作类名的时候，需要通过 className 属性添加、删除和替换类名。如下面例子：
     <p class="bd user disabled">...</p>
 
-    这个p中一共有三个类名，要从中删掉一个类名，需要把这三个类分别拆开，然后进行处理，处理过程如下：
+    这个 p 中一共有三个类名，要从中删掉一个类名，需要把这三个类分别拆开，然后进行处理，处理过程如下：
     
     <script>
-       var className=p.className.split(/\s+/);
-       //找到要删掉的类名
-       var pos=-1,i,len;
+       var className = p.className.split(/\s+/);
+       var pos = -1, i ,len;
 
        for (var i = 0; i < className.length; i++) {
-           if(className[i]=="user"){
-              pos=i;
+           if(className[i] === "user"){
+              pos = i;
               break;
            }
        };
        className.splice(i,1);
-       //将余下的类名重新拼装
-       p.className=className.join(" ");
+       p.className = className.join(" ");
     </script>
 
- ② html5 新增方法 classList()，可以完全摆脱 className 属性
+ ② html5 新增方法 classList 属性，可以完全摆脱 className 属性
 
     <p id="myDiv" class="init">Hello world!</p>
     <input type="button" value="Add class" onclick="addClass()">
@@ -11435,23 +11433,21 @@ var style = {
     <p>This demo works in Firefox 3.6 and Chrome 8.</p>
      
     <script type="text/javascript">
+        var myDiv = document.getElementById("myDiv");
+
         function addClass(){
-            var myDiv = document.getElementById("myDiv");
             myDiv.classList.add("highlight");
         }
      
         function removeClass(){
-            var myDiv = document.getElementById("myDiv");
             myDiv.classList.remove("highlight");
         }
      
         function toggleClass(){
-            var myDiv = document.getElementById("myDiv");
             myDiv.classList.toggle("highlight");
         }
      
         function containsClass(){
-            var myDiv = document.getElementById("myDiv");
             alert(myDiv.classList.contains("highlight"));
         }
     </script>
@@ -11463,21 +11459,29 @@ var style = {
  * Add class with compatibility for SVG since classList is not supported on
  * SVG elements in IE
  */
-// 把 cls 添加到 el 的 class 属性里
+// 添加 class
 function addClass (el, cls) {
-  // cls 必须存在
+  // 若待添加的 cls 不存在，直接返回
   if (!cls || !(cls = cls.trim())) {
     return
   }
 
+  // 1. 支持 classList 属性
   if (el.classList) {
-    // cls 是空格分开的多个 class 构成，逐个添加
+    // ① cls 形如 'cls1 cls2 cls3'，逐个添加
     if (cls.indexOf(' ') > -1) {
       cls.split(/\s+/).forEach(function (c) { return el.classList.add(c); });
+    // ② cls 形如 'cls'，直接添加
     } else {
       el.classList.add(cls);
     }
+  // 2. 原生 class 属性里添加 cls
   } else {
+    /*
+        注意：
+        a. 这里 cur 前后带空格
+        b. 前面执行了 cls = cls.trim()，所以 cls 前后是不带 ' '
+     */
     var cur = " " + (el.getAttribute('class') || '') + " ";
     // 如果当前 class 属性不包括 cls，那就加上
     if (cur.indexOf(' ' + cls + ' ') < 0) {
@@ -11490,31 +11494,38 @@ function addClass (el, cls) {
  * Remove class with compatibility for SVG since classList is not supported on
  * SVG elements in IE
  */
+// 删除 class
 function removeClass (el, cls) {
-  // cls 必须存在
+  
+  // 若待删除的 cls 不存在，直接返回
   if (!cls || !(cls = cls.trim())) {
     return
   }
 
-  /* istanbul ignore else */
+  // 1. 支持 classList 属性
   if (el.classList) {
-    // cls 是空格分开的多个 class 构成，逐个删除
+    // ① cls 形如 'cls1 cls2 cls3'，逐个删除
     if (cls.indexOf(' ') > -1) {
       cls.split(/\s+/).forEach(function (c) { return el.classList.remove(c); });
+    // ② cls 形如 'cls1'，直接删除
     } else {
       el.classList.remove(cls);
     }
-    // 如果 classList 长度为 0，那就移除 class 属性
+
+    // 若删除 cls 后 classList 长度为 0，那就移除 class 属性
     if (!el.classList.length) {
       el.removeAttribute('class');
     }
+  // 2. 原生 class 属性里删除 cls
   } else {
     var cur = " " + (el.getAttribute('class') || '') + " ";
     var tar = ' ' + cls + ' ';
-    // 把 cls 从 class 中移除
+    // ① 将 ' ' + cls + ' ' 替换为 ' '
     while (cur.indexOf(tar) >= 0) {
       cur = cur.replace(tar, ' ');
     }
+
+    // ② 更新 class
     cur = cur.trim();
     // 如果移除 cls 后 class 还有值，那就重新设置 class。否则把 class 属性移除掉。
     if (cur) {
@@ -12381,14 +12392,14 @@ var patch = createPatchFunction({ nodeOps: nodeOps, modules: modules });
 // <input> 的 type 类型为下列值之一
 var isTextInputType = makeMap('text,number,password,search,email,tel,url');
 
-/* istanbul ignore if */
+// ie9 下，如果文档发生了 selectionchange 事件，那就触发”当前获得焦点并且有 v-model 属性的元素“的 input 事件
 if (isIE9) {
   // http://www.matts411.com/post/internet-explorer-9-oninput/
-  // ie9 下，如果一个元素有 v-model 属性，那这个元素的 selectionchange 事件就转交给 input 事件
   document.addEventListener('selectionchange', function () {
+    // activeElement 属性返回文档中当前获得焦点的元素
     var el = document.activeElement;
     if (el && el.vmodel) {
-      // 触发 input 方法
+      // 触发 input 事件（事件源为 el）
       trigger(el, 'input');
     }
   });
@@ -12407,7 +12418,7 @@ if (isIE9) {
 var model$1 = {
   // 被绑定元素插入父节点时调用
   inserted: function inserted (el, binding, vnode) {
-    // <select> 标签
+    // 1. <select> 下拉列表
     if (vnode.tag === 'select') {
       var cb = function () {
         // 设置下拉列表选项
@@ -12418,11 +12429,20 @@ var model$1 = {
       if (isIE || isEdge) {
         setTimeout(cb, 0);
       }
-    // <textarea> 标签或者 <input> 标签，并且 type 为 text,number,password,search,email,tel,url 之一
+    // 2. <textarea> 标签或者 <input> 标签（type 为 text,number,password,search,email,tel,url 之一）
     } else if (vnode.tag === 'textarea' || isTextInputType(el.type)) {
-      // binding.modifiers ：一个包含修饰符的对象。例如：v-my-directive.foo.bar, 修饰符对象 modifiers 的值是 { foo: true, bar: true }
+      /*
+          modifiers：一个包含修饰符的对象。
+          例如：v-my-directive.foo.bar 中，修饰符对象为 { foo: true, bar: true }。
+       
+          v-model 修饰符：
+          .lazy - 取代 input，监听 change 事件
+          .number - 输入字符串转为数字
+          .trim - 输入首尾空格过滤
+       */
       el._vModifiers = binding.modifiers;
-      // 触发 input 事件
+      
+      // 监听 input 事件
       if (!binding.modifiers.lazy) {
         // Safari < 10.2 & UIWebView doesn't fire compositionend when
         // switching focus before confirming composition choice
@@ -12431,6 +12451,7 @@ var model$1 = {
 
         // onCompositionEnd 函数会触发 input 事件
         el.addEventListener('change', onCompositionEnd);
+        
         // 非 Android
         if (!isAndroid) {
           // compositionstart 事件触发于一段文字的输入之前
@@ -12438,7 +12459,7 @@ var model$1 = {
           // 当文本段落的组成完成或取消时, compositionend 事件将被激发。onCompositionEnd 函数会触发 input 事件
           el.addEventListener('compositionend', onCompositionEnd);
         }
-        /* istanbul ignore if */
+
         if (isIE9) {
           el.vmodel = true;
         }
@@ -12447,7 +12468,7 @@ var model$1 = {
   },
   // 所在组件的 VNode 及其孩子的 VNode 全部更新时调用
   componentUpdated: function componentUpdated (el, binding, vnode) {
-    // <select> 标签
+    // <select> 下拉列表
     if (vnode.tag === 'select') {
       // 设置下拉列表选项
       setSelected(el, binding, vnode.context);
@@ -12463,9 +12484,9 @@ var model$1 = {
             a. 新值不等于旧值
             b. 新值没有匹配的 option
 
-            只有 a 和 b 两个条件同时满足时就需要重置了。
+            只有 a 和 b 两个条件同时满足时才需要重置
 
-            1. 假设只有 a 满足，新值虽然不等于旧值，而新值和 option 匹配上了，这就是“歪打正着”吧，不需要重置。
+            1. 假设只有 a 满足，新值虽然不等于旧值，但新值和 option 匹配上了，这就是“歪打正着”吧，不需要重置。
             2. 假设只有 b 满足，虽然没有和新值匹配的 option，但是旧值也不匹配啊，所以就维持一个都没选中的状态好了，不需要重置。
       */
       var needReset = el.multiple
@@ -12486,31 +12507,44 @@ function setSelected (el, binding, vm) {
   var value = binding.value;
   // 是否是多选下拉
   var isMultiple = el.multiple;
+
+  /*
+      警告：
+      `<select multiple v-model="${binding.expression}"> `
+      多选下拉绑定的值应该是个数组，而 binding.value 并不是数组
+   */
   if (isMultiple && !Array.isArray(value)) {
-    // 多选下拉的值应该是一个数组
     "development" !== 'production' && warn(
       // binding.expression ：绑定值的字符串形式。例如 v-my-directive="1 + 1" ，expression 的值是 "1 + 1"
       "<select multiple v-model=\"" + (binding.expression) + "\"> " +
       "expects an Array value for its binding, but got " + (Object.prototype.toString.call(value).slice(8, -1)),
       vm
     );
+    // 就此返回
     return
   }
+
+
   var selected, option;
+  /*
+      el.options 集合可返回包含 <select> 元素中所有 <option> 的一个数组
+      下面遍历这个 el.options 集合
+   */
   for (var i = 0, l = el.options.length; i < l; i++) {
     option = el.options[i];
-    // 多选列表
+    // ① 多选下拉（value 为数组）
     if (isMultiple) {
-      // 这里 value 是一个数组，getValue(option) 是 option 的值。也就是说，若 option 的值在数组 value 中，selected 就为 true
+      // true or false
       selected = looseIndexOf(value, getValue(option)) > -1;
-      // 如果和旧值不相等，就更新值
+      // 直接写 option.selected = selected 不就完了
       if (option.selected !== selected) {
         option.selected = selected;
       }
-    // 单选列表
+    // ② 单选下拉（value 是单个值）
     } else {
       // 匹配到了第一个选项，并且和之前的不一样，就更新，并结束循环
       if (looseEqual(getValue(option), value)) {
+        // el.selectedIndex 设置或者返回 select 对象已选选项的索引值
         if (el.selectedIndex !== i) {
           el.selectedIndex = i;
         }
@@ -12518,6 +12552,7 @@ function setSelected (el, binding, vm) {
       }
     }
   }
+
   // 单选列表，一个都没匹配到，那就将 selectedIndex 强制写为 -1
   if (!isMultiple) {
     el.selectedIndex = -1;
@@ -12535,33 +12570,44 @@ function hasNoMatchingOption (value, options) {
   return true
 }
 
-// 获取 option 的值
+// 返回 option._value || option.value
 function getValue (option) {
   return '_value' in option
     ? option._value
     : option.value
 }
 
-// 标记 e.target.composing 为 true
+// compositionstart 事件触发于一段文字的输入之前
 function onCompositionStart (e) {
   e.target.composing = true;
 }
 
-// 标记 e.target.composing 为 false，并触发 input 事件。所以，我们看到，凡是调用 onCompositionEnd 函数都会触发 input 事件
+// 当文本段落的组成完成或取消时, compositionend 事件将被激发。
 function onCompositionEnd (e) {
   // prevent triggering an input event for no reason
+  // 不会无缘无故执行该方法来触发 input 事件，触发是真的有输入使得 e.target.composing 为 true
   if (!e.target.composing) { return }
+  
+  // ① 将 e.target.composing 置为 false
   e.target.composing = false;
+  // ② 触发 input 事件
   trigger(e.target, 'input');
 }
 
-// 老式写法，自定义事件
+// 以 el 作为事件源，触发 type 事件
 function trigger (el, type) {
-  // 新建 HTMLEvents 实例
+  // ① 新建 HTMLEvents 实例
   var e = document.createEvent('HTMLEvents');
-  // 事件初始化，type 为事件名称
+  /*
+      initEvent(type,bubbles,cancelable,option) 方法可以接受四个参数:
+      type：事件名称，格式为字符串。
+      bubbles：事件是否应该冒泡，格式为布尔值。可以使用 event.bubbles 属性读取它的值。
+      cancelable：事件是否能被取消，格式为布尔值。可以使用 event.cancelable 属性读取它的值。
+      option：为事件对象指定额外的属性。
+   */
+  // ② 初始化事件
   e.initEvent(type, true, true);
-  // 触发事件
+  // ③ 触发事件
   el.dispatchEvent(e);
 }
 
@@ -12576,32 +12622,61 @@ function locateNode (vnode) {
     : vnode
 }
 
+/*
+    自定义指令，例如注册一个全局自定义指令 `v-focus`
+    Vue.directive('focus', {
+      inserted: function (el) {
+        el.focus()
+      }
+    })
+
+    一个指令对象可包括以下几个钩子函数，例如：
+    bind：只调用一次，指令第一次绑定到元素时调用。在这里可以进行一次性的初始化设置。
+    inserted：被绑定元素插入父节点时调用 (仅保证父节点存在，但不一定已被插入文档中)。
+    update：所在组件的 VNode 更新时调用，但是可能发生在其子 VNode 更新之前。指令的值可能发生了改变，也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新。
+    componentUpdated：指令所在组件的 VNode 及其子 VNode 全部更新后调用。
+    unbind：只调用一次，指令与元素解绑时调用。
+
+    钩子函数参数分别如下：
+    node：指令所绑定的元素，可以用来直接操作 DOM 。
+    dir：一个对象，包含以下属性：
+        name：指令名，不包括 v- 前缀。
+        value：指令的绑定值，例如：v-my-directive="1 + 1" 中，绑定值为 2。
+        oldValue：指令绑定的前一个值，仅在 update 和 componentUpdated 钩子中可用。无论值是否改变都可用。
+        expression：字符串形式的指令表达式。例如 v-my-directive="1 + 1" 中，表达式为 "1 + 1"。
+        arg：传给指令的参数，可选。例如 v-my-directive:foo 中，参数为 "foo"。
+        modifiers：一个包含修饰符的对象。例如：v-my-directive.foo.bar 中，修饰符对象为 { foo: true, bar: true }。
+    vnode：Vue 编译生成的虚拟节点。
+    oldVnode：上一个虚拟节点，仅在 update 和 componentUpdated 钩子中可用。
+*/
+
 // v-show 指令
 var show = {
-  // bind：只调用一次，指令第一次绑定到元素时调用，用这个钩子函数可以定义一个在绑定时执行一次的初始化动作。
+  // 指令第一次绑定到元素时调用
   bind: function bind (el, ref, vnode) {
     // value：指令的绑定值，例如：v-my-directive="1 + 1", value 的值是 2
     var value = ref.value;
 
-    // 找到定义了 transition 的 vnode
+    // 过渡元素
     vnode = locateNode(vnode);
 
     var transition$$1 = vnode.data && vnode.data.transition;
 
     /*
-        ① el.style.display === 'none'，originalDisplay 为 ''，也就是默认值
-        ② el.style.display !== 'none'，originalDisplay 为 el.style.display
-    */
+        这里的 originalDisplay 要获取的是 el 在可见状态下的 style 值
+        ① 若当前 el.style.display === 'none'，那么可见状态下应该为 ''
+        ② 若当前 el.style.display !== 'none'，那么这就是可见状态
+     */
     var originalDisplay = el.__vOriginalDisplay = el.style.display === 'none' ? '' : el.style.display;
 
-    // 过渡
+    // 1. 过渡进入（value 为真）
     if (value && transition$$1 && !isIE9) {
       vnode.data.show = true;
-      // 动画/过渡进入
+      // 过渡进入
       enter(vnode, function () {
         el.style.display = originalDisplay;
       });
-    // 直接显示/隐藏
+    // 2. 直接显示/隐藏（value 为真时显示，否则隐藏）
     } else {
       el.style.display = value ? originalDisplay : 'none';
     }
@@ -12610,7 +12685,6 @@ var show = {
   // 所在组件的 VNode 更新时调用，但是可能发生在其孩子的 VNode 更新之前。指令的值可能发生了改变也可能没有。但是你可以通过比较更新前后的值来忽略不必要的模板更新
   update: function update (el, ref, vnode) {
     var value = ref.value;
-    // oldVnode：上一个虚拟节点，仅在 update 和 componentUpdated 钩子中可用
     var oldValue = ref.oldValue;
 
     // 新旧虚拟节点相同，那就不更新了，在此返回
@@ -12618,39 +12692,41 @@ var show = {
         return 
     }
 
-    // 找到定义了 transition 的 vnode
+    // 过渡元素
     vnode = locateNode(vnode);
     var transition$$1 = vnode.data && vnode.data.transition;
-    // 过渡
+    
+    // 1. 过渡
     if (transition$$1 && !isIE9) {
       vnode.data.show = true;
+      // ① 进入过渡
       if (value) {
-        // 进入过渡
         enter(vnode, function () {
           el.style.display = el.__vOriginalDisplay;
         });
+      // ② 离开过渡
       } else {
         // 离开过渡
         leave(vnode, function () {
           el.style.display = 'none';
         });
       }
-    // 直接显示/隐藏
+    // 2. 直接显示/隐藏（value 为真时显示，否则隐藏）
     } else {
       el.style.display = value ? el.__vOriginalDisplay : 'none';
     }
   },
 
-  // unbind：只调用一次，指令与元素解绑时调用。
+  // 指令与元素解绑时调用
   unbind: function unbind (el, binding, vnode, oldVnode, isDestroy) {
-    // 恢复之前的 display 属性
+    // 恢复默认可见状态下 display 值
     if (!isDestroy) {
       el.style.display = el.__vOriginalDisplay;
     }
   }
 };
 
-// 系统给我们定义好的指令
+// 默认指令
 var platformDirectives = {
   model: model$1,
   show: show
@@ -13490,13 +13566,29 @@ function parseText (text, delimiters) {
   return tokens.join('+')
 }
 
-// 转变节点，添加 el.staticClass 和 el.classBinding 属性
+/*
+    ① parse (template,options) 函数中会执行：
+    transforms = pluckModuleFunction(options.modules, 'transformNode');
+    即返回 options.modules 中每一个 module.transformNode 组成的数组，即 [ module1.transformNode,  module2.transformNode,  module2.transformNode, ...]
+
+    ② 在 parseHTML 函数的 start 钩子函数中，会执行：
+    for (let i = 0; i < transforms.length; i++) {
+      transforms[i](element, options)
+    }
+ */
 function transformNode (el, options) {
   // 警告函数
   var warn = options.warn || baseWarn;
   // 返回 el.attrsMap['class']，并从 el.attrsList 中删除 'class' 这一项
   var staticClass = getAndRemoveAttr(el, 'class');
   if ("development" !== 'production' && staticClass) {
+    /*
+        parseText 函数的作用是将模板字符串转为浏览器可以识别的常规字符串，例如：
+        parseText('abc{{msg | fn}}efg')
+        -> 'abc' + '_s(_f("fn")(msg))' + 'efg'
+
+        注意：若参数不是插值写法，返回值就是 undefined
+     */
     var expression = parseText(staticClass, options.delimiters);
     if (expression) {
       // <div class="{{ val }}"> 属性内的插值这种写法已经不支持了。推荐使用 <div :class="val">
@@ -13508,12 +13600,13 @@ function transformNode (el, options) {
       );
     }
   }
-  // 静态 class
+  // class="..." 方法静态 class
   if (staticClass) {
     el.staticClass = JSON.stringify(staticClass);
   }
   // 动态 class，:class 或 v-bind:class 的值。getBindingAttr 的第三个参数设为 false 表示取不到动态属性就也不取静态的（默认情况下会取静态的）
   var classBinding = getBindingAttr(el, 'class', false /* getStatic */);
+  // v-bind:class 方式绑定的动态 class
   if (classBinding) {
     el.classBinding = classBinding;
   }
@@ -13540,15 +13633,31 @@ var klass$1 = {
   genData: genData
 };
 
-// 转变节点，添加 el.staticStyle 和 el.styleBinding 属性
+/*
+    ① parse (template,options) 函数中会执行：
+    transforms = pluckModuleFunction(options.modules, 'transformNode');
+    即返回 options.modules 中每一个 module.transformNode 组成的数组，即 [ module1.transformNode,  module2.transformNode,  module2.transformNode, ...]
+
+    ② 在 parseHTML 函数的 start 钩子函数中，会执行：
+    for (let i = 0; i < transforms.length; i++) {
+      transforms[i](element, options)
+    }
+ */
 function transformNode$1 (el, options) {
   // 警告方法
   var warn = options.warn || baseWarn;
   // 返回 el.attrsMap['style']，并从 el.attrsList 中删除 'style' 这一项
   var staticStyle = getAndRemoveAttr(el, 'style');
   if (staticStyle) {
-    /* istanbul ignore if */
+
     {
+      /*
+          parseText 函数的作用是将模板字符串转为浏览器可以识别的常规字符串，例如：
+          parseText('abc{{msg | fn}}efg')
+          -> 'abc' + '_s(_f("fn")(msg))' + 'efg'
+
+          注意：若参数不是插值写法，返回值就是 undefined
+       */
       var expression = parseText(staticStyle, options.delimiters);
       if (expression) {
         // <div style="{{ val }}"> 属性内的插值这种写法已经不支持了。推荐使用 <div :style="val">
@@ -13560,19 +13669,21 @@ function transformNode$1 (el, options) {
         );
       }
     }
-    // 静态 style
+    // style="..." 方法静态 style
     el.staticStyle = JSON.stringify(parseStyleText(staticStyle));
   }
 
-  // 动态 style，:style 或 v-bind:style 的值
   var styleBinding = getBindingAttr(el, 'style', false /* getStatic */);
-  // 动态 style
+  // v-bind:style 方式绑定的动态 style
   if (styleBinding) {
     el.styleBinding = styleBinding;
   }
 }
 
-// 返回一个字符串
+/*
+    返回一个字符串，形如：
+    `staticStyle:${el.staticStyle},style:(${el.styleBinding}),`
+ */
 function genData$1 (el) {
   var data = '';
   // 静态 style
@@ -13637,7 +13748,7 @@ var canBeLeftOpenTag = makeMap(
 
 // HTML5 tags https://html.spec.whatwg.org/multipage/indices.html#elements-3
 // Phrasing Content https://html.spec.whatwg.org/multipage/dom.html#phrasing-content
-// 段落元素
+// 段落标签（p 标签是不允许出现以下标签的）
 var isNonPhrasingTag = makeMap(
   'address,article,aside,base,blockquote,body,caption,col,colgroup,dd,' +
   'details,dialog,div,dl,dt,fieldset,figcaption,figure,footer,form,' +
@@ -13650,30 +13761,15 @@ var isNonPhrasingTag = makeMap(
 // 基本选项
 var baseOptions = {
   expectHTML: true,
-  // class、style 模块
-  modules: modules$1,
-  // model、text、html 指令
-  directives: directives$1,
-  // 是否为 pre 标签
-  isPreTag: isPreTag,
-  // 是否为单标签
-  isUnaryTag: isUnaryTag,
-  mustUseProp: mustUseProp,
-  // 会自动闭合的标签
-  canBeLeftOpenTag: canBeLeftOpenTag,
-  isReservedTag: isReservedTag,
-  getTagNamespace: getTagNamespace,
-  /*
-    将一组对象的 staticKeys 数组合并成一个字符串，举个例子：
-    modules = [
-      { staticKeys : ['mod11','mod12'] },
-      { staticKeys : ['mod21','mod22'] },
-      { staticKeys : ['mod31','mod32'] }
-    ];
-    genStaticKeys(modules)
-    -> "mod11,mod12,mod21,mod22,mod31,mod32"
-  */
-  staticKeys: genStaticKeys(modules$1)
+  modules: modules$1,                  // [klass,style]
+  directives: directives$1,            // { model,text,html }
+  isPreTag: isPreTag,                  // 是否为 pre 标签
+  isUnaryTag: isUnaryTag,              // 是否为单标签（不需要闭合标签）
+  mustUseProp: mustUseProp,            // 是否要使用 prop（某些特殊情形需要用 prop 而不是 attr）
+  canBeLeftOpenTag: canBeLeftOpenTag,  // 是否是可以不闭合的标签（它们会自己闭合)
+  isReservedTag: isReservedTag,        // 是否为 html/svg 保留标签名
+  getTagNamespace: getTagNamespace,    // 获取标签的命名空间(返回值为 'svg'、'math' 等)
+  staticKeys: genStaticKeys(modules$1) // 'staticStyle,staticClass'
 };
 
 /*  */
@@ -16145,55 +16241,55 @@ function generate (ast,options) {
   // 将 ast 对象转为浏览器可以解析的字符串
   var code = ast ? genElement(ast, state) : '_c("div")';
   return {
-  /*
-    以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
-    with 语句的 this 是 vm，所以 _c 实际是 vm._c
+    /*
+      以 code = "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))" 为例：
+      with 语句的 this 是 vm，所以 _c 实际是 vm._c
+      
+      看看 with 的基本用法（严格模式下不能使用 with 语句）：
+      var qs = location.search.substring(1);
+      var hostName = location.hostname;
+      var url = location.href;
+      这几行代码都是访问 location 对象中的属性，如果使用 with 关键字的话，可以简化代码如下：
+      with (location){
+        var qs = search.substring(1);
+        var hostName = hostname;
+        var url = href;
+      }
+      在这段代码中，使用了 with 语句关联了 location 对象，这就以为着在 with 代码块内部，每个变量首先被认为是一个局部变量，如果局部变量与 location 对象的某个属性同名，则这个局部变量会指向 location 对象属性。
     
-    看看 with 的基本用法（严格模式下不能使用 with 语句）：
-    var qs = location.search.substring(1);
-    var hostName = location.hostname;
-    var url = location.href;
-    这几行代码都是访问 location 对象中的属性，如果使用 with 关键字的话，可以简化代码如下：
-    with (location){
-      var qs = search.substring(1);
-      var hostName = hostname;
-      var url = href;
-    }
-    在这段代码中，使用了 with 语句关联了 location 对象，这就以为着在 with 代码块内部，每个变量首先被认为是一个局部变量，如果局部变量与 location 对象的某个属性同名，则这个局部变量会指向 location 对象属性。
-  
-    在 Vue.prototype._render 中：
-    vnode = render.call(vm._renderProxy, vm.$createElement);
-    而 vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）
-    所以:
-    "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
-    其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
+      在 Vue.prototype._render 中：
+      vnode = render.call(vm._renderProxy, vm.$createElement);
+      而 vm._renderProxy = new Proxy(vm, handlers)，也就是说 vm._renderProxy 的属性读取会被代理（对不存在的属性发出警告）
+      所以:
+      "_c('a',{attrs:{"id":"app"}},_l((items),function(value,key){return _c('a',{attrs:{"href":"#"}},[_v(_s(val))])}))"
+      其中的 vm._c、vm._l、vm._v、vm._s 等属性的读取都会被拦截（对不合要求的属性发出警告）
 
-    注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
+      注意：这里的 "with(this){return " + code + "}" 只是一个字符串，真正转为执行代码时 this 是 vm
 
-    对于模板：
-    div id='app'>
-        <div @click.self.ctrl='click'>
-            {{computedValue | filter}}
-        </div>
-    </div>
+      对于模板：
+      div id='app'>
+          <div @click.self.ctrl='click'>
+              {{computedValue | filter}}
+          </div>
+      </div>
 
-    得到的 render 为:
-    `with(this) {
-        return _c('div', {
-            attrs: {
-                "id": "app"
-            }
-        }, [_c('div', {
-            on: {
-                "click": function($event) {
-                    if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
-                    if ($event.target !== $event.currentTarget) return null;
-                    click($event)
-                }
-            }
-        }, [_v("\n" + _s(_f("filter")(computedValue)) + "\n")])])
-    }`
-  */
+      得到的 render 为:
+      `with(this) {
+          return _c('div', {
+              attrs: {
+                  "id": "app"
+              }
+          }, [_c('div', {
+              on: {
+                  "click": function($event) {
+                      if (!('button' in $event) && _k($event.keyCode, "ctrl")) return null;
+                      if ($event.target !== $event.currentTarget) return null;
+                      click($event)
+                  }
+              }
+          }, [_v("\n" + _s(_f("filter")(computedValue)) + "\n")])])
+      }`
+    */
     render: ("with(this){return " + code + "}"),
     staticRenderFns: state.staticRenderFns
   }
@@ -17186,7 +17282,28 @@ function createCompileToFunctionFn (compile) {
   }
 }
 
-// 生成编译器
+/*
+    简单地看：
+    function createCompilerCreator (baseCompile) {
+        return function createCompiler (baseOptions) {
+            function compile (template, options) {
+                ...
+                var compiled = baseCompile(template, finalOptions);
+                ...
+                return compiled;
+            }
+
+            return {
+              compile: compile,
+              compileToFunctions: createCompileToFunctionFn(compile)
+            }
+        }
+    }
+
+    所以：
+    createCompilerCreator 函数生成 createCompiler 函数
+    实参 baseCompile 不一样，生成的 createCompiler 函数也不一样（createCompiler 函数内部会用到 baseCompile 函数）
+ */
 function createCompilerCreator (baseCompile) {
   /*
     var baseOptions = {
@@ -17352,17 +17469,24 @@ Vue$3.prototype.$mount = function (el,hydrating) {
 
   var options = this.$options;
   // resolve template/el and convert to render function
-  // 如果没有 options.render，将 template/el 转化为渲染函数
+  /*
+      若没有渲染函数，那就用 template/el 生成渲染函数
+
+      即生成：
+      options.render = render
+      options.staticRenderFns = staticRenderFns
+   */
   if (!options.render) {
     var template = options.template;
     // 有模板就用模板
     if (template) {
-      // 字符串模板
+      // 1. 将 options.template -> 字符串形式模板
       if (typeof template === 'string') {
+        // ① 如 template = '#app' 模板为元素 id
         if (template.charAt(0) === '#') {
           // idToTemplate(id) 根据选择器 id 获取元素，然后返回该元素的 innerHTML
           template = idToTemplate(template);
-          // 如果没找到对应元素，发出警告
+          // 警告：找不到对应的元素
           if ("development" !== 'production' && !template) {
             warn(
               ("Template element not found or is empty: " + (options.template)),
@@ -17370,17 +17494,17 @@ Vue$3.prototype.$mount = function (el,hydrating) {
             );
           }
         }
-      // <template> 标签，直接获取其 innerHTML 为模板
+      // ② 如 template = document.getElementById('app') 模板为 dom 元素
       } else if (template.nodeType) {
         template = template.innerHTML;
-      // 其他都是无效的 template 选项
+      // ③ 否则是无效的 template
       } else {
         {
           warn('invalid template option:' + template, this);
         }
         return this
       }
-    // 没有模板就用 el 元素的 outerHTML 作为模板
+    // 2. 用 el 元素的 outerHTML 作为模板
     } else if (el) {
       template = getOuterHTML(el);
     }
@@ -17393,13 +17517,13 @@ Vue$3.prototype.$mount = function (el,hydrating) {
       }
     
       /*
-        ref 为一个 json 对象，结果为：
-        {
-            render : createFunction(compiled.render, fnGenErrors),
-            staticRenderFns : compiled.staticRenderFns.map(function (code) {return createFunction(code, fnGenErrors)})
-        }
-      */
-      // 根据模板生成渲染函数 compileToFunctions (template, options, vm)
+           compileToFunctions(template, options, vm) 
+           会根据模板 template 返回一个 json：
+           { 
+              render: fn, 
+              staticRenderFns: [...]
+           }
+       */
       var ref = compileToFunctions(template, {
         shouldDecodeNewlines: shouldDecodeNewlines,
         delimiters: options.delimiters,
@@ -17408,17 +17532,19 @@ Vue$3.prototype.$mount = function (el,hydrating) {
 
       var render = ref.render;
       var staticRenderFns = ref.staticRenderFns;
-      // 修改 options 对象
+
+      // 修改 options 对象，添加渲染函数
       options.render = render;
       options.staticRenderFns = staticRenderFns;
 
-      // 标记编译结束
+      // 标记编译结束，计算耗时
       if ("development" !== 'production' && config.performance && mark) {
         mark('compile end');
         measure(((this._name) + " compile"), 'compile', 'compile end');
       }
     }
   }
+
   // 修正完 this.$options 的渲染函数，开始安装元素 el
   return mount.call(this, el, hydrating)
 };
@@ -17427,11 +17553,12 @@ Vue$3.prototype.$mount = function (el,hydrating) {
  * Get outerHTML of elements, taking care
  * of SVG elements in IE as well.
  */
-// 获取元素的 outerHTML，如果获取不到则获取其父元素的 innerHTML
+// 获取 el 元素的 outerHTML
 function getOuterHTML (el) {
+  // ① 首选取 el.outerHTML 属性
   if (el.outerHTML) {
     return el.outerHTML
-  // 兼容 ie 中的 svg
+  // ② 若取不到，则取父元素的 innerHTML
   } else {
     var container = document.createElement('div');
     container.appendChild(el.cloneNode(true));
