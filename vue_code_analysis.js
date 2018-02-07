@@ -8059,28 +8059,32 @@ function query (el) {
   }
 }
 
-// 创建元素并返回该元素。只有 select 元素会特殊对待
+// 根据标签名新建 dom 元素
 function createElement$1 (tagName, vnode) {
   var elm = document.createElement(tagName);
+  // ① 只要不是 select 元素，创建好了直接返回这个元素
   if (tagName !== 'select') {
     return elm
   }
   // false or null will remove the attribute but undefined will not
-  // 当 vnode.data.attrs.multiple 不为 undefined 时，给 select 元素加上 multiple 属性
+  // ② select 元素。当 vnode.data.attrs.multiple 不为 undefined 时，给 select 元素加上 multiple 属性
   if (vnode.data && vnode.data.attrs && vnode.data.attrs.multiple !== undefined) {
     elm.setAttribute('multiple', 'multiple');
   }
   return elm
 }
 
-// 创建一个具有指定的命名空间 namespace 和限定名称 tagName 的元素。
+// 创建一个具有指定的命名空间URI和限定名称的元素
 function createElementNS (namespace, tagName) {
   /*
-    var namespaceMap = {
+      namespaceMap = {
         svg: 'http://www.w3.org/2000/svg',
         math: 'http://www.w3.org/1998/Math/MathML'
-    };
-  */
+      }
+
+      createElementNS() 方法与 createElement() 方法相似，
+      只是它创建的 Element 节点除了具有指定的名称外，还具有指定的命名空间。只有使用命名空间的 XML 文档才会使用该方法。
+   */
   return document.createElementNS(namespaceMap[namespace], tagName)
 }
 
@@ -11836,10 +11840,12 @@ function getTimeout (delays, durations) {
 
     参数
     callback : 原数组中的元素经过该方法后返回一个新的元素。
+    thisArg : 执行 callback 函数时 this 指向的对象。
+    
+    其中：callback 方法参数：
     currentValue : callback 的第一个参数，数组中当前被传递的元素。
     index : callback 的第二个参数，数组中当前被传递的元素的索引。
     array : callback 的第三个参数，调用 map 方法的数组。
-    thisArg : 执行 callback 函数时 this 指向的对象。
    */
 
   // 遍历数组 durations，获取 toMs(d) + toMs(delays[i]) 的最大值
