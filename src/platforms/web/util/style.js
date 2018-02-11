@@ -84,7 +84,7 @@ export function normalizeStyleBinding (bindingStyle: any): ?Object {
  * parent component style should be after child's
  * so that parent component's style could override it
  */
-// 返回一个 json 对象。父组件的 style 应该在子组件的后面。这样父组件的 style 就可以覆盖前面的。
+// 返回一个 json 对象（包括合并静态和动态样式数据）。父组件的 style 应该在子组件的后面。这样父组件的 style 就可以覆盖前面的。
 export function getStyle (vnode: VNode, checkChild: boolean): Object {
   const res = {}
   let styleData

@@ -11321,17 +11321,26 @@ function getStyle (vnode, checkChild) {
 
 var cssVarRE = /^--/;
 var importantRE = /\s*!important$/;
-// 设置 style 属性
+
+// 设置样式
 var setProp = function (el, name, val) {
-  // name 以 -- 开头
+  
+  // ① name 以 '--' 开头，用 setProperty 方法设置样式
   if (cssVarRE.test(name)) {
-    // 调用原生的 setProperty 方法设置样式
+    /*
+        style.setProperty(propertyName, value, priority) 为一个声明了CSS样式的对象设置一个新的值
+        参数：
+        propertyName 被更改的 css 属性名
+        value 属性值。如果没有指定，则当做空字符（注意: value 不能包含 "!important" --那个应该使用 priority 参数）
+        priority 允许 "important" CSS 优先被设置。如果没有指定, 则当作空字符。
+     */
     el.style.setProperty(name, val);
+  // ② 设置带有 'important' 的样式
   } else if (importantRE.test(val)) {
-    // setProperty 可接受第三个参数为 'important'
     el.style.setProperty(name, val.replace(importantRE, ''), 'important');
+  // ③ 直接设置样式 style.cssPropertyName = 'value'（之所以 ① 和 ② 没采取这种方法，是因为不是所有属性在 style 对象中都是合法的）
   } else {
-    // 属性名转为 style 对象接受的驼峰化
+    // 将普通的 css 属性名转为 style 对象中合法的属性名
     var normalizedName = normalize(name);
     if (Array.isArray(val)) {
       // Support values array created by autoprefixer, e.g.
@@ -11384,7 +11393,7 @@ function updateStyle (oldVnode, vnode) {
   var data = vnode.data;
   var oldData = oldVnode.data;
 
-  // 如果没有 style 数据，就谈不上更新了
+  // 如果没有 style 数据，就谈不上更新了，直接返回
   if (isUndef(data.staticStyle) && isUndef(data.style) && isUndef(oldData.staticStyle) && isUndef(oldData.style)) {
     return
   }
@@ -11399,6 +11408,7 @@ function updateStyle (oldVnode, vnode) {
   // normalizeStyleData 函数已经把动态 style 合并到静态 style 中了，所以这里取 oldStaticStyle 就够了
   var oldStyle = oldStaticStyle || oldStyleBinding;
 
+  // 将数组/字符串形式的值转成 json 对象
   var style = normalizeStyleBinding(vnode.data.style) || {};
 
   // store normalized style under a different key for next diff
@@ -11406,7 +11416,7 @@ function updateStyle (oldVnode, vnode) {
   // to mutate it.
   // 如果 style 对象被观察，那就克隆一份
   vnode.data.normalizedStyle = isDef(style.__ob__)
-    ? extend({}, style)
+    ? extend({}, style) // 深复制一份 style（因为 style 被”观察“了，它的变动会触发订阅者改变，这是不必要的）
     : style;
 
   // 返回静态 style 和动态 style 的集合
