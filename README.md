@@ -241,3 +241,6 @@ function copyAugment (target, src, keys) {
 3. http://www.jianshu.com/p/41f9d7461844
 4. https://segmentfault.com/a/1190000006983211
 5. https://www.brooch.me/2017/03/17/vue-source-notes-1/
+6. https://www.brooch.me/tags/vue/
+7. https://www.gitbook.com/book/114000/read-vue-code/details
+8. http://www.cnblogs.com/QH-Jimmy/archive/2017/05.html

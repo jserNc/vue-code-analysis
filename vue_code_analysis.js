@@ -1,167 +1,3 @@
-/*
-
-熟悉项目方法：
-
-开源代码，首先找到其主页，对 README.md 文件进行一番查阅，理解一下项目说明，比如：jQuery README，分几部分介绍了下项目:
-
-Contribution Guides: 共享代码的一些规范
-Environments in which to use jQuery: 运行环境
-What you need to build your own jQuery: 构建环境
-How to build your own jQuery: 构建方式
-Running the Unit Tests: 运行测试
-Building to a different directory: 改变构建目录
-Essential Git: 一些git操作
-
-
-看一个例子，了解双向绑定机制：
-出处：https://github.com/bison1994
-
-<div id="app">
-  <input type="text" v-model="text">
-  {{ text }}
-</div>
-
-<script>
-  function observe (obj, vm) {
-    Object.keys(obj).forEach(function (key) {
-      defineReactive(vm, key, obj[key]);
-    });
-  }
-
-  function defineReactive (obj, key, val) {
-    // 一个属性 key 对应一个依赖对象
-    var dep = new Dep();
-
-    Object.defineProperty(obj, key, {
-      // 获取 key 属性时收集关注它的 watcher
-      get: function () {
-        // 添加订阅者 watcher 到依赖对象 Dep
-        if (Dep.target) dep.addSub(Dep.target);
-        return val
-      },
-      // 更新 key 属性时通知关注它的 watcher
-      set: function (newVal) {
-        if (newVal === val) return
-        val = newVal;
-        // 作为发布者发出通知
-        dep.notify();
-      }
-    });
-  }
-
-  function nodeToFragment (node, vm) {
-    var flag = document.createDocumentFragment();
-    var child;
-
-    while (child = node.firstChild) {
-      compile(child, vm);
-      flag.appendChild(child); // 将子节点劫持到文档片段中
-    }
-
-    return flag;
-  }
-
-  function compile (node, vm) {
-    var reg = /\{\{(.*)\}\}/;
-    // 节点类型为元素
-    if (node.nodeType === 1) {
-      var attr = node.attributes;
-      // 解析属性
-      for (var i = 0; i < attr.length; i++) {
-        if (attr[i].nodeName == 'v-model') {
-          // 获取 v-model 绑定的属性名
-          var name = attr[i].nodeValue;
-          node.addEventListener('input', function (e) {
-            // 给 vm[name] 属性赋值，进而触发该属性的 set 方法
-            vm[name] = e.target.value;
-          });
-          // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
-          node.value = vm[name]; 
-          node.removeAttribute('v-model');
-        }
-      };
-
-      new Watcher(vm, node, name, 'input');
-    }
-
-    // 节点类型为text
-    if (node.nodeType === 3) {
-      if (reg.test(node.nodeValue)) {
-        var name = RegExp.$1; // 获取匹配到的字符串
-        name = name.trim();
-
-        new Watcher(vm, node, name, 'text');
-      }
-    }
-  }
-
-  function Watcher (vm, node, name, nodeType) {
-    Dep.target = this;
-    this.name = name;
-    this.node = node;
-    this.vm = vm;
-    this.nodeType = nodeType;
-    this.update();
-    Dep.target = null;
-  }
-
-  Watcher.prototype = {
-    // 更新 dom
-    update: function () {
-      this.get();
-      if (this.nodeType == 'text') {
-        this.node.nodeValue = this.value;
-      }
-      if (this.nodeType == 'input') {
-        this.node.value = this.value;
-      }
-    },
-    // 获取data中的属性值
-    get: function () {
-      // 触发相应属性的 get 方法
-      this.value = this.vm[this.name]; 
-    }
-  }
-
-  function Dep () {
-    this.subs = []
-  }
-
-  Dep.prototype = {
-    addSub: function(sub) {
-      this.subs.push(sub);
-    },
-
-    notify: function() {
-      this.subs.forEach(function(sub) {
-        sub.update();
-      });
-    }
-  };
-
-  function Vue (options) {
-    this.data = options.data;
-    var data = this.data;
-
-    observe(data, this);
-
-    var id = options.el;
-    var dom = nodeToFragment(document.getElementById(id), this);
-
-    // 编译完成后，将 dom 返回到 app 中
-    document.getElementById(id).appendChild(dom);
-  }
-
-  var vm = new Vue({
-    el: 'app',
-    data: {
-      text: 'hello world'
-    }
-  });
-
-</script>
- */
-
 /*!
  * Vue.js v2.4.0
  * (c) 2014-2017 Evan You
@@ -1876,6 +1712,7 @@ function defineReactive$$1 (obj, key, val, customSetter, shallow) {
   });
 }
 
+
 /**
  * Set a property on an object. Adds the new property and
  * triggers change notification if the property doesn't
@@ -1978,7 +1815,154 @@ function dependArray (value) {
   }
 }
 
-/*  */
+/*
+看一个例子，了解双向绑定机制（出处：https://github.com/bison1994）
+
+<div id="app">
+  <input type="text" v-model="text">
+  {{ text }}
+</div>
+
+<script>
+  function observe (obj, vm) {
+    Object.keys(obj).forEach(function (key) {
+      defineReactive(vm, key, obj[key]);
+    });
+  }
+
+  function defineReactive (obj, key, val) {
+    // 一个属性 key 对应一个依赖对象
+    var dep = new Dep();
+
+    Object.defineProperty(obj, key, {
+      // 获取 key 属性时收集关注它的 watcher
+      get: function () {
+        // 添加订阅者 watcher 到依赖对象 Dep
+        if (Dep.target) dep.addSub(Dep.target);
+        return val
+      },
+      // 更新 key 属性时通知关注它的 watcher
+      set: function (newVal) {
+        if (newVal === val) return
+        val = newVal;
+        // 作为发布者发出通知
+        dep.notify();
+      }
+    });
+  }
+
+  function nodeToFragment (node, vm) {
+    var flag = document.createDocumentFragment();
+    var child;
+
+    while (child = node.firstChild) {
+      compile(child, vm);
+      flag.appendChild(child); // 将子节点劫持到文档片段中
+    }
+
+    return flag;
+  }
+
+  function compile (node, vm) {
+    var reg = /\{\{(.*)\}\}/;
+    // 节点类型为元素
+    if (node.nodeType === 1) {
+      var attr = node.attributes;
+      // 解析属性
+      for (var i = 0; i < attr.length; i++) {
+        if (attr[i].nodeName == 'v-model') {
+          // 获取 v-model 绑定的属性名
+          var name = attr[i].nodeValue;
+          node.addEventListener('input', function (e) {
+            // 给 vm[name] 属性赋值，进而触发该属性的 set 方法
+            vm[name] = e.target.value;
+          });
+          // 获取 vm[name] 属性赋值，进而触发该属性的 get 方法
+          node.value = vm[name]; 
+          node.removeAttribute('v-model');
+        }
+      };
+
+      new Watcher(vm, node, name, 'input');
+    }
+
+    // 节点类型为text
+    if (node.nodeType === 3) {
+      if (reg.test(node.nodeValue)) {
+        var name = RegExp.$1; // 获取匹配到的字符串
+        name = name.trim();
+
+        new Watcher(vm, node, name, 'text');
+      }
+    }
+  }
+
+  function Watcher (vm, node, name, nodeType) {
+    Dep.target = this;
+    this.name = name;
+    this.node = node;
+    this.vm = vm;
+    this.nodeType = nodeType;
+    this.update();
+    Dep.target = null;
+  }
+
+  Watcher.prototype = {
+    // 更新 dom
+    update: function () {
+      this.get();
+      if (this.nodeType == 'text') {
+        this.node.nodeValue = this.value;
+      }
+      if (this.nodeType == 'input') {
+        this.node.value = this.value;
+      }
+    },
+    // 获取data中的属性值
+    get: function () {
+      // 触发相应属性的 get 方法
+      this.value = this.vm[this.name]; 
+    }
+  }
+
+  function Dep () {
+    this.subs = []
+  }
+
+  Dep.prototype = {
+    addSub: function(sub) {
+      this.subs.push(sub);
+    },
+
+    notify: function() {
+      this.subs.forEach(function(sub) {
+        sub.update();
+      });
+    }
+  };
+
+  function Vue (options) {
+    this.data = options.data;
+    var data = this.data;
+
+    observe(data, this);
+
+    var id = options.el;
+    var dom = nodeToFragment(document.getElementById(id), this);
+
+    // 编译完成后，将 dom 返回到 app 中
+    document.getElementById(id).appendChild(dom);
+  }
+
+  var vm = new Vue({
+    el: 'app',
+    data: {
+      text: 'hello world'
+    }
+  });
+
+</script>
+ */
 
 /**
  * Option overwriting strategies are functions that handle
@@ -9941,7 +9925,10 @@ var baseModules = [
 // 更新属性
 function updateAttrs (oldVnode, vnode) {
   var opts = vnode.componentOptions;
-  // 构造函数选项的 inheritAttrs 设为 false，那就直接返回吧
+  /*
+      默认情况下父作用域的不被认作 props 的特性绑定 (attribute bindings) 将会“回退”且作为普通的 HTML 特性应用在子组件的根元素上。
+      通过设置 inheritAttrs 到 false，这些默认行为将会被去掉。
+   */
   if (isDef(opts) && opts.Ctor.options.inheritAttrs === false) {
     return
   }
@@ -9959,10 +9946,11 @@ function updateAttrs (oldVnode, vnode) {
 
   // clone observed objects, as the user probably wants to mutate it
   if (isDef(attrs.__ob__)) {
+    // 深复制一份 attrs（因为 attrs 被”观察“了，它的变动会触发订阅者改变，这是不必要的）
     attrs = vnode.data.attrs = extend({}, attrs);
   }
 
-  // 遍历 attrs，和 oldAttrs 不一样的就设置
+  // 遍历新的属性列表（只要对应的属性值和新的属性值不同，那就更新为新的属性值）
   for (key in attrs) {
     cur = attrs[key];
     old = oldAttrs[key];
@@ -9971,15 +9959,20 @@ function updateAttrs (oldVnode, vnode) {
       setAttr(elm, key, cur);
     }
   }
+
   // #4391: in IE9, setting type can reset value for input[type=radio]
   /* istanbul ignore if */
-  // ie9 下有个问题，设置 input 的 type 为 radio 时，会重置它的 value 属性值。所以在 ie9 下，新旧 value 值不一样，那就以新的值为准
+  /*
+      IE9 下，动态地设置 type 会导致 value 值被重置。
+
+      上面的 for-in 循环可能会设置 type 属性，从而导致 value 值被重置了，这是不对的
+      所以，在这里针对 value 属性单独重新设置
+   */
   if (isIE9 && attrs.value !== oldAttrs.value) {
-    // 例如：<input type="checkbox" name="vehicle" value="Car" checked="checked" /> 别忘了 value 也是一个属性
     setAttr(elm, 'value', attrs.value);
   }
 
-  // 遍历 oldAttrs，删除不要的属性
+  // 旧的属性列表中存在，而新的属性列表中不存在的属性则删除
   for (key in oldAttrs) {
     if (isUndef(attrs[key])) {
       if (isXlink(key)) {
@@ -9992,31 +9985,37 @@ function updateAttrs (oldVnode, vnode) {
 
 }
 
-// 调用原生方法为对象设置属性
+// 设置属性（调用原生 api）
 function setAttr (el, key, value) {
-  // key 为 checked、enabled 等需要布尔值的属性
+  // 1. 布尔值属性。如 checked、enabled 等
   if (isBooleanAttr(key)) {
     // set attribute for blank value
     // e.g. <option disabled>Select one</option>
-    // value 为 null、undefined 或 false，删除这个属性
+    
+    // ① 若 value 为 undefined/null/false，那就移除该属性
     if (isFalsyAttrValue(value)) {
       el.removeAttribute(key);
+    // ② 设置该属性，如 checked="checked"
     } else {
-      // 例如：<input type="checkbox" name="vehicle" value="Car" checked="checked" />
       el.setAttribute(key, key);
     }
-  // key 为 contenteditable,draggable,spellcheck 三者之一
+  // 2. 枚举属性。如 contenteditable,draggable,spellcheck
   } else if (isEnumeratedAttr(key)) {
     el.setAttribute(key, isFalsyAttrValue(value) || value === 'false' ? 'false' : 'true');
-  // key 以 'xlink:' 开头
+  // 3. xlink 属性。如 xlink:href="http://www.w3school.com.cn"
   } else if (isXlink(key)) {
     if (isFalsyAttrValue(value)) {
+      /*
+          ① xlinkNS = 'http://www.w3.org/1999/xlink'
+          ② 获取 xlink 中属性名，例如 getXlinkProp('xlink:href') -> 'href'
+          ③ 删除属性
+       */
       el.removeAttributeNS(xlinkNS, getXlinkProp(key));
     } else {
       el.setAttributeNS(xlinkNS, key, value);
     }
+  // 4. 其他属性
   } else {
-    // value 为 null、undefined 或 false
     if (isFalsyAttrValue(value)) {
       el.removeAttribute(key);
     } else {
@@ -10051,18 +10050,18 @@ function updateClass (oldVnode, vnode) {
     return
   }
 
-  // 生成字符串形式的 class 属性值，各个 class 之间用空格分开
+  // 返回字符串形式的 class 值，如 'cls1 cls2 cls3 cls4 cls5 cls6'
   var cls = genClassForVnode(vnode);
 
-  // handle transition classes
+  // 过渡相关 class
   var transitionClass = el._transitionClasses;
   if (isDef(transitionClass)) {
-    // 过渡的 class 也加上
+    // concat(a,b) 连接字符串 a 和 b，中间用空格分开
     cls = concat(cls, stringifyClass(transitionClass));
   }
 
   // set the class
-  // 新旧 class 不一样，那就更新
+  // 若不等于之前的 class 值，那就更新
   if (cls !== el._prevClass) {
     el.setAttribute('class', cls);
     el._prevClass = cls;
@@ -10977,7 +10976,11 @@ function genDefaultModel (el,value,modifiers) {
 function normalizeEvents (on) {
   var event;
 
-  // RANGE_TOKEN = '__r'
+  /*
+      RANGE_TOKEN = '__r'
+      若 input 的 type === 'range'，那么其事件类型最开始就是用 RANGE_TOKEN 代替的
+      在这里才将 RANGE_TOKEN 替换为真正的事件类型名
+   */
   if (isDef(on[RANGE_TOKEN])) {
     // IE input[type=range] only supports `change` event。在 ie 下，input[type=range] 只支持 change 事件
     event = isIE ? 'change' : 'input';
@@ -10994,7 +10997,11 @@ function normalizeEvents (on) {
     delete on[RANGE_TOKEN];
   }
 
-  // CHECKBOX_RADIO_TOKEN = '__c'
+  /*
+      CHECKBOX_RADIO_TOKEN = '__c'
+      若 input 的 type === 'checkbox'，那么其事件类型最开始就是用 CHECKBOX_RADIO_TOKEN 代替的
+      在这里才将 CHECKBOX_RADIO_TOKEN 替换为真正的事件类型名
+   */
   if (isDef(on[CHECKBOX_RADIO_TOKEN])) {
     // Chrome fires microtasks in between click/change, leads to #4521
     event = isChrome ? 'click' : 'change';
@@ -11015,9 +11022,13 @@ function add$1 (event,handler,once$$1,capture,passive) {
     // 修正 handler
     handler = function (ev) {
       var res = arguments.length === 1
-        ? oldHandler(ev)
-        : oldHandler.apply(null, arguments);
-      // 执行一次就解除监听
+        ? oldHandler(ev)                      // 1 个实参
+        : oldHandler.apply(null, arguments);  // 多个实参
+      
+      /*
+          只要函数执行结果不是 null，就解除绑定
+          换句话说，若执行结果是 null，那么就不解除绑定了
+       */ 
       if (res !== null) {
         remove$2(event, handler, capture, _target);
       }
@@ -11054,9 +11065,14 @@ function remove$2 (
 // 更新节点事件监听
 function updateDOMListeners (oldVnode, vnode) {
   var isComponentRoot = isDef(vnode.componentOptions);
-  // 绑定的事件
+
+  /*
+      nativeOn 指的是 click、mouseover 等原生事件
+      on 指的是用户自定义的事件（模拟事件）
+   */
   var oldOn = isComponentRoot ? oldVnode.data.nativeOn : oldVnode.data.on;
   var on = isComponentRoot ? vnode.data.nativeOn : vnode.data.on;
+  
   // 如果新旧节点都没绑定过事件，那就直接返回
   if (isUndef(oldOn) && isUndef(on)) {
     return
@@ -11069,7 +11085,7 @@ function updateDOMListeners (oldVnode, vnode) {
   target$1 = vnode.elm;
   // 将 v-model 回调函数放到回调函数队列最前面
   normalizeEvents(on);
-  // 更新事件监听
+  // 更新事件监听函数
   updateListeners(on, oldOn, add$1, remove$2, vnode.context);
 }
 
@@ -11085,6 +11101,7 @@ function updateDOMProps (oldVnode, vnode) {
   if (isUndef(oldVnode.data.domProps) && isUndef(vnode.data.domProps)) {
     return
   }
+
   var key, cur;
   var elm = vnode.elm;
   var oldProps = oldVnode.data.domProps || {};
@@ -11093,41 +11110,47 @@ function updateDOMProps (oldVnode, vnode) {
 
   // clone observed objects, as the user probably wants to mutate it
   if (isDef(props.__ob__)) {
-    // 复制一份 props，以免被改变了？
+    // 深复制一份 props（因为 props 被”观察“了，它的变动会触发订阅者改变，这是不必要的）
     props = vnode.data.domProps = extend({}, props);
   }
 
-  // 新的属性不存在，则将对应的属性值置为 ''
+  // 旧的属性名不存在新的属性列表里，则将其置为 ''
   for (key in oldProps) {
     if (isUndef(props[key])) {
       elm[key] = '';
     }
   }
 
+  // 遍历新的属性列表
   for (key in props) {
     cur = props[key];
     // ignore children if the node has textContent or innerHTML,
     // as these will throw away existing DOM nodes and cause removal errors
     // on subsequent patches (#3360)
-    // 如果有 textContent/innerHTML 属性，就强制清除子元素
+    // ① 如果有 'textContent'/'innerHTML' 属性，就强制清除子元素
     if (key === 'textContent' || key === 'innerHTML') {
       if (vnode.children) { vnode.children.length = 0; }
       // 和旧值相等，那就不操作了
       if (cur === oldProps[key]) { continue }
     }
 
+    // ② 'value' 属性
     if (key === 'value') {
       // store value as _value as well since
       // non-string values will be stringified
-      // 保留原始值，后面会将不是字符串的值会强制改为字符串
+
+      // 保留原始值（后面会将其强制改为字符串）
       elm._value = cur;
       // avoid resetting cursor position when value is the same
-      // 将值强制改为字符串
+      
+      // 字符串化后的属性值
       var strCur = isUndef(cur) ? '' : String(cur);
-      // 判断是否应该更新 value
+      
+      // 满足特定条件 value 值才会更新
       if (shouldUpdateValue(elm, vnode, strCur)) {
         elm.value = strCur;
       }
+    // ③ 其他属性
     } else {
       elm[key] = cur;
     }
@@ -11136,12 +11159,12 @@ function updateDOMProps (oldVnode, vnode) {
 
 // check platforms/web/util/attrs.js acceptValue
 
-// 是否应该更新 value
+// 是否应该更新 value（elm 为 input/select/option 元素之一）
 function shouldUpdateValue (elm, vnode, checkVal) {
-  return (!elm.composing && (
-    vnode.tag === 'option' ||
-    isDirty(elm, checkVal) ||
-    isInputChanged(elm, checkVal)
+  return (!elm.composing && (       // 输入完毕
+    vnode.tag === 'option' ||       // <option> 元素
+    isDirty(elm, checkVal) ||       // 失去了焦点，并且新值不等于 value
+    isInputChanged(elm, checkVal)   // 新旧 value 值不一样
   ))
 }
 
@@ -11152,18 +11175,22 @@ function isDirty (elm, checkVal) {
   return document.activeElement !== elm && elm.value !== checkVal
 }
 
-// elm 的旧值和 newVal 是否相等
+// input 输入框的值是否变化
 function isInputChanged (elm, newVal) {
   var value = elm.value;
+  // v-model 修饰符
   var modifiers = elm._vModifiers; // injected by v-model runtime
-  // 数值化
+  
+  // ① value 转为数值后相等，直接返回
   if (isDef(modifiers) && modifiers.number) {
     return toNumber(value) !== toNumber(newVal)
   }
-  // 去掉前后空格
+
+  // ② value 去掉前后空格后相等，直接返回
   if (isDef(modifiers) && modifiers.trim) {
     return value.trim() !== newVal.trim()
   }
+
   return value !== newVal
 }
 
@@ -11335,10 +11362,13 @@ var normalize = cached(function (prop) {
   emptyStyle = emptyStyle || document.createElement('div').style;
   // 将连字符分隔的字符串驼峰化，例如：a-b-c -> aBC
   prop = camelize(prop);
-  // 合法的 prop
+  
+  // ① 将 prop 驼峰化，例如：a-b-c -> aBC，若驼峰化后属性名合法，就返回该属性名
   if (prop !== 'filter' && (prop in emptyStyle)) {
     return prop
   }
+
+  // ② 将 prop 首字母大写，然后加上 Webkit'/'Moz'/'ms' 等前缀，再次试探属性名是否合法，若合法则返回
   var capName = prop.charAt(0).toUpperCase() + prop.slice(1);
   // 以 prop 为 margin-top 为例，依次用 WebkitMarginTop、MozMarginTop、msMarginTop 类匹配 emptyStyle 里的属性名，匹配上了就是合法的
   for (var i = 0; i < vendorNames.length; i++) {
@@ -11540,26 +11570,47 @@ function removeClass (el, cls) {
   }
 }
 
-// 返回一个 json 对象
+// 返回 6 个 class 组成的 json 对象
 function resolveTransition (def$$1) {
+  // ① 不存在 def，返回 undefined
   if (!def$$1) {
     return
   }
-  // def$$1 是对象，也是返回一个 json 对象，除了 6 个 class，还有包括 def$$1 的所有可枚举属性
+  /*
+      ② def 是对象类型，也就是动态属性用一个对象来描述，如：
+      <div v-bind="{ id: someProp, 'other-attr': otherProp }"></div>
+
+      所以：
+      def.css 指的是 v-bind:css
+      def.name 指的是 v-bind:name
+   */
   if (typeof def$$1 === 'object') {
     var res = {};
+    /*
+        推荐对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。
+        这也可以避免过渡过程中 CSS 的影响。
+     */
     if (def$$1.css !== false) {
       extend(res, autoCssTransition(def$$1.name || 'v'));
     }
     extend(res, def$$1);
     return res
-  // def$$1 是字符串，那就返回 6 个 class 组成的 json 对象
+  // ③ def 是字符串，实参是元素的 name
   } else if (typeof def$$1 === 'string') {
     return autoCssTransition(def$$1)
   }
 }
 
-// 返回 transition 所需的 6 个 class 组成的 json 对象
+/*
+    在进入/离开的过渡中，会有 6 个 class 切换。
+
+    1. v-enter：定义进入过渡的开始状态。在元素被插入时生效，在下一个帧移除。
+    2. v-enter-active：定义过渡的状态。在元素整个过渡过程中作用，在元素被插入时生效，在 transition/animation 完成之后移除。这个类可以被用来定义过渡的过程时间，延迟和曲线函数。
+    3. v-enter-to:（2.1.8版及以上）定义进入过渡的结束状态。在元素被插入一帧后生效 (与此同时 v-enter 被删除)，在 transition/animation 完成之后移除。
+    4. v-leave: 定义离开过渡的开始状态。在离开过渡被触发时生效，在下一个帧移除。
+    5. v-leave-active：定义过渡的状态。在元素整个过渡过程中作用，在离开过渡被触发后立即生效，在 transition/animation 完成之后移除。这个类可以被用来定义过渡的过程时间，延迟和曲线函数。
+    6. v-leave-to:（2.1.8版及以上）定义离开过渡的结束状态。在离开过渡被触发一帧后生效 (与此同时 v-leave 被删除)，在 transition/animation 完成之后移除。
+ */
 var autoCssTransition = cached(function (name) {
   return {
     enterClass: (name + "-enter"),
@@ -11606,13 +11657,6 @@ var raf = inBrowser && window.requestAnimationFrame
 /*
 看一下 window.requestAnimationFrame 方法的基本用法：
 
-requestAnimationFrame 的用法与 settimeout 很相似，只是不需要设置时间间隔而已。
-requestAnimationFrame 使用一个回调函数作为参数，这个回调函数会在浏览器重绘之前调用。
-它返回一个整数，表示定时器的编号，这个值可以传递给 cancelAnimationFrame 用于取消这个函数的执行
-
-用法：requestID = requestAnimationFrame(callback); 
-callback 方法在执行动画之前调用 1 次。
-
 例1，小红块自下向上运动 5 秒：
 <div id="app"></div>
 <style>
@@ -11628,14 +11672,24 @@ callback 方法在执行动画之前调用 1 次。
     }
 </style>
 <script>
+    // 写法一：
     var app = document.getElementById('app');
-
     app.style.transform = `translateY(30px)`;
 
     var timer = requestAnimationFrame(function() {
         app.classList.add('animate-on-transforms');
         app.style.transform = '';
-        console.log('动画开始前执行该函数');
+        console.log('执行动画');
+    });
+
+    // 写法二：
+    var app = document.querySelector('#app');
+    app.style.top = '30px';
+
+    var timer = requestAnimationFrame(function(){
+        app.classList.add('cls');
+        app.style.top = '0';
+        console.log('执行动画');
     });
 </script>
 
@@ -11643,15 +11697,39 @@ callback 方法在执行动画之前调用 1 次。
 
 注意，这里的 requestAnimationFrame 函数执行 1 次，callback 函数也是执行 1 次，就可以让动画动起来。
 
-问题来了，动画产生的原因是什么？
+1. 问题来了，这里动画产生的原因是什么？其实就是 css3 过渡动画。
+transition 必须规定两项内容： 
+① 您希望把效果添加到哪个 css 属性上（all 代表所有属性）
+② 动画效果的时长（如果时长未规定，则不会有过渡效果，默认值是 0）
+
+【重要】：动画效果开始于指定的 css 属性改变时。
+上面的例子中就是 transform 和 top 属性改变，导致动画效果开始。
+
+2. window.requestAnimationFrame(callback); 
+① requestAnimationFrame 的用法与 setTimeout 很相似，只是不需要设置时间间隔而已。
+② window.requestAnimationFrame() 方法告诉浏览器您希望执行动画并请求浏览器在下一次重绘之前调用指定的函数来更新动画。
+该方法使用一个回调函数作为参数，这个回调函数会在浏览器重绘之前调用。
+③ 若您想要在下次重绘时产生另一个动画画面，您的回调函数必须调用 requestAnimationFrame()。
+④ 当你准备好更新屏幕画面时你就应用此方法。这会要求你的动画函数在浏览器下次重绘前执行。
+回调的次数常是每秒60次，但大多数浏览器通常匹配 W3C 所建议的刷新率。
+⑤ callback 即每次需要重新绘制动画时调用的函数。
+这个回调函数有一个传参，DOMHighResTimeStamp，指示从触发 requestAnimationFrame 回调到现在（重新渲染页面内容之前）的时间（从 performance.now() 取得）。
+
+
+上面动画产生的流程为：
 ① 首先给 app 添加了一个 transform 属性： translateY(30px)，那么 app 会突变到相对原位置向下 30px 的位置；
 ② 然后，执行 requestAnimationFrame 方法，会调用 callback 方法；
 ③ 在 callback 方法中，将 app 的 transform 属性置空，那么意味着 app 会移动回到它最开始的位置，即 top 属性由 30px 变为 0;
 ④ 除此之外，callback 方法中还给 app 添加了一个新的 class: animate-on-transforms，这个属性 class 限定所有的属性变化时长为 5s;
 ⑤ 于是，我们就可以看到一个时长 5s 的动画了
 
-另外，我们可以用 cancelAnimationFrame(timer) 来取消定时器
 
+对于 window.requestAnimationFrame(callback) 我是这么理解的：
+【重要】callback 函数只执行 1 次（可以用 console.log 打印信息来验证）
+① 若 callback 函数触发了动画，例如上面的 transition 动画，那就只需执行一次 requestAnimationFrame 方法
+② 若 callback 只是普通的函数，那就需要递归调用来模拟动画效果。
+
+再看一个例子，以便更好地理解：
 
 例2，小红块自左向右运动 2 秒 ：
 <div id="app"></div>
@@ -11693,7 +11771,7 @@ window.requestAnimationFrame(step);
 ④ 由于位置突变频率很高，所以看起来就是一个连贯的动画了；
 ⑤ 2 秒后，step 方法不再调用 requestAnimationFrame 方法，动画终止。
 
-另外，回调函数 step 有一个传参 timestamp，它表示 step 回调函数第一次执行到现在的时间（单位毫秒）。
+回调函数 step 有一个传参 timestamp，它表示 step 回调函数第一次执行到现在的时间（单位毫秒）。
  */
 
 // raf 是 requestAnimationFrame 的简称
@@ -11703,17 +11781,20 @@ function nextFrame (fn) {
   });
 }
 
-// 添加动画 class
+// 添加过渡 class
 function addTransitionClass (el, cls) {
   var transitionClasses = el._transitionClasses || (el._transitionClasses = []);
-  // 一方面把 cls 加入到数组 el._transitionClasse 里，另一方面把 cls 应用到 class 属性里
+  /*
+      ① 将 cls 加入数组 el._transitionClasses 中
+      ② 将 cls 应用加入到元素 class 属性中（样式生效）
+   */
   if (transitionClasses.indexOf(cls) < 0) {
     transitionClasses.push(cls);
     addClass(el, cls);
   }
 }
 
-// 移除动画 class
+// 移除过渡 class
 function removeTransitionClass (el, cls) {
   if (el._transitionClasses) {
     // 从数组 el._transitionClasses 里删除 cls
@@ -11723,25 +11804,42 @@ function removeTransitionClass (el, cls) {
   removeClass(el, cls);
 }
 
-// 过渡/动画结束处理
+// 过渡/动画结束执行回调函数 cb
 function whenTransitionEnds (el,expectedType,cb) {
-  // 包含过渡信息的 json 对象
+  /*
+      {
+        type,         // 类型，值为 'transition' | 'animation' | null
+        timeout,      // 延迟+持续时间，值为数值，单位为毫秒
+        propCount,    // 'transition'/'animation' 属性个数
+        hasTransform  // transform 属性是否过渡
+      }
+   */
   var ref = getTransitionInfo(el, expectedType);
   var type = ref.type;
   var timeout = ref.timeout;
   var propCount = ref.propCount;
 
-  // 没有 type，直接执行回调函数 cb
+  // 1. 不是过渡/动画（或者 timeout 不是大于 0），直接执行回调函数
   if (!type) { return cb() }
 
-  // transitionEndEvent = 'transitionend'; animationEndEvent = 'animationend';
+  // 2. 过渡/动画，继续往下走
+  /*
+      transitionEndEvent = 'transitionend'（特殊情况会修正为：transitionEndEvent = 'webkitTransitionEnd'）
+      animationEndEvent = 'animationend'（特殊情况会修正为：animationEndEvent = 'webkitAnimationEnd'）
+   */
   var event = type === TRANSITION ? transitionEndEvent : animationEndEvent;
   var ended = 0;
 
+  // 解除事件监听，并执行回调函数
   var end = function () {
     el.removeEventListener(event, onEnd);
     cb();
   };
+
+  /*
+      transition/animation 属性可以添加多个属性，每个属性过渡/动画完毕都会触发 transitionend/animationend 事件
+      每次事件发生的时候 ended++，一旦 ended 大于等于 propCount，说明整个过渡/动画结束
+   */
   var onEnd = function (e) {
     if (e.target === el) {
       // 动画属性执行完毕，那就解除监听
@@ -11750,82 +11848,144 @@ function whenTransitionEnds (el,expectedType,cb) {
       }
     }
   };
-  // 过渡/动画设定的最长时间结束后，如果 ended 还是小于 propCount，那还是解除监听，并执行回调函数 cb
+
+  // 若最大时间过后，ended 还是小于 propCount，那就强制结束
   setTimeout(function () {
     if (ended < propCount) {
       end();
     }
   }, timeout + 1);
-  // 监听过渡/动画结束事件
+
+  // 监听过渡/动画结束事件（每一个属性执行完毕都会触发，所以可能触发多次）
   el.addEventListener(event, onEnd);
 }
 
 var transformRE = /\b(transform|all)(,|$)/;
 
-// 获取过渡相关信息
+/*
+    获取过渡/动画相关信息：
+    {
+      type,         // 类型，值为 'transition' | 'animation' | null
+      timeout,      // 延迟+持续时间，值为数值，单位为毫秒
+      propCount,    // 'transition'/'animation' 属性个数
+      hasTransform  // transform 属性是否过渡
+    }
+ */ 
 function getTransitionInfo (el, expectedType) {
+  // getComputedStyle 方法获取的是最终应用在元素上的所有 CSS 属性
   var styles = window.getComputedStyle(el);
 
-  // transitionProp = 'transition';
+  /*
+      transitionProp = 'transition'（特殊情况下修正为 transitionProp = 'WebkitTransition'）
+      
+      CSS 的 transition-delay 属性规定了在过渡效果开始作用之前需要等待的时间，值以秒（s）或毫秒（ms）为单位
+      你可以指定多个延迟时间，每个延迟将会分别作用于你所指定的相对应的 css 属性，例如：
+      transition-delay: 3s;
+      transition-delay: 2s, 4ms;
+
+      transition-duration 属性以秒或毫秒为单位指定过渡动画所需的时间
+      可以指定多个时长，每个时长会被应用到由 transition-property 指定的对应属性上。如果指定的时长个数小于属性个数，那么时长列表会重复。如果时长列表更长，那么该列表会被裁减。例如：
+      transition-duration: 6s;
+      transition-duration: 10s, 30s, 230ms;
+
+      注意：transition-delay 指定的延迟时长个数可以小于属性个数，而 transition-duration 会自动补全至属性个数。
+      所以，在 getTimeout(delays,durations) 函数中才需要手动处理：若数组 delays 的长度小于 durations，那就一直复制自身，直至超过
+   
+      transitionTimeout 获得 [过渡延迟时间] + [过渡持续时间] 的最大值
+   */
   var transitionDelays = styles[transitionProp + 'Delay'].split(', ');
   var transitionDurations = styles[transitionProp + 'Duration'].split(', ');
-  // 获得 [过渡延迟时间] + [过渡持续时间] 的最大值
   var transitionTimeout = getTimeout(transitionDelays, transitionDurations);
 
-  // var animationProp = 'animation';
+  /*
+      animationProp = 'animation'（特殊情况下修正为 animationProp = 'WebkitAnimation'）
+      
+      animation-delay 属性定义动画于何时开始，即从动画应用在元素上到动画开始的这段时间的长度。例如：
+      animation-delay: 3s;
+      animation-delay: 2s, 4ms;
+
+      animation-duration 属性指定一个动画周期的时长，例如：
+      animation-duration: 6s;
+      animation-duration: 10s, 30s, 230ms;
+
+      animationTimeout 获得 [动画延迟时间] + [动画持续时间] 的最大值
+   */
   var animationDelays = styles[animationProp + 'Delay'].split(', ');
   var animationDurations = styles[animationProp + 'Duration'].split(', ');
-  // 获得 [动画延迟时间] + [动画持续时间] 的最大值
   var animationTimeout = getTimeout(animationDelays, animationDurations);
 
   var type;
   var timeout = 0;
   var propCount = 0;
   
-  // TRANSITION = 'transition'，过渡
+  // ① 过渡 TRANSITION = 'transition'
   if (expectedType === TRANSITION) {
     if (transitionTimeout > 0) {
       type = TRANSITION;
       timeout = transitionTimeout;
+      // transitionDurations 的长度会自动等于属性个数，正好利用这点
       propCount = transitionDurations.length;
     }
-  // ANIMATION = 'animation'，动画
+  // ② 动画 ANIMATION = 'animation'
   } else if (expectedType === ANIMATION) {
     if (animationTimeout > 0) {
       type = ANIMATION;
       timeout = animationTimeout;
       propCount = animationDurations.length;
     }
+  // ③ 同时使用过渡和动画
   } else {
-    // 过渡耗时和动画耗时之间的最大值
+    // 取时间较大者
     timeout = Math.max(transitionTimeout, animationTimeout);
-    // type 取决于哪个耗时更大
+
+    // 时间长度决定 type
     type = timeout > 0
       ? transitionTimeout > animationTimeout
         ? TRANSITION
         : ANIMATION
       : null;
+
+    // 同样，propCount 也取决于时间
     propCount = type
       ? type === TRANSITION
         ? transitionDurations.length
         : animationDurations.length
       : 0;
   }
-  // transformRE = /\b(transform|all)(,|$)/
+
+
+  /*
+      transformRE = /\b(transform|all)(,|$)/
+
+      transition-property 属性规定应用过渡效果的 CSS 属性的名称。（当指定的 CSS 属性改变时，过渡效果将开始
+      transition-property: none|all|property;
+      none: 没有属性会获得过渡效果
+      all: 所有属性都将获得过渡效果
+      property: 定义应用过渡效果的 CSS 属性名称列表，列表以逗号分隔（例如属性名为 transform）
+
+      当 transform 属性可以应用过渡（transition）时，hasTransform 为 true
+   */
   var hasTransform = type === TRANSITION && transformRE.test(styles[transitionProp + 'Property']);
+  
   return {
-    type: type,
-    timeout: timeout,
-    propCount: propCount,
-    hasTransform: hasTransform
+    type: type,                 // 类型，值为 'transition' | 'animation' | null
+    timeout: timeout,           // 延迟+持续时间，值为数值，单位为毫秒
+    propCount: propCount,       // 'transition'/'animation' 属性个数
+    hasTransform: hasTransform  // transform 属性是否过渡
   }
 }
 
 /*
-取出 [延迟时间] + [持续时间] 的最大值
-例如：
-getTimeout(['10s','30s','50s'],['20s','40s']) -> 70000
-getTimeout(['10s','30s','50s'],['20s','40s','60s']) -> 110000
+    取出 [延迟时间] + [持续时间] 的最大值，例如：
+    var delays = ['10s','5s','6s'];
+    var durations = ['3s','2s','8s','7s','11s','5s','1s'];
+    getTimeout(delays,durations)
+    -> 17000
+
+    大致过程如下：
+    ① delays 长度小于 durations，所以 delays 变为：
+    delays = ["10s", "5s", "6s", "10s", "5s", "6s", "10s", "5s", "6s", "10s", "5s", "6s"]
+    ② 然后，遍历 durations（delays 每一项和 durations 每一项相加），返回最长的时间
  */
 function getTimeout (delays, durations) {
   /* istanbul ignore next */
@@ -11841,7 +12001,7 @@ function getTimeout (delays, durations) {
     参数
     callback : 原数组中的元素经过该方法后返回一个新的元素。
     thisArg : 执行 callback 函数时 this 指向的对象。
-    
+
     其中：callback 方法参数：
     currentValue : callback 的第一个参数，数组中当前被传递的元素。
     index : callback 的第二个参数，数组中当前被传递的元素的索引。
@@ -13359,15 +13519,14 @@ var platformComponents = {
   TransitionGroup: TransitionGroup
 };
 
-/*  */
 
 // install platform specific utils
-// 全局的 config 对象定义了以下方法（空函数，没具体作用），后来又定义了 Vue$3.config = config，所以这里相当于覆盖原来全局 config 对象定义的默认方法
-Vue$3.config.mustUseProp = mustUseProp;
-Vue$3.config.isReservedTag = isReservedTag;
-Vue$3.config.isReservedAttr = isReservedAttr;
-Vue$3.config.getTagNamespace = getTagNamespace;
-Vue$3.config.isUnknownElement = isUnknownElement;
+// 平台相关工具方法
+Vue$3.config.mustUseProp = mustUseProp;           // 几种特殊元素的属性会添加进 el.props 数组，而不是 el.attrs 数组
+Vue$3.config.isReservedTag = isReservedTag;       // 是否为 html/svg 保留标签名
+Vue$3.config.isReservedAttr = isReservedAttr;     // 是否为 'style' | 'class'
+Vue$3.config.getTagNamespace = getTagNamespace;   // 获取标签的命名空间，例如 'svg' | 'math'
+Vue$3.config.isUnknownElement = isUnknownElement; // 是否为未知元素标签名
 
 // install platform runtime directives & components
 /*
@@ -13396,28 +13555,35 @@ Vue$3.prototype.__patch__ = inBrowser ? patch : noop;
 Vue$3.prototype.$mount = function (el,hydrating) {
   // query(el) 根据 el 选择器，返回对应元素，如果找不到，就新创建一个 div 返回
   el = el && inBrowser ? query(el) : undefined;
-  // 安装组件
+  /*
+      注意，mountComponent 函数的第二个参数 el 可以为空/undefined
+
+      ① el 为 dom 元素，挂载到该元素，替换的该元素内容
+      ② el 为 空/undefined，在文档之外渲染，随后再挂载
+   */
   return mountComponent(this, el, hydrating)
 };
 
 // devtools global hook
 /* istanbul ignore next */
-// 控制台提示，setTimeout(f,0) 可以让后面的同步代码先执行，然后再执行 f 函数
+// setTimeout(f,0) 可以让后面的同步代码先执行，然后再尽可能早地执行 f 函数
 setTimeout(function () {
+
+  // 1. 配置开启 devtools
   if (config.devtools) {
-    // 如果安装了 Devtools，初始化
+    // ① 已经有 devtools，则初始化。其中 devtools = inBrowser && window.__VUE_DEVTOOLS_GLOBAL_HOOK__
     if (devtools) {
       devtools.emit('init', Vue$3);
-    // 否则就调用 Chrome 的 console.log 方法提示用户安装 Devtools
+    // ② 否则，控制台提示下载 devtools
     } else if ("development" !== 'production' && isChrome) {
-      // 优先用 console.log 方法，如果不存在，那就用 console.log 方法吧
       console[console.info ? 'info' : 'log'](
         'Download the Vue Devtools extension for a better development experience:\n' +
         'https://github.com/vuejs/vue-devtools'
       );
     }
   }
-  // 开发模式下提示：你正在开发模式下使用 Vue，别忘了在生产环境下使用生产模式
+
+  // 2. 未开启 devtools。在控制台提示：当前为开发模式，若需要部署生产模式代码别忘了开启生产模式开关
   if ("development" !== 'production' && config.productionTip !== false && inBrowser && typeof console !== 'undefined') {
     console[console.info ? 'info' : 'log'](
       "You are running Vue in development mode.\n" +
@@ -13443,7 +13609,6 @@ setTimeout(function () {
 （其中 160，10 指的是 ASCII码值（十进制））
 
 使用实体名称表示转义字符，比实体编号更容易记忆。但是，并不是所有浏览器都支持最新的实体名称，而几乎所有的浏览器对实体编号的支持都很好。
-
 */
 
 // check whether current browser encodes a char inside attribute values
@@ -17578,10 +17743,3 @@ Vue$3.compile = compileToFunctions;
 return Vue$3;
 
 })));
-
-// 有空的时候看看 
-// http://www.cnblogs.com/QH-Jimmy/p/6862539.html#3770924
-// http://www.cnblogs.com/QH-Jimmy/archive/2017/05.html
-// https://www.brooch.me/2017/03/17/vue-source-notes-1/
-// https://www.brooch.me/tags/vue/
-// https://www.gitbook.com/book/114000/read-vue-code/details

@@ -10,7 +10,7 @@ export const isReservedAttr = makeMap('style,class')
 // 以下几个标签有 value 属性
 const acceptValue = makeMap('input,textarea,option,select')
 
-// 以下几种情况的属性会添加进 el.props 数组，而不是 el.attrs 数组
+// 以下几种元素的属性会添加进 el.props 数组，而不是 el.attrs 数组
 export const mustUseProp = (tag: string, type: ?string, attr: string): boolean => {
   return (
     (attr === 'value' && acceptValue(tag)) && type !== 'button' ||

@@ -5,6 +5,7 @@ import domProps from './dom-props'
 import style from './style'
 import transition from './transition'
 
+// 导出这 6 个模块
 export default [
   attrs,
   klass,

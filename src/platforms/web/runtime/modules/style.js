@@ -29,13 +29,20 @@ const setProp = (el, name, val) => {
 const vendorNames = ['Webkit', 'Moz', 'ms']
 
 let emptyStyle
+
+// 将普通的 css 属性名转为 style 对象中合法的属性名
 const normalize = cached(function (prop) {
   emptyStyle = emptyStyle || document.createElement('div').style
   prop = camelize(prop)
+
+  // ① 将 prop 驼峰化，例如：a-b-c -> aBC，若驼峰化后属性名合法，就返回该属性名
   if (prop !== 'filter' && (prop in emptyStyle)) {
     return prop
   }
+
+  // ② 将 prop 首字母大写，然后加上 Webkit'/'Moz'/'ms' 等前缀，再次试探属性名是否合法，若合法则返回
   const capName = prop.charAt(0).toUpperCase() + prop.slice(1)
+  // 以 prop 为 margin-top 为例，依次用 WebkitMarginTop、MozMarginTop、msMarginTop 类匹配 emptyStyle 里的属性名，匹配上了就是合法的
   for (let i = 0; i < vendorNames.length; i++) {
     const name = vendorNames[i] + capName
     if (name in emptyStyle) {
