@@ -4,7 +4,31 @@ import { inBrowser, isIE9 } from 'core/util/index'
 import { addClass, removeClass } from './class-util'
 import { remove, extend, cached } from 'shared/util'
 
-// 返回 6 个 class 组成的 json 对象
+/*
+    返回一个 json 对象，大致为：
+    {
+      css,
+      type,
+      enterClass,
+      enterToClass,
+      enterActiveClass,
+      leaveClass,
+      leaveToClass,
+      leaveActiveClass,
+      appearClass,
+      appearToClass,
+      appearActiveClass,
+      beforeEnter,
+      enter,
+      afterEnter,
+      enterCancelled,
+      beforeAppear,
+      appear,
+      afterAppear,
+      appearCancelled,
+      duration
+    }
+ */
 export function resolveTransition (def?: string | Object): ?Object {
   // ① 不存在 def，返回 undefined
   if (!def) {
@@ -27,6 +51,8 @@ export function resolveTransition (def?: string | Object): ?Object {
     if (def.css !== false) {
       extend(res, autoCssTransition(def.name || 'v'))
     }
+
+    // def 对象的其他属性也赋给 res，大致如下：
     extend(res, def)
     return res
   // ③ def 是字符串，实参是元素的 name

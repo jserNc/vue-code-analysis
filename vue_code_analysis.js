@@ -3121,7 +3121,7 @@ var normalizeEvent = cached(function (name) {
   ① 若 fns 是一组函数，依次执行 fns 里的每一个函数
   ② 若 fns 只是一个函数，执行该函数，并将该函数的返回值作为 invoker 函数的返回值
  
-  简单的理解就是，将一组函数 fns 合并成一个函数 invoker
+  简单的理解就是，将一组函数 fns 合并成一个函数 invoker（invoker.fns = fns）
  */
 function createFnInvoker (fns) {
   function invoker () {
@@ -11580,7 +11580,31 @@ function removeClass (el, cls) {
   }
 }
 
-// 返回 6 个 class 组成的 json 对象
+/*
+    返回一个 json 对象，大致为：
+    {
+      css,
+      type,
+      enterClass,
+      enterToClass,
+      enterActiveClass,
+      leaveClass,
+      leaveToClass,
+      leaveActiveClass,
+      appearClass,
+      appearToClass,
+      appearActiveClass,
+      beforeEnter,
+      enter,
+      afterEnter,
+      enterCancelled,
+      beforeAppear,
+      appear,
+      afterAppear,
+      appearCancelled,
+      duration
+    }
+ */
 function resolveTransition (def$$1) {
   // ① 不存在 def，返回 undefined
   if (!def$$1) {
@@ -11603,6 +11627,7 @@ function resolveTransition (def$$1) {
     if (def$$1.css !== false) {
       extend(res, autoCssTransition(def$$1.name || 'v'));
     }
+    // def 对象的其他属性也赋给 res
     extend(res, def$$1);
     return res
   // ③ def 是字符串，实参是元素的 name
@@ -12034,19 +12059,19 @@ function toMs (s) {
 function enter (vnode, toggleDisplay) {
   var el = vnode.elm;
 
-  // call leave callback now，调用离开的回调函数
+  // 调用离开的回调函数
   if (isDef(el._leaveCb)) {
     el._leaveCb.cancelled = true;
     el._leaveCb();
   }
 
-  // 6 个 class 、css、type 等组成的 json 对象
+  // 返回过渡/动画相关的钩子函数/class 等信息
   var data = resolveTransition(vnode.data.transition);
   if (isUndef(data)) {
     return
   }
 
-  // 如果存在 el._enterCb 或节点类型为 Element，返回
+  // el._enterCb 存在或者 el 不为元素，则返回
   if (isDef(el._enterCb) || el.nodeType !== 1) {
     return
   }
@@ -12084,23 +12109,46 @@ function enter (vnode, toggleDisplay) {
   // as the root node of a child component. In that case we need to check
   // <transition>'s parent for appear check.
 
-  /*
-    当前被激活的实例将会是管理着过渡的 <transition> 组件。
-    不过，当 <transition> 作为子组件的根节点时，我们需要去检查 <transition> 的父节点
-  */
-
 
   var context = activeInstance;
   var transitionNode = activeInstance.$vnode;
+
+  // 修正 context 和 transitionNode
   while (transitionNode && transitionNode.parent) {
     transitionNode = transitionNode.parent;
     context = transitionNode.context;
   }
 
-  // 没有被插入过文档？
+  // 是否为初次渲染
   var isAppear = !context._isMounted || !vnode.isRootInsert;
 
-  // 返回
+  /*
+      可以通过 appear 特性设置节点在初始渲染的过渡
+      <transition appear>
+        <!-- ... -->
+      </transition>
+
+      这里默认和进入/离开过渡一样，同样也可以自定义 CSS 类名
+      <transition
+        appear
+        appear-class="custom-appear-class"
+        appear-to-class="custom-appear-to-class" (2.1.8+)
+        appear-active-class="custom-appear-active-class"
+      >
+        <!-- ... -->
+      </transition>
+
+      自定义 JavaScript 钩子：
+      <transition
+        appear
+        v-on:before-appear="customBeforeAppearHook"
+        v-on:appear="customAppearHook"
+        v-on:after-appear="customAfterAppearHook"
+        v-on:appear-cancelled="customAppearCancelledHook"
+      >
+        <!-- ... -->
+      </transition>
+   */
   if (isAppear && !appear && appear !== '') {
     return
   }
@@ -12140,7 +12188,17 @@ function enter (vnode, toggleDisplay) {
     ? (appearCancelled || enterCancelled)
     : enterCancelled;
 
-  // 进入持续时间，数值
+  /*
+      显性的过渡持续时间
+
+      在很多情况下，Vue 可以自动得出过渡效果的完成时机。默认情况下，Vue 会等待其在过渡效果的根元素的第一个 transitionend 或 animationend 事件。然而也可以不这样设定——比如，我们可以拥有一个精心编排的一序列过渡效果，其中一些嵌套的内部元素相比于过渡效果的根元素有延迟的或更长的过渡效果。
+
+      在这种情况下你可以用 <transition> 组件上的 duration 属性定制一个显性的过渡持续时间 (以毫秒计)：
+      <transition :duration="1000">...</transition>
+
+      你也可以定制进入和移出的持续时间：
+      <transition :duration="{ enter: 500, leave: 800 }">...</transition>
+   */
   var explicitEnterDuration = toNumber(
     isObject(duration)
       ? duration.enter
@@ -12153,22 +12211,39 @@ function enter (vnode, toggleDisplay) {
   }
 
   /*
-    推荐对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。这也可以避免过渡过程中 CSS 的影响。
+      对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。
+      这也可以避免过渡过程中 CSS 的影响。
 
-    当 css 不为 false，并且不为 ie9 时，expectsCSS 为 true
-  */
+      注意是仅使用 JavaScript，例如：
+      <div id="example-4">
+        <button @click="show = !show">
+          Toggle
+        </button>
+        <transition
+          v-on:before-enter="beforeEnter"
+          v-on:enter="enter"
+          v-on:leave="leave"
+          v-bind:css="false"
+        >
+          <p v-if="show">
+            Demo
+          </p>
+        </transition>
+      </div>
+   */
   var expectsCSS = css !== false && !isIE9;
   // enterHook 函数形参个数是否大于 1
   var userWantsControl = getHookArgumentsLength(enterHook);
 
-  // once(fn) 确保 fn 只被执行 1 次
+  // 这个函数在过渡/动画进入完成之后执行
   var cb = el._enterCb = once(function () {
     if (expectsCSS) {
       // 移除 toClass、activeClass
       removeTransitionClass(el, toClass);
       removeTransitionClass(el, activeClass);
     }
-    // 进入取消
+    
+    // ① 取消
     if (cb.cancelled) {
       if (expectsCSS) {
         // 移除 startClass
@@ -12176,20 +12251,24 @@ function enter (vnode, toggleDisplay) {
       }
       // 进入取消钩子
       enterCancelledHook && enterCancelledHook(el);
-    // 进入之后钩子
+    // ② 正常结束
     } else {
       afterEnterHook && afterEnterHook(el);
     }
     el._enterCb = null;
   });
 
+  // 合并 enterHook 合并到 'insert' 钩子函数中
   if (!vnode.data.show) {
     // remove pending leave element on enter by injecting an insert hook
-    // mergeVNodeHook (def, hookKey, hook) 的作用是将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+    /*
+        mergeVNodeHook (def, hookKey, hook) 的作用是将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+        这里将  elm._leaveCb() 和 enterHook(el, cb) 都作为 'insert' 钩子回调
+     */
     mergeVNodeHook(vnode.data.hook || (vnode.data.hook = {}), 'insert', function () {
       var parent = el.parentNode;
+      // 正在离开的元素
       var pendingNode = parent && parent._pending && parent._pending[vnode.key];
-
       if (pendingNode && pendingNode.tag === vnode.tag && pendingNode.elm._leaveCb) {
         pendingNode.elm._leaveCb();
       }
@@ -12198,23 +12277,24 @@ function enter (vnode, toggleDisplay) {
     });
   }
 
-  // start enter transition，开始进入过渡，调用进入前钩子
+  // 执行进入前钩子
   beforeEnterHook && beforeEnterHook(el);
 
   if (expectsCSS) {
-    // 添加 startClass、activeClass
+    // 1. 添加 startClass、activeClass
     addTransitionClass(el, startClass);
     addTransitionClass(el, activeClass);
     
-    // 下一帧，添加 toClass，移除 startClass
+    // 2. 下一帧，添加 toClass，移除 startClass
     nextFrame(function () {
       addTransitionClass(el, toClass);
       removeTransitionClass(el, startClass);
       if (!cb.cancelled && !userWantsControl) {
-        // isValidDuration (explicitEnterDuration)，判断 explicitEnterDuration 是否为有效的数组（类型为 number，且不为 NaN）
+        // ① 若指定了过渡持续时间，该时间之后执行 cb
         if (isValidDuration(explicitEnterDuration)) {
           // 过渡结束后调用回调
           setTimeout(cb, explicitEnterDuration);
+        // ② 否则就等到过渡结束后执行 cb（监听了 transitionend 事件）
         } else {
           // 过渡结束处理
           whenTransitionEnds(el, type, cb);
@@ -12231,8 +12311,8 @@ function enter (vnode, toggleDisplay) {
   }
   
   /*
-  ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
-  ② userWantsControl 为 true 表示 enterHook 函数形参个数大于 1
+    ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
+    ② userWantsControl 为 true 表示 enterHook 函数形参个数大于 1
   */
   if (!expectsCSS && !userWantsControl) {
     cb();
@@ -12249,13 +12329,15 @@ function leave (vnode, rm) {
     el._enterCb();
   }
 
-  // 6 个 class 、css、type 等组成的 json 对象
+  // 返回过渡/动画相关的钩子函数/class 等信息
   var data = resolveTransition(vnode.data.transition);
+
+  // 若 data 不存在，直接直接 rm()
   if (isUndef(data)) {
     return rm()
   }
 
-  // 如果存在 el._enterCb 或节点类型为 Element，返回
+  // 若 el._leaveCb 存在或 el 不为元素，则返回
   if (isDef(el._leaveCb) || el.nodeType !== 1) {
     return
   }
@@ -12278,16 +12360,22 @@ function leave (vnode, rm) {
   var delayLeave = data.delayLeave;
   var duration = data.duration;
 
-  /*
-    推荐对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。这也可以避免过渡过程中 CSS 的影响。
-
-    当 css 不为 false，并且不为 ie9 时，expectsCSS 为 true
-  */
+  // 对于仅使用 JavaScript 过渡的元素添加 v-bind:css="false"，Vue 会跳过 CSS 的检测。这也可以避免过渡过程中 CSS 的影响。
   var expectsCSS = css !== false && !isIE9;
   // leave 函数形参个数是否大于 1
   var userWantsControl = getHookArgumentsLength(leave);
 
-  // 离开持续时间，数值
+  /*
+      显性的过渡持续时间
+
+      在很多情况下，Vue 可以自动得出过渡效果的完成时机。默认情况下，Vue 会等待其在过渡效果的根元素的第一个 transitionend 或 animationend 事件。然而也可以不这样设定——比如，我们可以拥有一个精心编排的一序列过渡效果，其中一些嵌套的内部元素相比于过渡效果的根元素有延迟的或更长的过渡效果。
+
+      在这种情况下你可以用 <transition> 组件上的 duration 属性定制一个显性的过渡持续时间 (以毫秒计)：
+      <transition :duration="1000">...</transition>
+
+      你也可以定制进入和移出的持续时间：
+      <transition :duration="{ enter: 500, leave: 800 }">...</transition>
+   */
   var explicitLeaveDuration = toNumber(
     isObject(duration)
       ? duration.leave
@@ -12299,17 +12387,20 @@ function leave (vnode, rm) {
     checkDuration(explicitLeaveDuration, 'leave', vnode);
   }
 
-  // once(fn) 确保 fn 只被执行 1 次
+  // 这个函数在过渡/动画离开完成之后执行
   var cb = el._leaveCb = once(function () {
+    // 标记已经离开
     if (el.parentNode && el.parentNode._pending) {
       el.parentNode._pending[vnode.key] = null;
     }
+
     if (expectsCSS) {
       // 移除 leaveToClass、leaveActiveClass
       removeTransitionClass(el, leaveToClass);
       removeTransitionClass(el, leaveActiveClass);
     }
-    // 离开取消
+    
+    // ① 取消
     if (cb.cancelled) {
       if (expectsCSS) {
         // 移除 leaveClass
@@ -12317,7 +12408,7 @@ function leave (vnode, rm) {
       }
       // 离开取消钩子
       leaveCancelled && leaveCancelled(el);
-    // 离开之后钩子
+    // ② 正常结束
     } else {
       rm();
       afterLeave && afterLeave(el);
@@ -12338,26 +12429,30 @@ function leave (vnode, rm) {
     if (cb.cancelled) {
       return
     }
-    // record leaving element，记录正在离开的元素
+    // record leaving element
+    // 记录正在离开的元素
     if (!vnode.data.show) {
       (el.parentNode._pending || (el.parentNode._pending = {}))[(vnode.key)] = vnode;
     }
+    
     // 离开前钩子
     beforeLeave && beforeLeave(el);
+
     if (expectsCSS) {
-      // 添加 leaveClass、leaveActiveClass
+      // 1. 添加 leaveClass、leaveActiveClass
       addTransitionClass(el, leaveClass);
       addTransitionClass(el, leaveActiveClass);
 
-      // 下一帧，添加 leaveToClass，移除 leaveClass
+      // 2. 下一帧，添加 leaveToClass，移除 leaveClass
       nextFrame(function () {
         addTransitionClass(el, leaveToClass);
         removeTransitionClass(el, leaveClass);
         if (!cb.cancelled && !userWantsControl) {
-          // isValidDuration (explicitLeaveDuration)，判断 explicitLeaveDuration 是否为有效的数组（类型为 number，且不为 NaN）
+          // ① 若指定了过渡持续时间，该时间之后执行 cb
           if (isValidDuration(explicitLeaveDuration)) {
             // 过渡结束后调用回调
             setTimeout(cb, explicitLeaveDuration);
+          // ② 否则就等到过渡结束后执行 cb（监听了 transitionend 事件）
           } else {
             // 过渡结束处理
             whenTransitionEnds(el, type, cb);
@@ -12368,8 +12463,8 @@ function leave (vnode, rm) {
     // 离开钩子
     leave && leave(el, cb);
     /*
-     ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
-     ② userWantsControl 为 true 表示 leave 函数形参个数大于 1
+       ① 如果过渡的元素有属性 v-bind:css="false"，那么 expectsCSS 就是 false
+       ② userWantsControl 为 true 表示 leave 函数形参个数大于 1
     */
     if (!expectsCSS && !userWantsControl) {
       cb();
@@ -12377,17 +12472,16 @@ function leave (vnode, rm) {
   }
 }
 
-// only used in dev mode
-// 只在开发模式下会用到
+// 只在开发模式用这个方法
 function checkDuration (val, name, vnode) {
-  // val 必须是 number 类型
+  // ① val 必须是 number 类型
   if (typeof val !== 'number') {
     warn(
       "<transition> explicit " + name + " duration is not a valid number - " +
       "got " + (JSON.stringify(val)) + ".",
       vnode.context
     );
-  // val 还不能是 NaN
+  // ② val 还不能是 NaN
   } else if (isNaN(val)) {
     warn(
       "<transition> explicit " + name + " duration is NaN - " +
@@ -12408,21 +12502,28 @@ function isValidDuration (val) {
  * - a wrapped component method (check ._length)
  * - a plain function (.length)
  */
- // 判断钩子函数形参个数是否大于 1
+/*
+    规范化过渡的钩子函数的参数长度，钩子函数可能有以下几种：
+    1. 函数是 invoker（简单的理解就是，将一组函数 fns 合并成一个函数 invoker（invoker.fns = fns））
+    2. 函数是 boundFn（绑定函数 fn 内部的 this 到 ctx，boundFn._length = fn.length）
+    3. 普通函数
+ */
 function getHookArgumentsLength (fn) {
   if (isUndef(fn)) {
     return false
   }
   var invokerFns = fn.fns;
+  // ① invoker
   if (isDef(invokerFns)) {
-    // invoker
+    // 递归调用 getHookArgumentsLength(invokerFns[0] | invokerFns)
     return getHookArgumentsLength(
       Array.isArray(invokerFns)
         ? invokerFns[0]
         : invokerFns
     )
+  // ② boundFn 或普通函数
   } else {
-    // 实质就这一句
+    // 实质就这一句，判断函数的形参是否大于 1
     return (fn._length || fn.length) > 1
   }
 }
@@ -12434,7 +12535,7 @@ function _enter (_, vnode) {
   }
 }
 
-// transition 生命周期 create -> activate -> remove。仅仅在浏览器环境下存在。
+// transition 仅仅在浏览器环境下存在
 var transition = inBrowser ? {
   create: _enter,   // 进入
   activate: _enter, // 进入
@@ -12958,13 +13059,13 @@ function getRealChild (vnode) {
 function extractTransitionData (comp) {
   var data = {};
   var options = comp.$options;
-  // 提取 props
+  // ① 提取 props
   for (var key in options.propsData) {
     data[key] = comp[key];
   }
-  // events.
+
+  // ② 提取 events
   // extract listeners and pass them directly to the transition methods
-  // 提取监听函数
   var listeners = options._parentListeners;
   for (var key$1 in listeners) {
     data[camelize(key$1)] = listeners[key$1];
@@ -12990,7 +13091,7 @@ function hasParentTransition (vnode) {
   }
 }
 
-// 新旧节点的 key 和 tag 都相同，就认为是同一个子节点
+// 新旧子节点的 key 和 tag 都相同，就认为是同一个子节点
 function isSameChild (child, oldChild) {
   return oldChild.key === child.key && oldChild.tag === child.tag
 }
@@ -13000,7 +13101,7 @@ function isAsyncPlaceholder (node) {
   return node.isComment && node.asyncFactory
 }
 
-// 定义 Transition 组件
+// Transition 组件配置对象
 var Transition = {
   name: 'transition',
   props: transitionProps,
@@ -13028,7 +13129,7 @@ var Transition = {
     }
 
     // warn multiple elements
-    // <transition> 只能用于单一的元素，<transition-group> 可以用于列表
+    // 警告：<transition> 只能用于单一的元素，<transition-group> 可以用于列表
     if ("development" !== 'production' && children.length > 1) {
       warn(
         '<transition> can only be used on a single element. Use ' +
@@ -13044,7 +13145,7 @@ var Transition = {
     var mode = this.mode;
 
     // warn invalid mode
-    // mode 必须是 in-out/out-in 二者之一
+    // 警告：mode 必须是 in-out/out-in，其他的无效
     if ("development" !== 'production' && mode && mode !== 'in-out' && mode !== 'out-in') {
       warn(
         'invalid <transition> mode: ' + mode,
@@ -13057,7 +13158,7 @@ var Transition = {
 
     // if this is a component root node and the component's
     // parent container node also has transition, skip.
-    // 如果父容器节点也有 transition，那就返回
+    // 如果祖先节点也有 transition，那就返回
     if (hasParentTransition(this.$vnode)) {
       return rawChild
     }
@@ -13072,7 +13173,7 @@ var Transition = {
       return rawChild
     }
 
-    // 正在离开...占位？
+    // 如果正在离开过渡，渲染占位符，生成 <keep-alive> 元素
     if (this._leaving) {
       return placeholder(h, rawChild)
     }
@@ -13081,8 +13182,7 @@ var Transition = {
     // component instance. This key will be used to remove pending leaving nodes
     // during entering.
     
-    // 确保 key 对于某种 vnode 类型或者对于组件实例是唯一的。在 entering 过程中这个 key 会被用来移除 pending leaving 节点
-
+    // 确保 key 对于某种 vnode 类型或者对于过渡组件实例是唯一的。在 entering 过程中这个 key 会被用来移除 pending leaving 节点
     var id = "__transition-" + (this._uid) + "-";
     /*
         ① child.key == null
@@ -13108,8 +13208,7 @@ var Transition = {
 
     /*
         extractTransitionData() 方法用于提取 props 和 listeners，返回一个 json 对象
-
-        把这个 json 对象赋值给 child.data.transition
+        这里把这个 json 对象赋值给 child.data.transition
     */
     var data = (child.data || (child.data = {})).transition = extractTransitionData(this);
 
@@ -13120,7 +13219,7 @@ var Transition = {
 
     // mark v-show
     // so that the transition module can hand over the control to the directive
-    // 只要有一个指令的名称为 'show'，那就把 child.data.show 标记为 true
+    // 只要有一个指令的名称为 'show'，那就把 child.data.show 标记为 true（标记 v-show）
     if (child.data.directives && child.data.directives.some(function (d) { return d.name === 'show'; })) {
       child.data.show = true;
     }
@@ -13132,11 +13231,14 @@ var Transition = {
       // 用 child.data.transition 的属性覆盖 oldChild.data.transition 的属性
       var oldData = oldChild && (oldChild.data.transition = extend({}, data));
 
-      // handle transition mode，当前元素先进行过渡，完成之后新元素过渡进入
+      // ① 当前元素先进行过渡，完成之后新元素过渡进入
       if (mode === 'out-in') {
         // return placeholder node and queue update when leave finishes
         this._leaving = true;
-        // mergeVNodeHook (def, hookKey, hook) 将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+        /*
+            mergeVNodeHook (def, hookKey, hook) 将钩子方法 hook 加入到 def[hookKey] 中，也就是添加一个钩子方法，以后执行 def[hookKey] 也就会执行 hook 方法了
+            钩子函数合并后，'afterLeave' 钩子函数会强制更新视图
+         */
         mergeVNodeHook(oldData, 'afterLeave', function () {
           // render 函数最开始有定义：var this$1 = this
           this$1._leaving = false;
@@ -13144,7 +13246,7 @@ var Transition = {
         });
         // 用 rawChild.componentOptions.propsData 数据渲染一个 <keep-alive> ?
         return placeholder(h, rawChild)
-      // 新元素先进行过渡，完成之后当前元素过渡离开
+      // ② 新元素先进行过渡，完成之后当前元素过渡离开
       } else if (mode === 'in-out') {
         if (isAsyncPlaceholder(child)) {
           return oldRawChild
@@ -13177,7 +13279,7 @@ var Transition = {
    P: play，为你要改变的任何 css 属性启用 tansition，移除你 invert 的改变。这时你的元素会做动画从起始点到终止点。
 
    FLIP 来实现动画，是对 JavaScript 和 CSS 的很好结合。用 JavaScript 计算，但让 CSS 为你处理动画。
-   你不必使用 CSS 去完成动画，不过，你可以用 animations  API 或 JavaScript 自身来完成，觉得哪种容易就用哪种。
+   你不必使用 CSS 去完成动画，不过，你可以用 animations API 或 JavaScript 自身来完成，觉得哪种容易就用哪种。
    关键要减少每帧动画的复杂性（推荐使用 transform 和 opacity），尽力让用户得到最好的体验。 
    
    其中：
@@ -13197,7 +13299,7 @@ var Transition = {
       scaleX(x)：通过设置 X 轴的值来定义缩放转换。如 transform:scaleX(1.1);
       scaleY(y)：通过设置 Y 轴的值来定义缩放转换。如 transform:scaleY(1.1);
 
-      skew(x-angle,y-angle)    定义沿着 X 和 Y 轴的 2D 倾斜转换。如 transform:skew(10deg,10deg);
+      skew(x-angle,y-angle) 定义沿着 X 和 Y 轴的 2D 倾斜转换。如 transform:skew(10deg,10deg);
       skewX(angle)：定义沿着 X 轴的 2D 倾斜转换。如 transform:skewX(10deg);
       skewY(angle)：定义沿着 Y 轴的 2D 倾斜转换。如 transform:skewY(10deg);
         
@@ -13239,9 +13341,9 @@ var Transition = {
         var app = document.getElementById('app');
 
         var first = app.getBoundingClientRect();
+        
         // 从 0px 处突变到 100px 处
         app.classList.add('app-to-end');
-
         var last = app.getBoundingClientRect();
 
         var invert = first.top - last.top;
@@ -13294,7 +13396,7 @@ var props = extend({
   moveClass: String
 }, transitionProps);
 
-// transitionProps 不要过渡模式
+// 不要过渡模式
 delete props.mode;
 
 // 定义 transitionProps 组件
@@ -13303,7 +13405,7 @@ var TransitionGroup = {
 
   // 渲染组件
   render: function render (h) {
-    // 默认的标签是 <span>
+    // 默认为一个 <span> 标签，你也可以通过 tag 特性更换为其他元素
     var tag = this.tag || this.$vnode.data.tag || 'span';
     var map = Object.create(null);
     var prevChildren = this.prevChildren = this.children;
@@ -13312,18 +13414,18 @@ var TransitionGroup = {
     // extractTransitionData() 方法用于提取 props 和 listeners，返回一个 json 对象
     var transitionData = extractTransitionData(this);
 
-    // 遍历所有子元素，删除元素，并触发它们的离开 transition ？
+    // 遍历所有子元素
     for (var i = 0; i < rawChildren.length; i++) {
       var c = rawChildren[i];
       if (c.tag) {
-        // c.key 存在并且不是以 __vlist 开头
+        // ① c.key 存在并且不是以 __vlist 开头
         if (c.key != null && String(c.key).indexOf('__vlist') !== 0) {
           // 修改 children 就是修改 this.children，也就是修改 this.prevChildren（prevChildren）
           children.push(c);
           map[c.key] = c;
           // c.data.transition = transitionData
           (c.data || (c.data = {})).transition = transitionData;
-        // 报错：<transition-group> 的子元素必须有 key 属性
+        // ② 报错：<transition-group> 的子元素必须有 key 属性
         } else {
           var opts = c.componentOptions;
           var name = opts ? (opts.Ctor.options.name || opts.tag || '') : c.tag;
@@ -13347,15 +13449,15 @@ var TransitionGroup = {
             -> { top: 287.625, right: 308, bottom: 387.625, left: 8 ,height: 100, width: 300 }
         */
         c$1.data.pos = c$1.elm.getBoundingClientRect();
-        // 有 key 的保留
+        // ① 有 key 的保留
         if (map[c$1.key]) {
           kept.push(c$1);
-        // 没 key 的删除
+        // ② 没 key 的删除
         } else {
           removed.push(c$1);
         }
       }
-      // 创建保留的节点
+      // 渲染成 dom 元素
       this.kept = h(tag, null, kept);
       this.removed = removed;
     }
@@ -13390,18 +13492,18 @@ var TransitionGroup = {
 
     // we divide the work into three loops to avoid mixing DOM reads and writes
     // in each iteration - which helps prevent layout thrashing.
-    // 每个 child 依次执行 _moveCb()、_enterCb()
+    // ① 每个 child 依次执行 _moveCb()、_enterCb()
     children.forEach(callPendingCbs);
-    // 记录每个 child 的终点位置
+    // ② 记录每个 child 的终点位置
     children.forEach(recordPosition);
-    // 对每个 child 依次水平/竖直偏移（由 transform:translate(x px,y px) 来实现）
+    // ③ 对每个 child 依次水平/竖直偏移（由 transform:translate(x px,y px) 来实现）
     children.forEach(applyTranslation);
 
     // force reflow to put everything in position
     var body = document.body;
     /*
-    clientHeight：内容高度 + padding 高度
-    offsetHeight：内容高度 + padding 高度 + 边框宽度 
+      clientHeight：内容高度 + padding 高度
+      offsetHeight：内容高度 + padding 高度 + 边框宽度 
     */
     var f = body.offsetHeight; // eslint-disable-line
 
@@ -13410,9 +13512,11 @@ var TransitionGroup = {
       if (c.data.moved) {
         var el = c.elm;
         var s = el.style;
+
+        
         // 添加 moveClass 这个过渡 class
         addTransitionClass(el, moveClass);
-        // transform 重置为默认值，会触发过渡，以使得元素移回到默认位置？
+        // transform 重置为 ''，会触发过渡动画，以使得元素移回到默认位置
         s.transform = s.WebkitTransform = s.transitionDuration = '';
         
         // transitionEndEvent = 'transitionend'，监听 transitionend 事件（过渡结束事件）
@@ -13429,7 +13533,7 @@ var TransitionGroup = {
   },
 
   methods: {
-    // 返回一个布尔值，表示是否有 move 效果？
+    // 返回一个布尔值，表示该 el 元素是否有 move 效果
     hasMove: function hasMove (el, moveClass) {
       // hasTransition = inBrowser && !isIE9，如果当前环境不支持 transition，直接返回 false
       if (!hasTransition) {
@@ -13444,16 +13548,16 @@ var TransitionGroup = {
       // transition at this very moment, we make a clone of it and remove
       // all other transition classes applied to ensure only the move class
       // is applied.
+      
+
+      // 克隆 el 元素
+      var clone = el.cloneNode();
       /*
         检测应用 move class 的元素是否拥有 css transitions.
 
         由于这个元素此刻可能在某个 entering transition 内部，所以这里就把它克隆一份，
         并且移除所有其他的 transition classes，以确保只有 move class 在应用
       */
-
-      // 克隆 el 元素
-      var clone = el.cloneNode();
-      // 移除所有 transition classes
       if (el._transitionClasses) {
         el._transitionClasses.forEach(function (cls) { removeClass(clone, cls); });
       }
