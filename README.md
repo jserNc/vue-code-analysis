@@ -268,12 +268,19 @@ observe(data, true /* 作为根 data */)
 ```
 
 (1) 如果 data 不是对象就返回，只有对象才继续执行后续步骤
+
 (2) 如果 data 有对应的 Observer 实例 data.ob 那就将它作为 observe 方法返回值
+
 (3) 如果 data 没有对应的 Observer 实例，那就执行 ob = new Observer(value)
+
 (4) new Observer(value) 的本质是执行 ob.walk(data)
+
 (5) 依次遍历 data 的属性 key，执行 defineReactive$$1(obj, keys[i], obj[keys[i]])
+
 (6) defineReactive$$1 会劫持属性 key 的 get/set 操作。
+
 (7) 当获取属性 key 时除了返回属性值，还会将 Dep.target（即与属性 key 对应的 watcher）加入到 key 的订阅者数组里（dep.depend() -> Dep.target.addDep(dep)）
+
 (8) 当设置属性 key 时除了更新属性值外，还会由主题对象 dep 发出通知给所有的订阅者 dep.notify()
 
 总的来说就是：observe(data) -> new Observer(data) -> defineReactive$$1()
@@ -283,17 +290,28 @@ var watcher = new Watcher(vm, 'aaa.bbb.ccc' , cb, options);
 ```
 
 (1) 执行 watcher = new Watcher() 会定义 watcher.getter = parsePath(‘aaa.bbb.ccc’)（这是一个函数），同时也会定义 watcher.value = watcher.get()，而这会触发执行 watcher.get()
+
 (2) 执行 watcher.get() 就是执行 watcher.getter.call(vm, vm)，也就是 parsePath(‘aaa.bbb.ccc’).call(vm, vm)
+
 (3) 执行 parsePath(‘aaa.bbb.ccc’).call(vm, vm) 会触发 vm.aaa.bbb.ccc 属性读取操作
-(5) vm.aaa.bbb.ccc 属性读取会触发 aaa.bbb.cc 属性的 get 函数（在 defineReactive$$1 函数中定义）
-(6) get 函数会触发 dep.depend()，也就是 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里（也就是说，dep 可以发布消息通知给订阅者 Dep.target）
-(7) 那么 Dep.targe 又是什么呢？其实 (2) 中执行 watcher.get() 之前已经将 Dep.target 锁定为当前 watcher（等到 watcher.get() 执行结束时释放 Dep.target）
-(8) 于是，watcher 就加入了 aaa.bbb.ccc 属性的订阅数组，也就是说 watcher 对 aaa.bbb.ccc 属性感兴趣
-(9) 当给 aaa.bbb.ccc 属性赋值时，如 vm.aaa.bbb.ccc = 100 会触发 vm 的 aaa.bbb.ccc 属性的 set 函数（在 defineReactive$$1 函数中定义）
-(10) set 函数触发 dep.notify()
-(11) 执行 dep.notify() 就会遍历 dep.subs 中的所有 watcher，并依次执行 watcher.update()
-(12) 执行 watcher.update() 又会触发 watcher.run()
-(13) watcher.run() 触发 watcher.cb.call(watcher.vm, value, oldValue);
+
+(4) vm.aaa.bbb.ccc 属性读取会触发 aaa.bbb.cc 属性的 get 函数（在 defineReactive$$1 函数中定义）
+
+(5) get 函数会触发 dep.depend()，也就是 Dep.target.addDep(dep)，即把 Dep.target 这个 Watcher 实例添加到 dep.subs 数组里（也就是说，dep 可以发布消息通知给订阅者 Dep.target）
+
+(6) 那么 Dep.targe 又是什么呢？其实 (2) 中执行 watcher.get() 之前已经将 Dep.target 锁定为当前 watcher（等到 watcher.get() 执行结束时释放 Dep.target）
+
+(7) 于是，watcher 就加入了 aaa.bbb.ccc 属性的订阅数组，也就是说 watcher 对 aaa.bbb.ccc 属性感兴趣
+
+(8) 当给 aaa.bbb.ccc 属性赋值时，如 vm.aaa.bbb.ccc = 100 会触发 vm 的 aaa.bbb.ccc 属性的 set 函数（在 defineReactive$$1 函数中定义）
+
+(9) set 函数触发 dep.notify()
+
+(10) 执行 dep.notify() 就会遍历 dep.subs 中的所有 watcher，并依次执行 watcher.update()
+
+(11) 执行 watcher.update() 又会触发 watcher.run()
+
+(12) watcher.run() 触发 watcher.cb.call(watcher.vm, value, oldValue);
 
 **5. util 目录**
 
@@ -352,11 +370,13 @@ var nextTick = function queueNextTick (cb, ctx) {...}
 ```
 
 a) 若 cb 参数不存在或当前环境不支持 Promise，则没有指定返回值，也就是 undefined；
+
 b) 否则，返回一个 promise 实例
 
 也就是说：
 
 ① nextTick 方法有实参时，将实参加入回调函数队列 callbacks，然后在本轮DOM 更新循环结束后，依次执行回调队列 callbacks 中的函数；
+
 ② nextTick 方法没有实参时，返回一个 Promise 实例。可以为该实例添加 then 回调，待队列 callbacks 中函数执行 _resolve(ctx) 时触发 then 的回调方法
 
 options.js 定义各个选项合并策略，简单地说就是：每个组件构造函数原本都有一些选项，新建组件实例的时候又会传入选项配置对象，这就涉及到选项之间的合并问题。在这里是这么处理的：
@@ -613,11 +633,17 @@ patch (oldVnode, vnode, hydrating, removeOnly, parentElm, refElm)
 ```
 
 其中：
+
 ① oldVnode 可能是 VNode 实例，也可能是 dom 元素
+
 ② vnode 为新的 VNode 实例
+
 ③ hydrating 为 true 才执行 hydrate() 函数“注水”，这里的 oldVnode 就是 dom 元素
+
 ④ removeOnly 该参数只用于 <transition-group> 中，确保被移除的元素在离开时保持相对正确的位置
+
 ⑤ parentElm 为 dom 元素，它将作为虚拟 vnode 生成的 dom 元素的父元素
+
 ⑥ refElm 作为 vnode 生成的 dom 元素插入父元素 parentElm 时的参考节点（插入 refElm 元素之前）
 
 **一言以蔽之，patch 函数的作用就是根据虚拟节点 vnode 来生成 dom 树并更新视图，最后返回该 dom 树。**
