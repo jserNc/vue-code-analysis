@@ -1294,7 +1294,7 @@ export function createPatchFunction (backend) {
   /*
       其中：
       ① oldVnode 可能是 VNode 实例，也可能是 dom 元素
-      ② 新的 VNode 实例
+      ② vnode 为新的 VNode 实例
       ③ hydrating 为 true 才执行 hydrate(oldVnode, vnode, insertedVnodeQueue) 函数“注水”，这里的 oldVnode 就是 dom 元素
       ④ removeOnly 该参数只用于 <transition-group> 中，用来确保被移除的元素在 leaving transitions 中保持相对正确的位置
       ⑤ parentElm 为 dom 元素，它将作为虚拟 vnode 生成的 dom 元素的父元素

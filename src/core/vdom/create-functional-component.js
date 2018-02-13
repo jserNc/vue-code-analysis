@@ -43,9 +43,9 @@ import {
   })
 
   函数式组件和普通组件定义的不同点体现在：
-  1. 显式指定 functional: true
+  1. 选项对象中显式指定 functional: true
   2. render 函数多一个参数 context 代表上下文
-     其中，context 包括以下属性供组件使用：
+     其中，context 提供以下属性给组件使用：
      props：提供 props 的对象
      children: VNode 子节点的数组
      slots: slots 对象

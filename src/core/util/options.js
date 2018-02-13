@@ -441,7 +441,7 @@ export function mergeOptions (
 
   // 将 child.props 的每一项都格式化成对象格式
   normalizeProps(child);
-  // 将数组 options.inject 转化为对象格式
+  // 将数组 child.inject 转化为对象格式
   normalizeInject(child);
   // 将 child.directives 的每一项都格式化成对象格式
   normalizeDirectives(child);

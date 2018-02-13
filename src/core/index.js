@@ -2,9 +2,10 @@ import Vue from './instance/index'
 import { initGlobalAPI } from './global-api/index'
 import { isServerRendering } from 'core/util/env'
 
+// 初始化全局 api，也就是将一些全局方法挂载到 Vue$3 下
 initGlobalAPI(Vue)
 
-// 获取 vm.$isServer 时，执行 isServerRendering 函数，标志是否在服务器渲染
+// 获取 vm.$isServer 时，执行 isServerRendering 函数，标志当前 Vue 实例是否运行于服务器
 Object.defineProperty(Vue.prototype, '$isServer', {
   // isServerRendering 是一个函数
   get: isServerRendering

@@ -19,7 +19,7 @@ initMixin(Vue)
 
 
 /*
-  定义以下 5 个方法
+  定义以下 5 个属性/方法
   Vue.prototype.$data
   Vue.prototype.$props
   Vue.prototype.$set

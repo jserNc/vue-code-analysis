@@ -21,7 +21,7 @@
      window.Vue = factory()
      这里的 factory 就是下面的 this 后面的这个很长很长的方法
 
-     window.Vue 就是这个方法的返回值，拖到这个文件文件最后一行：
+     window.Vue 就是这个方法的返回值，拖到整个文件文件最后一行：
 
      return Vue$3;
 
@@ -55,29 +55,9 @@
      ② Vue 定义了吗:  undefined
      ③ Vue 的值:  hello
      ④ 最终的 Vue:  hello
-
-     也就是说，在实参  (function () {
-         console.log('Vue 定义了吗: ',typeof Vue);
-         return 'hello';
-     }) 里是取不到 Vue 的
-
-
-     既然这样，那下面的出现的那么多 Vue 又是干嘛的呢？
-
-     其实，下面的那么多 Vue，只不过内部函数的形参而已，例如：
-
-     function eventsMixin (Vue) {
-         ...
-         Vue.prototype.$on = function (event, fn) {}
-         ...
-     }
-    
-     // 实参是真正的构造函数 Vue$3
-     eventsMixin(Vue$3);
      */
 }(this, (function () { 'use strict';
 
-/*  */
 
 // these helpers produces better vm code in JS engines due to their
 // explicitness and function inlining
@@ -148,10 +128,10 @@ function isValidArrayIndex (val) {
  * Convert a value to a string that is actually rendered.
  */
  /*
- 对于 JSON.stringify(value [, replacer] [, space]) 函数：
- 第 1 个参数为 value 将要序列化成一个 JSON 字符串的值
- 第 2 个参数为 null 时表示对象的所有属性都会被序列化
- 第 3 个参数 space 文本在每个级别缩进指定数目的空格
+   对于 JSON.stringify(value [, replacer] [, space]) 函数：
+   第 1 个参数为 value 将要序列化成一个 JSON 字符串的值
+   第 2 个参数为 null 时表示对象的所有属性都会被序列化
+   第 3 个参数 space 文本在每个级别缩进指定数目的空格
  */
 function toString (val) {
   return val == null
@@ -176,10 +156,10 @@ function toNumber (val) {
  * is in that map.
  */
  /*
- 检验字符串是不是在 str 中，参数为 true 表示将参数转为小写后再比较，eg:
- makeMap('aaa,bbb,ccc',true)('aa')  -> undefined
- makeMap('aaa,bbb,ccc',true)('aaa') -> true
- makeMap('aaa,bbb,ccc',true)('AAA') -> true
+   检验字符串是不是在 str 中，参数为 true 表示将参数转为小写后再比较，eg:
+   makeMap('aaa,bbb,ccc',true)('aa')  -> undefined
+   makeMap('aaa,bbb,ccc',true)('aaa') -> true
+   makeMap('aaa,bbb,ccc',true)('AAA') -> true
  */
 function makeMap (str,expectsLowerCase) {
   var map = Object.create(null);
@@ -197,10 +177,10 @@ function makeMap (str,expectsLowerCase) {
  * Check if a tag is a built-in tag.
  */
 /*
-判断参数是否匹配 slot 或 component（这两种是内置标签名），忽视大小写。
-eg:
-isBuiltInTag("SLOT")  -> true
-isBuiltInTag("component")  -> true
+  判断参数是否匹配 slot 或 component（这两种是内置标签名），忽视大小写。
+  eg:
+  isBuiltInTag("SLOT")  -> true
+  isBuiltInTag("component")  -> true
 */
 var isBuiltInTag = makeMap('slot,component', true);
 
@@ -897,6 +877,18 @@ function handleError (err, vm, info) {
     }
   }
 }
+
+// 源码中经常出现一组注释：
+/* istanbul ignore if */
+/* istanbul ignore else */
+/* istanbul ignore next */
+/*
+  Istanbul 是 JavaScript 程序的代码覆盖率工具。
+  这个软件以土耳其最大城市伊斯坦布尔命名，因为土耳其地毯世界闻名，而地毯是用来覆盖的。
+  以上 3 个语句是 Istanbul 提供的注释语法，允许某些代码不计入覆盖率
+*/
+// 用官网的原文说明其作用：Ignoring code for coverage Skip an if or else path with /* istanbul ignore if / or / istanbul ignore else / respectively. For all other cases, skip the next 'thing' in the source with: / istanbul ignore next */
+
 
 /*  */
 /* globals MutationObserver */
@@ -2398,7 +2390,7 @@ function mergeOptions (parent, child, vm) {
 
   // 将 child.props 的每一项都统一成对象格式
   normalizeProps(child);
-  // 将数组 options.inject 转化为对象格式
+  // 将数组 child.inject 转化为对象格式
   normalizeInject(child);
   // 将 child.directives 的每一项都统一成对象格式
   normalizeDirectives(child);
@@ -6341,7 +6333,7 @@ function createElement (context, tag, data, children, normalizationType, alwaysN
   ⑤ tag 是其他字符串，return vnode = new VNode(tag, data, children, undefined, undefined, context);
   ⑥ tag 是构造函数名，return vnode = createComponent(tag, data, context, children);
  
-  可以看出，除了直接调用 new VNode() 生成 vnode，就是用 createComponent() 和 createEmptyVNode() 来生成 vnode 
+  可以看出，除了直接调用 new VNode() 生成 vnode，还有就是用 createComponent() 和 createEmptyVNode() 来生成 vnode 
  */
 // 返回一个 vnode。如 _createElement(vm, 'a', {attr:{'href':'#'}}, [vnode...], 2)
 function _createElement (context, tag, data, children, normalizationType) {
@@ -6582,7 +6574,7 @@ function resolveFilter (id) {
 /*
   Vue.prototype._k = checkKeyCodes;
 
-  该函数检查键值，eventKeyCode 和配置的键值不相同返回 true，例如：
+  该函数检查键值，eventKeyCode 和指定的键不相同返回 true，例如：
   _k($event.keyCode,"right",39) 不是点击鼠标右键返回 true
  */
 function checkKeyCodes (eventKeyCode, key, builtInAlias) {
@@ -6690,7 +6682,7 @@ function renderStatic (index, isInFor) {
  * Runtime helper for v-once.
  * Effectively it means marking the node as static with a unique key.
  */
-// 标记一次
+// 标记静态树（v-once）
 function markOnce (tree, index, key) {
   markStatic(tree, ("__once__" + index + (key ? ("_" + key) : "")), true);
   return tree
@@ -9490,7 +9482,7 @@ function createPatchFunction (backend) {
   /*
       其中：
       ① oldVnode 可能是 VNode 实例，也可能是 dom 元素
-      ② 新的 VNode 实例
+      ② vnode 新的 VNode 实例
       ③ hydrating 为 true 才执行 hydrate(oldVnode, vnode, insertedVnodeQueue) 函数“注水”，这里的 oldVnode 就是 dom 元素
       ④ removeOnly 该参数只用于 <transition-group> 中，用来确保被移除的元素在 leaving transitions 中保持相对正确的位置
       ⑤ parentElm 为 dom 元素，它将作为虚拟 vnode 生成的 dom 元素的父元素
