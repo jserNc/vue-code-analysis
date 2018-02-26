@@ -6303,7 +6303,7 @@ var ALWAYS_NORMALIZE = 2;
 
 // wrapper function for providing a more flexible interface
 // without getting yelled at by flow
-// 创建元素，修正参数，实际调用 _createElement(context, tag, data, children, normalizationType)，返回一个 vnode
+// 创建元素，返回一个 vnode。实际调用 _createElement(context, tag, data, children, normalizationType)，返回一个 vnode
 function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
   // data 为数组、字符串或数值，则参数的含义重新分配（相当于为定义 data，其他参数取前 1 位）
   if (Array.isArray(data) || isPrimitive(data)) {
@@ -6753,7 +6753,7 @@ function initRender (vm) {
     参数顺序：tag, data, children, normalizationType, alwaysNormalize
 
     内部版本是被模板编译而成的渲染函数用的
-  createElement 最后参数为 false 表示是否进行正常标准化处理由参数 d 决定
+    createElement 最后参数为 false 表示是否进行正常标准化处理由参数 d 决定
   */
   vm._c = function (a, b, c, d) { return createElement(vm, a, b, c, d, false); };
 
