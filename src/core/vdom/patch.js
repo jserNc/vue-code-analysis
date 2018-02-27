@@ -836,7 +836,7 @@ export function createPatchFunction (backend) {
         1. 循环结束条件为：新旧数组有一个已经遍历完
         2. 循环过程中始终关注的是旧的节点（对其更新，移位）
         3. 每个执行过 patchVnode() 的节点就“丢弃”，不再关注
-        4. oldStartVnode、oldEndVnode、newStartVnode、newEndVnode 在循环过程中动态更新，它们的值时下一次循环中的参考值
+        4. oldStartVnode、oldEndVnode、newStartVnode、newEndVnode 在循环过程中动态更新，它们的值是下一次循环中的参考值
      */
     while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
 
@@ -893,6 +893,7 @@ export function createPatchFunction (backend) {
         oldEndVnode = oldCh[--oldEndIdx];
         newStartVnode = newCh[++newStartIdx];
 
+      // 3-6 是 4 种简单的对应关系，优先处理这些简单对应关系是为了避免查找对应关系，提高了效率
       // 7. 其他，对应关系不明了，需要通过 key 值来确定
       } else {
         /*
@@ -915,7 +916,7 @@ export function createPatchFunction (backend) {
         // 获取新的开始节点在旧的节点数组里对应的索引
         idxInOld = isDef(newStartVnode.key) ? oldKeyToIdx[newStartVnode.key] : null;
 
-        // ① 新的开始节点不存在于旧的节点数组里，也就是说这是全新的元素，那就把这个新的节点插入就的开始节点之前就好了
+        // ① 新的开始节点不存在于旧的节点数组里，也就是说这是全新的元素，那就把这个新的节点插入旧的开始节点之前就好了
         if (isUndef(idxInOld)) { // New element
           createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm);
           newStartVnode = newCh[++newStartIdx];
@@ -929,7 +930,7 @@ export function createPatchFunction (backend) {
               所以，若新的节点数组 newCh 里有多个节点的 key 值相同，除了第一个来匹配的以外，后面的都匹配不到了
            */ 
           if ("development" !== 'production' && !elmToMove) {
-            // v-for 列表的每一个列表项应该有唯一的 key 值。否则在更新的时候会出现。
+            // v-for 列表的每一个列表项应该有唯一的 key 值。否则在更新的时候会出现错误。
             warn(
               'It seems there are duplicate keys that is causing an update error. ' +
               'Make sure each v-for item has a unique key.'
@@ -946,7 +947,7 @@ export function createPatchFunction (backend) {
             // 更新后，旧的节点 -> 新的开始节点，那么这个节点应该移到最左边
             canMove && nodeOps.insertBefore(parentElm, elmToMove.elm, oldStartVnode.elm);
             newStartVnode = newCh[++newStartIdx];
-          // b. 即便 key 相等，不同节点，那就还是当做一个新的元素
+          // b. 毕竟 key 值相同只是判断两个节点相同的条件之一，当其他条件不满足时，它们还是不同节点，那就还是当做一个新的节点
           } else {
             // 根据 newStartVnode 创建一个新的 dom 节点，插入到 oldStartVnode.elm 之前
             createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm);
@@ -965,7 +966,7 @@ export function createPatchFunction (backend) {
            那么意味着新的数组 newCh 剩余的都是新元素，那就都插入 dom 中
            新的元素应该插入到哪里呢，这就由参考节点 refElm 来决定了
             
-           a. 若 newCh[newEndIdx + 1] 不存在，那就说明 newCh[newEndIdx].elm 已经是 parentElm 的最后节点了，那就不需要参考元素，之间在 parentElm 最末尾插入就行了
+           a. 若 newCh[newEndIdx + 1] 不存在，那就不需要参考元素，直接在 parentElm 最末尾插入就行了
            b. 若 newCh[newEndIdx + 1] 存在，那就以 newCh[newEndIdx + 1].elm 为参考节点，新元素插在其之前（也就是 newCh[newEndIdx].elm 之后）
             
            总之，新元素紧跟在元素 newCh[newEndIdx].elm 后面插入
@@ -1260,6 +1261,7 @@ export function createPatchFunction (backend) {
       }
     // ② 否则，目标是文本节点
     } else if (elm.data !== vnode.text) {
+      // 修改文本元素的 data 属性就是修改该文本
       elm.data = vnode.text
     }
 
@@ -1315,7 +1317,7 @@ export function createPatchFunction (backend) {
     if (isUndef(oldVnode)) {
       // empty mount (likely as component), create new root element
       isInitialPatch = true;
-      // 根据 vnode 新的生成 dom 元素
+      // 根据 vnode 生成新的 dom 元素
       createElm(vnode, insertedVnodeQueue, parentElm, refElm);
     // 3. vnode、oldVnode 都存在，那就打补丁吧（更新）
     } else {
@@ -1449,7 +1451,7 @@ export function createPatchFunction (backend) {
               <div id="app">
                 {{message}}
               </div>
-              这样只是一个形象表述，事实不是这样的
+              这样只是一个形象表述，事实并不是这样的
           */
           // 移除旧的元素
           removeVnodes(parentElm$1, [oldVnode], 0, 0);
