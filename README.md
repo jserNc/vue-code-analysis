@@ -508,9 +508,9 @@ VNode = function VNode (
 )
 
 createEmptyVNode(text) // 创建文本空虚拟节点
-createTextVNode(val) // 创建文本虚拟节点
-cloneVNode(vnode) // 克隆虚拟节点
-cloneVNodes(vnodes) // 克隆一组虚拟节点
+createTextVNode(val)   // 创建文本虚拟节点
+cloneVNode(vnode)      // 克隆虚拟节点
+cloneVNodes(vnodes)    // 克隆一组虚拟节点
 
 // 注意 vnode 必须是唯一的，所以克隆时必须新建一个完全独立的 vnode，而不能通过浅拷贝方式共用
 ```
@@ -526,9 +526,11 @@ createComponentInstanceForVnode (vnode, parent, parentElm, refElm)
 
 ```
 
-create-element.js 对外提供一个方法：
+create-element.js 对外提供两个方法：
 
 ```javascript
+createElement 函数实质是调用 _createElement 函数，返回 vnode
+
 // 创建元素节点，返回 vnode
 _createElement (context, tag, data, children, normalizationType)
 
