@@ -11746,7 +11746,7 @@ transition 必须规定两项内容：
 上面动画产生的流程为：
 ① 首先给 app 添加了一个 transform 属性： translateY(30px)，那么 app 会突变到相对原位置向下 30px 的位置；
 ② 然后，执行 requestAnimationFrame 方法，会调用 callback 方法；
-③ 在 callback 方法中，将 app 的 transform 属性置空，那么意味着 app 会移动回到它最开始的位置，即 top 属性由 30px 变为 0;
+③ 在 callback 方法中，将 app 的 transform 属性置空 (该属性改变，那么意味着 app 会移动回到它最开始的位置，即 top 属性由 30px 变为 0）;
 ④ 除此之外，callback 方法中还给 app 添加了一个新的 class: animate-on-transforms，这个属性 class 限定所有的属性变化时长为 5s;
 ⑤ 于是，我们就可以看到一个时长 5s 的动画了
 
