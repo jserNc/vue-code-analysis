@@ -521,7 +521,7 @@ create-component.js 对外提供两个方法：
 // 创建组件节点，返回 vnode
 createComponent (Ctor, data, context, children, tag)
 
-// 创建与 vnode 对象的组件实例
+// 创建与 vnode 对应的组件实例
 createComponentInstanceForVnode (vnode, parent, parentElm, refElm)
 
 ```
