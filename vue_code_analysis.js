@@ -3791,10 +3791,10 @@ function eventsMixin (Vue) {
       }
     } else {
       /*
-      $on 函数最核心的就是这一句，把 fn 添加到 vm._events[event] 数组里即完成了事件的绑定
+        $on 函数最核心的就是这一句，把 fn 添加到 vm._events[event] 数组里即完成了事件的绑定
 
-      ① 若 vm._events[event] 不存在，初始化为空数组
-      ② 向数组 vm._events[event] 末尾添加 fn
+        ① 若 vm._events[event] 不存在，初始化为空数组
+        ② 向数组 vm._events[event] 末尾添加 fn
       */
       (vm._events[event] || (vm._events[event] = [])).push(fn);
       // optimize hook:event cost by using a boolean flag marked at registration
@@ -3816,6 +3816,17 @@ function eventsMixin (Vue) {
       vm.$off(event, on);
       fn.apply(vm, arguments);
     }
+    /*
+     Vue.prototype.$off(event, fn) 方法里通过两种途径找到要被移除的回调函数 fn：
+     ① vm._events[event] 里找 cb === fn
+     ② vm._events[event] 里找 cb.fn === fn
+
+     针对 ② 意思是 vm._events[event] 数组里存的 on 方法，但是 Vue.prototype.$off 的实参是 fn 方法
+
+     为什么要这样传参呢？
+
+     因为 fn 是用户注册的回调方法，on 只是这里的闭包方法，所以取消时间监听的时候也只能传 fn 方法
+    */
     on.fn = fn;
     vm.$on(event, on);
     return vm
@@ -4177,7 +4188,7 @@ function lifecycleMixin (Vue) {
     // updated in a parent's updated hook.
   };
 
-  // 强制更新
+  // 迫使 Vue 实例重新渲染。注意它仅仅影响实例本身和插入插槽内容的子组件，而不是所有子组件。
   Vue.prototype.$forceUpdate = function () {
     var vm = this;
     if (vm._watcher) {
@@ -4188,7 +4199,7 @@ function lifecycleMixin (Vue) {
   // 实例销毁
   Vue.prototype.$destroy = function () {
     var vm = this;
-    // 如果已经开始销毁了，那就返回吧
+    // 如果正在销毁过程中，那就返回吧
     if (vm._isBeingDestroyed) {
       return
     }
@@ -4241,7 +4252,7 @@ function lifecycleMixin (Vue) {
 
 /*
     vm.$mount() 手动地挂载一个未挂载的实例
-    a. 参数为元素选择器，挂载到该元素，替换的该元素内容
+    a. 参数为元素选择器，挂载到该元素，替换该元素内容
     var MyComponent = Vue.extend({
       template: '<div>Hello!</div>'
     })
@@ -4273,7 +4284,7 @@ function mountComponent (vm, el, hydrating) {
           vm
         );
       } else {
-            // 警告，组件安装失败：未定义模板或者渲染函数
+        // 警告，组件安装失败：未定义模板或者渲染函数
         warn(
           'Failed to mount component: template or render function not defined.',
           vm
@@ -4311,11 +4322,11 @@ function mountComponent (vm, el, hydrating) {
     };
   } else {
     /*
-        生产环境下，直接渲染、更新
+      生产环境下，直接渲染、更新
 
-        其实，跟上面的 if 块一样，注意执行这两句：
-        var vnode = vm._render();
-        vm._update(vnode, hydrating);
+      其实，跟上面的 if 块一样，注意执行这两句：
+      var vnode = vm._render();
+      vm._update(vnode, hydrating);
 
       其中，vm._render() 的作用就是生成虚拟节点 vnode
     */
@@ -4325,20 +4336,20 @@ function mountComponent (vm, el, hydrating) {
     };
   }
 
-  // 添加观察者实例。所以 vm._watcher 是一个 watcher 实例。
+  // 执行该构造函数会触发 updateComponent 执行，以完成初次渲染
   vm._watcher = new Watcher(vm, updateComponent, noop);
   hydrating = false;
 
   // manually mounted instance, call mounted on self
   // mounted is called for render-created child components in its inserted hook
   /*
-        并不是执行 vm.$mount() 方法一定会将 vm 组件挂载到文档中
-        参数为空/undefined，在文档之外渲染，随后再挂载例如：
-        var component = new MyComponent().$mount()
-        document.getElementById('app').appendChild(component.$el)
+    并不是执行 vm.$mount() 方法一定会将 vm 组件挂载到文档中
+    参数为空/undefined，在文档之外渲染，随后再挂载例如：
+    var component = new MyComponent().$mount()
+    document.getElementById('app').appendChild(component.$el)
 
-        $vnode 为 vm 在父树种的占位节点，现在占位节点为 null，就是安装成功了
-   */
+    $vnode 为 vm 在父树种的占位节点，现在占位节点为 null，就是安装成功了
+  */
   if (vm.$vnode == null) {
     vm._isMounted = true;
     // 安装成功回调
@@ -4387,7 +4398,7 @@ function updateChildComponent (
   vm.$listeners = listeners;
 
   // update props
-  // ③ 更新 props
+  // ③ 更新 props（更新 vm._props）
   if (propsData && vm.$options.props) {
     observerState.shouldConvert = false;
     var props = vm._props;
@@ -4456,7 +4467,7 @@ function activateChildComponent (vm, direct) {
 }
 
 /*
-    组件失效和组件销毁对应的（componentVNodeHooks.destroy() 方法中看得清楚）：
+    组件失效和组件销毁对应的（componentVNodeHooks.destroy() 方法中看得比较清楚）：
     // ① 不需要 keepAlive，直接销毁
     if (!vnode.data.keepAlive) {
       componentInstance.$destroy()
@@ -4487,11 +4498,11 @@ function deactivateChildComponent (vm, direct) {
 }
 
 /*
-     比如，传进来的钩子名是 'beforeUpdate'，而之前我们还监听了事件 'hook:beforeUpdate'
-     那么，callHook(vm,'evtA') 会导致：
-     ① 执行钩子 'beforeUpdate' 的所有回调函数
-     ② 执行事件 'hook:beforeUpdate' 的所有回调函数
-  */
+   比如，传进来的钩子名是 'beforeUpdate'，而之前我们还监听了事件 'hook:beforeUpdate'
+   那么，callHook(vm,'evtA') 会导致：
+   ① 执行钩子 'beforeUpdate' 的所有回调函数
+   ② 执行事件 'hook:beforeUpdate' 的所有回调函数
+*/
 function callHook (vm, hook) {
   // 钩子处理函数
   var handlers = vm.$options[hook];
@@ -6566,7 +6577,7 @@ function renderList (val,render) {
     // i + 1 为 1 2 3 4 5
       ret[i] = render(i + 1, i);
     }
-  // ③ val 是对象
+  // ③ val 是对象，例如 v-for="(val, key, index) in object" 中的 object
   } else if (isObject(val)) {
     keys = Object.keys(val);
     ret = new Array(keys.length);
@@ -6801,6 +6812,23 @@ function bindObjectListeners (data, value) {
 function initRender (vm) {
   vm._vnode = null; // the root of the child tree
   vm._staticTrees = null;
+  /*
+    什么是占位节点？
+
+    例如： <base-input v-on:focus.native="onFocus"></base-input>
+
+    实际 dom 为：
+    <label>
+      {{ label }}
+      <input
+        v-bind="$attrs"
+        v-bind:value="value"
+        v-on:input="$emit('input', $event.target.value)"
+      >
+    </label>
+
+    这里的 <base-input> 就是占位节点
+  */
   var parentVnode = vm.$vnode = vm.$options._parentVnode; // the placeholder node in parent tree
   var renderContext = parentVnode && parentVnode.context;
   vm.$slots = resolveSlots(vm.$options._renderChildren, renderContext);
@@ -13728,7 +13756,7 @@ Vue$3.prototype.$mount = function (el,hydrating) {
   /*
       注意，mountComponent 函数的第二个参数 el 可以为空/undefined
 
-      ① el 为 dom 元素，挂载到该元素，替换的该元素内容
+      ① el 为 dom 元素，挂载到该元素，替换该元素内容
       ② el 为 空/undefined，在文档之外渲染，随后再挂载
    */
   return mountComponent(this, el, hydrating)
