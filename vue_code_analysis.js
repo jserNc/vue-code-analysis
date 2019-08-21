@@ -3024,7 +3024,7 @@ prototypeAccessors.child.get = function () {
 
   也就是说，VNode 的实例访问 child 属性，会返回其 componentInstance 属性
   var vnode = new VNode();
-  vnode.child -> vn.componentInstance
+  vnode.child -> vnode.componentInstance
 */
 Object.defineProperties( VNode.prototype, prototypeAccessors );
 
@@ -3390,7 +3390,7 @@ function simpleNormalizeChildren (children) {
         ③ 可以看出，这样做只能将数组降 1 个维度，例如：
         Array.prototype.concat.apply([], [1,[2,[3],4]])
         -> [1, 2, [3], 4]
-      */
+    */
     if (Array.isArray(children[i])) {
       return Array.prototype.concat.apply([], children)
     }
@@ -3422,7 +3422,7 @@ function isTextNode (node) {
   return isDef(node) && isDef(node.text) && isFalse(node.isComment)
 }
 
-// 标准化数组类型 children
+// 主要作用是对 children 里的相邻的文本节点进行合并
 function normalizeArrayChildren (children, nestedIndex) {
   var res = [];
   var i, c, last;
@@ -3490,7 +3490,7 @@ function ensureCtor (comp, base) {
     : comp
 }
 
-// 创建异步的占位符，返回 VNode 节点
+// 创建异步组件占位节点，返回 VNode 节点
 function createAsyncPlaceholder (
   factory,
   data,
@@ -3626,43 +3626,60 @@ function resolveAsyncComponent (
     var res = factory(resolve, reject);
 
     /*
-      上面官网例子中工厂函数 factory 返回了 undefined。
-      其实，工厂函数 factory 还可以返回其他值：
+      对比一下异步组件的注册：
+      1. 异步组件工厂函数返回值为 undefined
+      Vue.component('async-example', function (resolve, reject) {
+        setTimeout(function () {
+          // 向 `resolve` 回调传递组件定义
+          resolve({
+            template: '<div>I am async!</div>'
+          })
+        }, 1000)
+      })
 
-      ① 返回一个 Promise 对象
-      Vue.component(
-        'async-webpack-example',
-        // 该 `import` 函数返回一个 `Promise` 对象。
-        () => import('./my-async-component')
-      )
-
-      ② 返回一个普通 json 对象
-      const factory = () => ({
-        // 需要加载的组件。应当是一个 Promise
-        component: import('./MyComp.vue'),
-        // 加载中应当渲染的组件
-        loading: LoadingComp,
-        // 出错时渲染的组件
-        error: ErrorComp,
-        // 渲染加载中组件前的等待时间。默认：200ms。
+      2. 异步组件工厂函数返回值为一个对象
+      const AsyncComponent = () => ({
+        // 需要加载的组件 (应该是一个 `Promise` 对象)
+        component: import('./MyComponent.vue'),
+        // 异步组件加载时使用的组件
+        loading: LoadingComponent,
+        // 加载失败时使用的组件
+        error: ErrorComponent,
+        // 展示加载时组件的延时时间。默认值是 200 (毫秒)
         delay: 200,
-        // 最长等待时间。超出此时间则渲染错误组件。默认：Infinity
+        // 如果提供了超时时间且组件加载也超时了，
+        // 则使用加载失败时使用的组件。默认值是：`Infinity`
         timeout: 3000
       })
-     */
+
+      3. 异步组件工厂函数返回值为 Promise 对象
+      new Vue({
+        // ...
+        components: {
+          'my-component': () => import('./my-async-component')
+        }
+      })
+
+      异步组件工厂函数 factory 执行结果可能是 undefined，也可能是一个对象（包括 Promise 对象）
+
+      对比 1 和 3：
+      1 中的工厂函数接受了 resolve、reject 作为实参
+      3 中的工厂函数不需要参数，那么 resolve、reject 就给工厂函数返回的 Promise 对象的 then 方
+    */
 
     if (isObject(res)) {
-      // ① res 为 Promise 对象
+      // ① 对应上面的例子 3
       if (typeof res.then === 'function') {
         /*
-          这么理解：
-          ① 工厂方法 factory(resolve, reject) 执行时调用了 resolve 方法，就像上面的例子那样，那就定义了 factory.resolved
-          ② 工厂方法 factory(resolve, reject) 执行时没调用 resolve 方法，那就再这里交给 Promise 对象处理
-         */
+          这时候工厂函数不需要实参：
+          () => Promise
+
+          所以 resolve, reject 就给 Promise 对象的 then 方法
+        */
         if (isUndef(factory.resolved)) {
           res.then(resolve, reject);
         }
-      // ② res 为普通 json 对象
+      // ② 对应上面的例子 2，res.componen: import('./MyComponent.vue')
       } else if (isDef(res.component) && typeof res.component.then === 'function') {
         // res.component 是一个 Promise 对象，成功后定义 factory.resolved 组件构造函数
         res.component.then(resolve, reject);
@@ -3711,6 +3728,7 @@ function resolveAsyncComponent (
     /*
       ① factory.loading 为 true，返回组件 factory.loadingComp
       ② 否则，返回 factory.resolved（试一试，也许此时已经有该属性了，没有也没关系）
+      ③ 即便 factory.resolved 为 undefined 也无所谓，createComponent 函数执行时，遇到 resolveAsyncComponent 返回 undefined 就会创建异步组件占位节点
      */
     return factory.loading
       ? factory.loadingComp
@@ -5877,6 +5895,25 @@ function createFunctionalComponent (
       ALWAYS_NORMALIZE = 2; 正常标准化
 
       createElement 最后一个参数为 true 表示对 children(c) 强制采用”正常标准化”处理
+
+      看一下用渲染函数 render 来注册组件
+      Vue.component('anchored-heading', {
+        render: function (createElement) {
+          return createElement(
+            'h' + this.level,   // 标签名称
+            this.$slots.default // 子元素数组
+          )
+        },
+        props: {
+          level: {
+            type: Number,
+            required: true
+          }
+        }
+      })
+
+      render 函数的返回值就是 vnode。
+      render 函数调用的 createElement 函数其实就是这里的 h 函数
    */
   var h = function (a, b, c, d) { return createElement(_context, a, b, c, d, true); };
   /*
@@ -5885,6 +5922,8 @@ function createFunctionalComponent (
       render: function (createElement, context) {
         // ...
       }
+
+      形参 createElement 对应实参 h
    */
   var vnode = Ctor.options.render.call(null, h, {
     data: data,
@@ -6021,7 +6060,7 @@ var componentVNodeHooks = {
     }
     // ② 标记激活了组件 componentInstance
     if (vnode.data.keepAlive) {
-      // 如果上下文已经插入过文档，那就将 componentInstance 添加到 activatedChildren 数组中（随后这个 componentInstance 组件会被标记激活了）
+      // a. 如果上下文已经插入过文档，那就将 componentInstance 添加到 activatedChildren 数组中（随后这个 componentInstance 组件会被标记激活了）
       if (context._isMounted) {
         // vue-router#1212
         // During updates, a kept-alive component's child components may
@@ -6090,10 +6129,47 @@ function createComponent (Ctor, data, context, children, tag) {
   /*
     ① 异步组件工厂函数 factory 只是普通的函数，没有 factory.cid 属性
     ② 而通过 Ctor = Vue.extend(extendOptions) 创建的组件构造函数都有 Ctor.cid 属性
- */
+
+    为什么是这样呢？
+
+    Vue.component(id, definition) 方法中规定：
+    1. 只有一个实参 id，返回已注册过的组件 Vue.options['components'][id]
+    2. 两个实参，并且第二个参数 definition 为对象，返回构造函数 Vue.extend(definition)
+    3. 两个参数，并且第二个参数 definition 为函数，直接返回该函数
+
+    其中，第 3 种其实就是异步组件的注册方式，见官方例子 async-example 的定义：
+
+    Vue.component('async-example', function (resolve, reject) {
+      setTimeout(function () {
+        // 向 `resolve` 回调传递组件定义
+        resolve({
+          template: '<div>I am async!</div>'
+        })
+      }, 1000)
+    })
+  */
   if (isUndef(Ctor.cid)) {
     asyncFactory = Ctor;
-    // 根据工厂函数 asyncFactory 的不同状态返回不同的组件构造函数
+    /*
+      异步工厂函数示例：
+      const AsyncComponent = () => ({
+        // 需要加载的组件 (应该是一个 `Promise` 对象)
+        component: import('./MyComponent.vue'),
+        // 异步组件加载时使用的组件
+        loading: LoadingComponent,
+        // 加载失败时使用的组件
+        error: ErrorComponent,
+        // 展示加载时组件的延时时间。默认值是 200 (毫秒)
+        delay: 200,
+        // 如果提供了超时时间且组件加载也超时了，
+        // 则使用加载失败时使用的组件。默认值是：`Infinity`
+        timeout: 3000
+      })
+
+      成功有成功对应的组件，失败有失败对应的组件，加载中有加载中对应的组件
+
+      这里的 resolveAsyncComponent 方法就是根据工厂函数 asyncFactory 的不同状态返回不同的组件构造函数
+    */
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor, context);
     /*
         resolveAsyncComponent() 返回值为 undefined，说明异步任务没执行完，组件构造函数还没创建
@@ -6107,7 +6183,7 @@ function createComponent (Ctor, data, context, children, tag) {
         对于异步组件，这里返回一个占位符。这种占位符会作为注释节点来渲染，不过它会保留节点的所有元信息。
         这些元信息在异步的服务器渲染和 hydration 时是有用的。
       */
-     // 创建组件占位符（看起来像注释节点，但是它会保存节点所有的原始信息，水化后就可以变成正常节点了）
+      // 创建组件占位符（看起来像注释节点，但是它会保存节点所有的原始信息，水化后就可以变成正常节点了）
       return createAsyncPlaceholder(
         asyncFactory,
         data,
@@ -6153,7 +6229,7 @@ function createComponent (Ctor, data, context, children, tag) {
   var listeners = data.on;
 
   /*
-      除了 props & listeners & slot，抽象组件不需要任何数据了
+      除了 props & listeners & slot，抽象组件不需要其他任何数据了
       ① 将 data 对象清空
       ② data.slot 属性重新加回来
       ③ props 和 listeners 属性在哪加回来的呢？new VNode() 过程中？
@@ -6357,14 +6433,16 @@ function transformModel (options, data) {
       }
    */
 
-  // ① 加入 data.props 对象中
+  // 1. 【双向绑定】数据初始化视图
   (data.props || (data.props = {}))[prop] = data.model.value;
 
-  // ② 加入 data.on 对象中
+
   var on = data.on || (data.on = {});
-  // 如果当前事件已经绑定过回调函数，那就回调函数数组合并
+
+
+  // 2. 【双向绑定】视图改变触发事件回调
   if (isDef(on[event])) {
-    // on[event] 应该是个数组，数组合并
+    // on[event] 是个数组，数组合并
     on[event] = [data.model.callback].concat(on[event]);
   } else {
     on[event] = data.model.callback;
@@ -6380,20 +6458,23 @@ var ALWAYS_NORMALIZE = 2;
 // without getting yelled at by flow
 // 创建元素，返回一个 vnode。实际调用 _createElement(context, tag, data, children, normalizationType)，返回一个 vnode
 function createElement (context, tag, data, children, normalizationType, alwaysNormalize) {
-  // data 为数组、字符串或数值，则参数的含义重新分配（相当于为定义 data，其他参数取前 1 位）
+  /*
+    若第二个参数是数组或者字符串等，那第二个参数就不是 data 了，而是 children，如：
+    createElement('p', 'No items found.')
+  */
   if (Array.isArray(data) || isPrimitive(data)) {
     // normalizationType 修正为第 4 个实参
     normalizationType = children;
-    // children 修正为第 3 个实参
+    // children 修正为第 2 个实参
     children = data;
     data = undefined;
   }
   // alwaysNormalize === true，再次修正 normalizationType 为 2
   if (isTrue(alwaysNormalize)) {
-  /*
-    SIMPLE_NORMALIZE = 1; 简单标准化
-    ALWAYS_NORMALIZE = 2; 正常标准化
-  */
+    /*
+      SIMPLE_NORMALIZE = 1; 简单标准化
+      ALWAYS_NORMALIZE = 2; 正常标准化
+    */
     normalizationType = ALWAYS_NORMALIZE;
   }
   return _createElement(context, tag, data, children, normalizationType)
@@ -6467,14 +6548,17 @@ function _createElement (context, tag, data, children, normalizationType) {
 
   // ⑤ 对 children 进行检查和修正
   /*
-      若 children 是数组，并且 children[0] 是函数，那么：
-      1. 将这个函数作为默认的 scoped slot
-      2. 将 children 数组清空
-   */
+    作用域插槽的内部工作原理是将你的插槽内容包括在一个传入单个参数的函数里：
+
+    function (slotProps) {
+      // 插槽内容
+    }
+  */
   // support single function children as default scoped slot
   // children 为数组，并且该数组的第一个元素是函数
   if (Array.isArray(children) && typeof children[0] === 'function') {
     data = data || {};
+    // scopedSlots 为一个暴露传入的作用域插槽以及函数形式的普通插槽的对象。
     data.scopedSlots = { default: children[0] };
     // 将 children 数组清空
     children.length = 0;
@@ -6500,7 +6584,7 @@ function _createElement (context, tag, data, children, normalizationType) {
     // 命名空间
     ns = config.getTagNamespace(tag);
 
-    // a. tag 是 html/svg 内置标签名
+    // a. tag 是 html/svg 等内置标签名
     if (config.isReservedTag(tag)) {
       // platform built-in elements
       /*
@@ -6509,7 +6593,7 @@ function _createElement (context, tag, data, children, normalizationType) {
         也就是说，直接用这个内置标签名
      */
       vnode = new VNode(config.parsePlatformTagName(tag), data, children, undefined, undefined, context);
-    // b. tag 是组件标签名，根据标签名找到组件构造函数，然后创建组件
+    // b. tag 是组件标签名，根据标签名找到组件构造函数，然后创建 vnode
     } else if (isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
       // component
       vnode = createComponent(Ctor, data, context, children, tag);
@@ -6520,7 +6604,41 @@ function _createElement (context, tag, data, children, normalizationType) {
       // parent normalizes children
       vnode = new VNode(tag, data, children, undefined, undefined, context);
     }
-  // 2. tag 为其他类型
+  // 2. tag 为其他类型，如这里的 tag 是组件选项对象或者构造函数
+  /*
+  var EmptyList = {  ...  }
+  var TableList = {  ...  }
+  var OrderedList = {  ...  }
+  var UnorderedList = {  ...  }
+
+  Vue.component('smart-list', {
+    functional: true,
+    props: {
+      items: {
+        type: Array,
+        required: true
+      },
+      isOrdered: Boolean
+    },
+    render: function (createElement, context) {
+      function appropriateListComponent () {
+        var items = context.props.items
+
+        if (items.length === 0)           return EmptyList
+        if (typeof items[0] === 'object') return TableList
+        if (context.props.isOrdered)      return OrderedList
+
+        return UnorderedList
+      }
+
+      return createElement(
+        appropriateListComponent(),
+        context.data,
+        context.children
+      )
+    }
+    })
+  */
   } else {
     // direct component options / constructor
     vnode = createComponent(tag, data, context, children);
@@ -7459,6 +7577,23 @@ function initAssetRegisters (Vue) {
 
     // 获取已注册的指令（一个实参）
     var myDirective = Vue.directive('my-directive')
+
+
+    对于 Vue.component(id, definition)：
+    1. 只有一个实参 id，返回已注册过的组件 Vue.options['components'][id]
+    2. 两个实参，并且第二个参数 definition 为对象，返回构造函数 Vue.extend(definition)
+    3. 两个参数，并且第二个参数 definition 为函数，直接返回该函数
+
+    其中，第 3 种其实就是异步组件的注册方式，见官方例子 async-example 的定义：
+
+    Vue.component('async-example', function (resolve, reject) {
+      setTimeout(function () {
+        // 向 `resolve` 回调传递组件定义
+        resolve({
+          template: '<div>I am async!</div>'
+        })
+      }, 1000)
+    })
   */
   ASSET_TYPES.forEach(function (type) {
     // 对 definition 进行修正，最后返回 definition
